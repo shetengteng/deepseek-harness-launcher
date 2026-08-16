@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>deepseek-harness-launcher 原型 v4 · shadcn 风格</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============ shadcn token (官方 dark preset + success/warning/info 扩展) ============ */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+  }
+
+  /* ============ Tailwind-style utility 映射（原型用，正式项目用 Tailwind） ============ */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 40px 24px;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  .mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace; }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .subtitle .accent { color: hsl(var(--success)); }
+
+  .screens {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 40px;
+    max-width: 1480px;
+    margin: 0 auto;
+  }
+
+  .screen-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .screen-label {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 14px;
+    text-align: center;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+  }
+
+  .screen-label .num {
+    color: hsl(var(--success));
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ============ 模拟桌面窗口（shadcn 风格：bg-card + border + shadow） ============ */
+  .window {
+    width: 460px;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 38px -10px hsl(0 0% 0% / 0.35), 0 10px 20px -15px hsl(0 0% 0% / 0.2);
+    position: relative;
+  }
+
+  .window-main { height: 540px; }
+  .window-panel { height: 500px; }
+  .window-modal { height: 340px; }
+
+  /* macOS 风格标题栏 */
+  .titlebar {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .titlebar.main-titlebar {
+    border-bottom: none;
+    background: transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+  }
+
+  .traffic-lights {
+    display: flex;
+    gap: 8px;
+  }
+
+  .light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .light.close { background: #FF5F57; }
+  .light.minimize { background: #FEBC2E; }
+  .light.maximize { background: #28C840; }
+
+  .titlebar-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  .window-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ============ shadcn 组件：Button ============ */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    border-radius: calc(var(--radius) - 2px);
+    font-size: 13px;
+    font-weight: 500;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 150ms, border-color 150ms, color 150ms;
+    outline: none;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  .btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .btn-primary:hover { background: hsl(var(--primary) / 0.9); }
+
+  .btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .btn-secondary:hover { background: hsl(var(--secondary) / 0.8); }
+
+  .btn-outline {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .btn-outline:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+
+  .btn-ghost {
+    background: transparent;
+    color: hsl(var(--foreground));
+    height: 30px;
+  }
+  .btn-ghost:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+
+  .btn-destructive {
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+  }
+  .btn-destructive:hover { background: hsl(var(--destructive) / 0.9); }
+
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+
+  /* ============ shadcn 组件：Badge ============ */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: calc(var(--radius) - 2px);
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge-default { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+  .badge-default::before { display: none; }
+  .badge-secondary { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); }
+  .badge-secondary::before { display: none; }
+  .badge-outline { background: transparent; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); }
+  .badge-outline::before { display: none; }
+  .badge-success { background: hsl(var(--success) / 0.12); color: hsl(var(--success)); border: 1px solid hsl(var(--success) / 0.25); }
+  .badge-success .dot { background: hsl(var(--success)); box-shadow: 0 0 8px hsl(var(--success)); }
+  .badge-warning { background: hsl(var(--warning) / 0.12); color: hsl(var(--warning)); border: 1px solid hsl(var(--warning) / 0.25); }
+  .badge-destructive { background: hsl(var(--destructive) / 0.12); color: hsl(var(--destructive)); border: 1px solid hsl(var(--destructive) / 0.25); }
+
+  .badge-dot::before { display: none; }
+  .badge-dot .dot {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(var(--success));
+    box-shadow: 0 0 8px hsl(var(--success));
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ============ shadcn 组件：Card ============ */
+  .card {
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .card-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .card-description { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  .card-content { padding: 0 20px 20px; }
+
+  /* ============ shadcn 组件：Input / Select / Switch ============ */
+  .input {
+    display: flex;
+    height: 32px;
+    width: 100%;
+    border-radius: calc(var(--radius) - 2px);
+    border: 1px solid hsl(var(--input));
+    background: hsl(var(--background));
+    padding: 0 10px;
+    font-size: 12px;
+    color: hsl(var(--foreground));
+    outline: none;
+    transition: border-color 150ms;
+  }
+  .input:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.3); }
+
+  .select {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    border-radius: calc(var(--radius) - 2px);
+    border: 1px solid hsl(var(--input));
+    background: hsl(var(--background));
+    padding: 0 28px 0 10px;
+    font-size: 12px;
+    color: hsl(var(--foreground));
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    outline: none;
+    transition: border-color 150ms;
+  }
+  .select:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.3); }
+
+  .switch {
+    display: inline-flex;
+    width: 38px;
+    height: 22px;
+    border-radius: 11px;
+    background: hsl(var(--input));
+    position: relative;
+    cursor: pointer;
+    transition: background-color 150ms;
+    flex-shrink: 0;
+  }
+  .switch[data-state="checked"] { background: hsl(var(--primary)); }
+  .switch::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: hsl(var(--background));
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.2);
+  }
+  .switch[data-state="checked"]::after { transform: translateX(16px); }
+
+  /* ============ shadcn 组件：Progress ============ */
+  .progress {
+    position: relative;
+    height: 8px;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 4px;
+    background: hsl(var(--secondary));
+  }
+  .progress-indicator {
+    height: 100%;
+    background: hsl(var(--primary));
+    border-radius: 4px;
+    transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .progress-indicator.success { background: hsl(var(--success)); }
+
+  /* ============ shadcn 组件：Separator ============ */
+  .separator {
+    height: 1px;
+    background: hsl(var(--border));
+    margin: 4px 0;
+  }
+
+  /* ============ shadcn 组件：Alert ============ */
+  .alert {
+    display: flex;
+    gap: 10px;
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    padding: 14px 16px;
+  }
+  .alert-destructive {
+    border-color: hsl(var(--destructive) / 0.3);
+    background: hsl(var(--destructive) / 0.05);
+  }
+  .alert-icon { flex-shrink: 0; }
+  .alert-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .alert-desc { font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.6; }
+
+  /* ============ 主窗口（dsh Web UI） ============ */
+  .dsh-fullscreen {
+    flex: 1;
+    background:
+      radial-gradient(circle at 30% 20%, hsl(var(--success) / 0.04) 0%, transparent 50%),
+      hsl(var(--background));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .dsh-fullscreen-badge {
+    position: absolute;
+    top: 52px;
+    right: 16px;
+  }
+
+  .dsh-fullscreen-label {
+    font-size: 14px;
+    color: hsl(var(--foreground));
+  }
+
+  .dsh-fullscreen-sub {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ============ 托盘菜单（shadcn DropdownMenu 视觉） ============ */
+  .tray-demo {
+    width: 280px;
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 10px 38px -10px hsl(0 0% 0% / 0.45), 0 10px 20px -15px hsl(0 0% 0% / 0.3);
+    overflow: hidden;
+    padding: 4px;
+  }
+
+  .tray-header {
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .tray-logo {
+    width: 26px;
+    height: 26px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tray-logo svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .tray-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: hsl(var(--popover-foreground));
+  }
+
+  .tray-version {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    margin-left: auto;
+  }
+
+  .tray-status {
+    padding: 8px 12px;
+    margin: 0 4px 4px;
+    background: hsl(var(--success) / 0.08);
+    border: 1px solid hsl(var(--success) / 0.2);
+    border-radius: calc(var(--radius) - 2px);
+    font-size: 11px;
+    color: hsl(var(--success));
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .tray-menu-item {
+    padding: 7px 12px;
+    margin: 1px 4px;
+    font-size: 13px;
+    color: hsl(var(--popover-foreground));
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: calc(var(--radius) - 4px);
+    transition: background-color 150ms, color 150ms;
+    outline: none;
+  }
+
+  .tray-menu-item:hover {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+
+  .tray-menu-item:focus-visible {
+    background: hsl(var(--accent));
+    outline: none;
+  }
+
+  .tray-menu-icon {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(var(--muted-foreground));
+    flex-shrink: 0;
+  }
+
+  .tray-menu-item:hover .tray-menu-icon { color: hsl(var(--accent-foreground)); }
+
+  .tray-menu-shortcut {
+    margin-left: auto;
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .tray-menu-badge {
+    margin-left: auto;
+    background: hsl(var(--success));
+    color: hsl(var(--success-foreground));
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+  }
+
+  .tray-menu-separator {
+    height: 1px;
+    background: hsl(var(--border));
+    margin: 4px 8px;
+  }
+
+  .tray-menu-item.danger { color: hsl(var(--destructive)); }
+  .tray-menu-item.danger .tray-menu-icon { color: hsl(var(--destructive)); }
+  .tray-menu-item.danger:hover {
+    background: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
+  }
+
+  /* ============ 设置面板 ============ */
+  .panel {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .panel h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    letter-spacing: -0.01em;
+  }
+
+  .panel-section {
+    margin-bottom: 24px;
+  }
+
+  .panel-section-title {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid hsl(var(--border));
+    font-weight: 600;
+  }
+
+  .setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid hsl(var(--border));
+    gap: 16px;
+  }
+
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-label {
+    font-size: 13px;
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+
+  .setting-desc {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    margin-top: 3px;
+  }
+
+  .setting-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .version-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: hsl(var(--foreground));
+    padding: 4px 9px;
+    background: hsl(var(--secondary));
+    border-radius: calc(var(--radius) - 4px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* ============ 首启向导 ============ */
+  .firstrun {
+    padding: 32px 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .firstrun-logo {
+    width: 48px;
+    height: 48px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+
+  .firstrun-logo svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .firstrun h2 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+
+  .firstrun-desc {
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .download-section {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    transition: border-color 150ms;
+  }
+
+  .download-section:hover { border-color: hsl(var(--input)); }
+
+  .download-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .download-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .download-name svg {
+    width: 14px;
+    height: 14px;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .download-size {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .progress-text {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .progress-text .done-label { color: hsl(var(--success)); }
+
+  .firstrun-options {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+    margin-top: 4px;
+    cursor: pointer;
+  }
+
+  .checkbox {
+    width: 16px;
+    height: 16px;
+    border: 1px solid hsl(var(--input));
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 150ms;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: hsl(var(--background));
+  }
+
+  .checkbox.checked {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
+  /* ============ shadcn Dialog 视觉 ============ */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: hsl(0 0% 0% / 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+  }
+
+  .modal {
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 360px;
+    box-shadow: 0 10px 38px -10px hsl(0 0% 0% / 0.5), 0 10px 20px -15px hsl(0 0% 0% / 0.3);
+    animation: modal-in 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96) translateY(4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: hsl(var(--info) / 0.12);
+    color: hsl(var(--info));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    border: 1px solid hsl(var(--info) / 0.25);
+  }
+
+  .modal-icon svg { width: 18px; height: 18px; }
+
+  .modal-icon.warning {
+    background: hsl(var(--warning) / 0.12);
+    color: hsl(var(--warning));
+    border-color: hsl(var(--warning) / 0.25);
+  }
+  .modal-icon.danger {
+    background: hsl(var(--destructive) / 0.12);
+    color: hsl(var(--destructive));
+    border-color: hsl(var(--destructive) / 0.25);
+  }
+  .modal-icon.success {
+    background: hsl(var(--success) / 0.12);
+    color: hsl(var(--success));
+    border-color: hsl(var(--success) / 0.25);
+  }
+
+  .modal h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .modal p {
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .modal-versions {
+    background: hsl(var(--muted) / 0.4);
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+    padding: 10px 12px;
+    margin-bottom: 18px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .modal-version-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    color: hsl(var(--foreground));
+  }
+
+  .modal-version-row .label { color: hsl(var(--muted-foreground)); }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .error-detail {
+    background: hsl(var(--muted) / 0.4);
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+    padding: 11px 13px;
+    margin-bottom: 18px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: hsl(var(--muted-foreground));
+    max-height: 90px;
+    overflow-y: auto;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .error-detail .err { color: hsl(var(--destructive)); }
+  .error-detail .info { color: hsl(var(--info)); }
+
+  /* ============ 启动中 ============ */
+  .booting {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .booting-text {
+    font-size: 14px;
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+
+  .booting-step {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    font-family: 'JetBrains Mono', monospace;
+    padding: 4px 9px;
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 4px);
+  }
+
+  .booting-step .prompt { color: hsl(var(--success)); }
+
+  /* ============ 关于面板 ============ */
+  .about {
+    padding: 36px 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .about-logo {
+    width: 64px;
+    height: 64px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+
+  .about-logo svg { width: 32px; height: 32px; }
+
+  .about h2 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .about-version {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 18px;
+    padding: 3px 10px;
+    background: hsl(var(--secondary));
+    border-radius: calc(var(--radius) - 4px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .about-info {
+    width: 100%;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .about-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .about-info-row:last-child { border-bottom: none; }
+
+  .about-info-label { color: hsl(var(--muted-foreground)); }
+  .about-info-value { font-family: 'JetBrains Mono', monospace; color: hsl(var(--foreground)); }
+
+  /* ============ 系统通知（shadcn 风格 Card） ============ */
+  .notification {
+    width: 340px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 10px 38px -10px hsl(0 0% 0% / 0.45), 0 10px 20px -15px hsl(0 0% 0% / 0.3);
+    overflow: hidden;
+    animation: notif-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes notif-in {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .notification-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .notification-icon {
+    width: 24px;
+    height: 24px;
+    background: hsl(var(--success) / 0.12);
+    color: hsl(var(--success));
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid hsl(var(--success) / 0.25);
+  }
+
+  .notification-icon svg { width: 14px; height: 14px; }
+
+  .notification-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
+
+  .notification-app {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .notification-body {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.6;
+  }
+
+  .notification-body strong {
+    color: hsl(var(--success));
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+  }
+
+  .notification-actions {
+    padding: 10px 14px;
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid hsl(var(--border));
+    justify-content: flex-end;
+  }
+
+  /* ============ Accessibility ============ */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  button, .switch, .checkbox, .tray-menu-item, .select, .firstrun-options {
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>deepseek-harness-launcher <span style="color: hsl(var(--success))">·</span> 页面原型 v4</h1>
+<p class="subtitle">shadcn-vue 风格 <span class="accent">·</span> 主窗口让给 dsh <span class="accent">·</span> 壳子功能收在托盘与独立面板</p>
+
+<div class="screens">
+
+  <!-- 1. 主窗口（纯 dsh Web UI） -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">01</span> 主窗口 · 全屏给 dsh Web UI<br>顶栏透明叠加，仅交通灯</div>
+    <div class="window window-main">
+      <div class="titlebar main-titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+      </div>
+      <div class="window-content">
+        <div class="dsh-fullscreen">
+          <span class="badge badge-success badge-dot"><span class="dot"></span>dsh 0.1.0-rc.6 · running</span>
+          <div class="dsh-fullscreen-label">dsh Web UI 在此区域加载</div>
+          <div class="dsh-fullscreen-sub mono">127.0.0.1:51842</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 托盘菜单 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">02</span> 托盘菜单 · 点击托盘图标弹出<br>壳子所有功能入口集中于此</div>
+    <div class="tray-demo">
+      <div class="tray-header">
+        <div class="tray-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+        </div>
+        <div class="tray-title">deepseek-harness-launcher</div>
+        <div class="tray-version mono">v0.1.0</div>
+      </div>
+      <div class="tray-status">
+        <span class="status-dot" style="width:6px;height:6px;border-radius:50%;background:hsl(var(--success));box-shadow:0 0 6px hsl(var(--success));animation: pulse 2s ease-in-out infinite;"></span>
+        <span>dsh 运行中 · 0.1.0-rc.6</span>
+      </div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>
+        </span>
+        <span>显示主窗口</span>
+        <span class="tray-menu-shortcut">⌘1</span>
+      </div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </span>
+        <span>重启 dsh</span>
+      </div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+        </span>
+        <span>检查 dsh 更新</span>
+        <span class="tray-menu-badge">NEW</span>
+      </div>
+      <div class="tray-menu-separator"></div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </span>
+        <span>设置...</span>
+      </div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        </span>
+        <span>关于 deepseek-harness-launcher</span>
+      </div>
+      <div class="tray-menu-item">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="15" y2="17"></line></svg>
+        </span>
+        <span>导出诊断日志</span>
+      </div>
+      <div class="tray-menu-separator"></div>
+      <div class="tray-menu-item danger">
+        <span class="tray-menu-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        </span>
+        <span>退出</span>
+        <span class="tray-menu-shortcut">⌘Q</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 首启向导 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">03</span> 首次启动 · 独立窗口<br>下载 Node + dsh</div>
+    <div class="window window-main">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="firstrun">
+          <div class="firstrun-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          </div>
+          <div>
+            <h2>正在准备运行环境</h2>
+            <p class="firstrun-desc">首次启动需要下载 Node.js 运行时和 dsh，仅此一次，约 55 MB。</p>
+          </div>
+
+          <div class="download-section">
+            <div class="download-row">
+              <span class="download-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon></svg>
+                Node.js v22.19.0
+              </span>
+              <span class="download-size mono">25 MB</span>
+            </div>
+            <div class="progress">
+              <div class="progress-indicator success" style="width: 100%"></div>
+            </div>
+            <div class="progress-text">
+              <span class="done-label">✓ 已完成</span>
+              <span>SHA-256 已校验</span>
+            </div>
+          </div>
+
+          <div class="download-section">
+            <div class="download-row">
+              <span class="download-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                @deepseek-ai/dsh 0.1.0-rc.6
+              </span>
+              <span class="download-size mono">30 MB</span>
+            </div>
+            <div class="progress">
+              <div class="progress-indicator" style="width: 62%"></div>
+            </div>
+            <div class="progress-text">
+              <span>npm install 进行中</span>
+              <span>62% · 约 30 秒</span>
+            </div>
+          </div>
+
+          <label class="firstrun-options">
+            <div class="checkbox"></div>
+            <span>我已有 Node，手动指定路径</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 启动中 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">04</span> 启动中 · 主窗口遮罩<br>等待 dsh 就绪</div>
+    <div class="window window-main">
+      <div class="titlebar main-titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+      </div>
+      <div class="window-content">
+        <div class="booting">
+          <div class="spinner"></div>
+          <div class="booting-text">正在启动 dsh...</div>
+          <div class="booting-step mono"><span class="prompt">$</span> node --expose-internals dsh web</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 设置面板 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">05</span> 设置面板 · 独立窗口<br>从托盘菜单触发</div>
+    <div class="window window-panel">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher 设置</div>
+      </div>
+      <div class="window-content">
+        <div class="panel">
+          <h2>设置</h2>
+
+          <div class="panel-section">
+            <div class="panel-section-title">运行时版本</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">dsh 当前版本</div>
+                <div class="setting-desc">已知好版本：0.1.0-rc.5</div>
+              </div>
+              <div class="setting-control">
+                <span class="version-display">0.1.0-rc.6</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Node.js 版本</div>
+                <div class="setting-desc">已托管在用户目录</div>
+              </div>
+              <div class="setting-control">
+                <span class="version-display">v22.19.0</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">dsh 版本范围</div>
+                <div class="setting-desc">自动升级只接受此 semver 范围</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>~0.1.0 (推荐)</option>
+                  <option>^0.1</option>
+                  <option>latest</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-title">升级策略</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">自动检查 dsh 更新</div>
+                <div class="setting-desc">每 24 小时检查一次</div>
+              </div>
+              <div class="setting-control">
+                <div class="switch" data-state="checked"></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">自动应用更新</div>
+                <div class="setting-desc">下载完成后下次启动时切换</div>
+              </div>
+              <div class="setting-control">
+                <div class="switch" data-state="checked"></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">启动失败自动回滚</div>
+                <div class="setting-desc">回退到上个已知好版本</div>
+              </div>
+              <div class="setting-control">
+                <div class="switch" data-state="checked"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-title">镜像源</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Node 下载源</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>npmmirror.com</option>
+                  <option>nodejs.org</option>
+                  <option>tsinghua</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">npm registry</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>registry.npmmirror.com</option>
+                  <option>registry.npmjs.org</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-title">手动操作</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">检查 dsh 更新</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-outline btn-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                  立即检查
+                </button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">清理旧版本</div>
+                <div class="setting-desc">保留当前 + 已知好版本</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-outline btn-sm">清理</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">重启 dsh 进程</div>
+                <div class="setting-desc">不影响主窗口，仅重启后台</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-outline btn-sm">重启</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. 关于面板 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">06</span> 关于面板 · 独立窗口<br>显示壳子与运行时信息</div>
+    <div class="window window-panel">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">关于</div>
+      </div>
+      <div class="window-content">
+        <div class="about">
+          <div class="about-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          </div>
+          <h2>deepseek-harness-launcher</h2>
+          <div class="about-version">v0.1.0</div>
+
+          <div class="about-info">
+            <div class="about-info-row">
+              <span class="about-info-label">壳子版本</span>
+              <span class="about-info-value">0.1.0</span>
+            </div>
+            <div class="about-info-row">
+              <span class="about-info-label">dsh 版本</span>
+              <span class="about-info-value">0.1.0-rc.6</span>
+            </div>
+            <div class="about-info-row">
+              <span class="about-info-label">Node 版本</span>
+              <span class="about-info-value">v22.19.0</span>
+            </div>
+            <div class="about-info-row">
+              <span class="about-info-label">数据目录</span>
+              <span class="about-info-value">~/Library/.../deepseek-harness-launcher</span>
+            </div>
+            <div class="about-info-row">
+              <span class="about-info-label">dsh 端点</span>
+              <span class="about-info-value">127.0.0.1:51842</span>
+            </div>
+            <div class="about-info-row">
+              <span class="about-info-label">运行时长</span>
+              <span class="about-info-value">2h 14m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. 系统通知 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">07</span> 系统通知 · 后台检查到新版<br>点击进入升级对话框</div>
+    <div class="notification">
+      <div class="notification-header">
+        <div class="notification-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+        </div>
+        <div class="notification-title">发现 dsh 新版本</div>
+        <div class="notification-app">deepseek-harness-launcher</div>
+      </div>
+      <div class="notification-body">
+        <strong>0.1.0-rc.6</strong> 已可用，当前为 0.1.0-rc.5。重启后生效。
+      </div>
+      <div class="notification-actions">
+        <button class="btn btn-ghost btn-sm">稍后</button>
+        <button class="btn btn-primary btn-sm">立即升级</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. 升级对话框 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">08</span> 升级对话框 · 独立窗口<br>从通知或托盘菜单触发</div>
+    <div class="window window-modal">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
+          <div class="modal">
+            <div class="modal-icon success">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            </div>
+            <h3>发现 dsh 新版本</h3>
+            <p>新版本已下载完成，重启后生效。当前会话将继续使用旧版本。</p>
+            <div class="modal-versions">
+              <div class="modal-version-row">
+                <span class="label">当前</span>
+                <span>0.1.0-rc.5</span>
+              </div>
+              <div class="modal-version-row">
+                <span class="label">新版</span>
+                <span style="color: hsl(var(--success))">0.1.0-rc.6</span>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-outline">下次再说</button>
+              <button class="btn btn-primary">立即重启升级</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. 启动失败回滚 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">09</span> 启动失败 · 独立错误窗口<br>自动回滚后弹出</div>
+    <div class="window window-modal">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
+          <div class="modal">
+            <div class="modal-icon warning">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <h3>dsh 0.1.0-rc.6 启动失败</h3>
+            <p>新版 dsh 在 90 秒内未输出就绪信号，已自动回滚到上个已知好版本。</p>
+            <div class="error-detail"><span class="err">[ERROR]</span> Host readiness timed out after 90000ms
+  at HostSupervisor.start (host-supervisor.ts:142)
+  at boot (main.ts:78)
+<span class="info">[INFO]</span> rolling back to 0.1.0-rc.5
+<span class="info">[INFO]</span> restarting dsh web...</div>
+            <div class="modal-actions">
+              <button class="btn btn-outline">导出日志</button>
+              <button class="btn btn-ghost">忽略此版本</button>
+              <button class="btn btn-primary">继续使用旧版</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. Node 升级提示 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">10</span> Node 升级提示 · 独立窗口<br>dsh 要求更高 Node 版本</div>
+    <div class="window window-modal">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
+          <div class="modal">
+            <div class="modal-icon warning">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            </div>
+            <h3>需要升级 Node.js</h3>
+            <p>新版 dsh 要求 Node.js 24 或更高版本。是否现在升级？</p>
+            <div class="modal-versions">
+              <div class="modal-version-row">
+                <span class="label">当前 Node</span>
+                <span>v22.19.0</span>
+              </div>
+              <div class="modal-version-row">
+                <span class="label">所需</span>
+                <span style="color: hsl(var(--warning))">^24.0.0</span>
+              </div>
+              <div class="modal-version-row">
+                <span class="label">下载大小</span>
+                <span>~25 MB</span>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-outline">暂不升级 dsh</button>
+              <button class="btn btn-primary">立即升级 Node</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. 崩溃恢复 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">11</span> 崩溃恢复 · 独立窗口<br>连续崩溃后提示回滚</div>
+    <div class="window window-modal">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
+          <div class="modal">
+            <div class="modal-icon danger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <h3>dsh 进程连续崩溃</h3>
+            <p>最近 5 分钟内 dsh 进程意外退出 3 次，可能存在严重问题。建议回滚到上个已知好版本以保证可用性。</p>
+            <div class="modal-versions">
+              <div class="modal-version-row">
+                <span class="label">当前版本</span>
+                <span>0.1.0-rc.6</span>
+              </div>
+              <div class="modal-version-row">
+                <span class="label">崩溃次数</span>
+                <span style="color: hsl(var(--destructive))">3 / 5min</span>
+              </div>
+              <div class="modal-version-row">
+                <span class="label">建议版本</span>
+                <span style="color: hsl(var(--success))">0.1.0-rc.5</span>
+              </div>
+            </div>
+            <div class="error-detail"><span class="err">[FATAL]</span> dsh process exited with code=134 (SIGABRT)
+  at HostSupervisor.watch (host-supervisor.ts:218)
+  at boot (main.ts:78)
+<span class="info">[INFO]</span> crash counter: 3 / 5 (threshold reached)
+<span class="info">[INFO]</span> awaiting user decision...</div>
+            <div class="modal-actions">
+              <button class="btn btn-outline">导出日志</button>
+              <button class="btn btn-ghost">忽略并继续</button>
+              <button class="btn btn-primary">回滚到 0.1.0-rc.5</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. 镜像源选择器（独立片段，演示 shadcn Select） -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">12</span> 镜像源选择器 · 设置面板片段<br>shadcn Select + 自定义输入</div>
+    <div class="window window-panel" style="height: auto; min-height: 320px;">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">镜像源</div>
+      </div>
+      <div class="window-content">
+        <div class="panel">
+          <div class="panel-section">
+            <div class="panel-section-title">Node 下载源</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">官方 / 镜像</div>
+                <div class="setting-desc">影响 Node 二进制下载速度</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>npmmirror.com (推荐)</option>
+                  <option>nodejs.org (官方)</option>
+                  <option>tsinghua</option>
+                  <option>自定义...</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">自定义 URL</div>
+                <div class="setting-desc">支持 <span class="mono">{version}</span> / <span class="mono">{platform}</span> 占位符</div>
+              </div>
+              <div class="setting-control" style="flex: 1; max-width: 200px;">
+                <input class="input" placeholder="https://npmmirror.com/mirrors/node/v{version}/node-{platform}.tar.gz">
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-title">npm Registry</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">registry</div>
+                <div class="setting-desc">影响 dsh 包下载</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>registry.npmmirror.com</option>
+                  <option>registry.npmjs.org</option>
+                  <option>自定义...</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">校验下载完整性</div>
+                <div class="setting-desc">SHA-256 校验，失败自动重试</div>
+              </div>
+              <div class="setting-control">
+                <div class="switch" data-state="checked"></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">最大重试次数</div>
+              </div>
+              <div class="setting-control">
+                <select class="select">
+                  <option>3 (默认)</option>
+                  <option>5</option>
+                  <option>10</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. 升级进度对话框 -->
+  <div class="screen-group">
+    <div class="screen-label"><span class="num">13</span> 升级进度 · 独立窗口<br>下载 + 校验 + 切换</div>
+    <div class="window window-modal" style="height: 380px;">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="light close"></div>
+          <div class="light minimize"></div>
+          <div class="light maximize"></div>
+        </div>
+        <div class="titlebar-title">deepseek-harness-launcher</div>
+      </div>
+      <div class="window-content">
+        <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
+          <div class="modal" style="width: 380px;">
+            <div class="modal-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </div>
+            <h3>正在升级 dsh</h3>
+            <p>下载并校验新版本，完成后下次启动生效。</p>
+
+            <div class="download-section" style="margin-bottom: 14px;">
+              <div class="download-row">
+                <span class="download-name">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                  @deepseek-ai/dsh 0.1.0-rc.6
+                </span>
+                <span class="badge badge-success" style="background: hsl(var(--info) / 0.12); color: hsl(var(--info)); border-color: hsl(var(--info) / 0.25);">下载中</span>
+              </div>
+              <div class="progress">
+                <div class="progress-indicator" style="width: 78%; background: hsl(var(--info));"></div>
+              </div>
+              <div class="progress-text">
+                <span>23.4 MB / 30 MB</span>
+                <span>78% · 约 12 秒</span>
+              </div>
+            </div>
+
+            <div class="error-detail" style="margin-bottom: 16px;"><span class="info">[INFO]</span> downloading from registry.npmmirror.com
+<span class="info">[INFO]</span> verifying SHA-256: 8a3f2c1b...
+<span class="info">[INFO]</span> installing to ~/Library/.../dsh/0.1.0-rc.6
+<span class="info">[INFO]</span> awaiting verification...</div>
+
+            <div class="modal-actions">
+              <button class="btn btn-outline">取消</button>
+              <button class="btn btn-ghost" disabled style="opacity: 0.5; cursor: not-allowed;">后台运行</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ 页脚说明 ============ -->
+<div style="max-width: 1480px; margin: 64px auto 0; padding-top: 24px; border-top: 1px solid hsl(var(--border)); display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+
+  <div>
+    <div style="font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-weight: 600;">设计原则</div>
+    <ul style="font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.8; list-style: none;">
+      <li>· 主窗口让给 dsh Web UI，壳子不抢空间</li>
+      <li>· 壳子功能收在托盘与独立面板</li>
+      <li>· 升级 / 错误使用独立窗口，不打扰主流程</li>
+      <li>· 所有交互遵循 shadcn-vue 视觉规范</li>
+    </ul>
+  </div>
+
+  <div>
+    <div style="font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-weight: 600;">shadcn-vue 组件映射</div>
+    <ul style="font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.8; list-style: none;">
+      <li>· <span class="mono">Button</span> · 按钮（primary/outline/ghost/destructive）</li>
+      <li>· <span class="mono">Card</span> · 卡片容器</li>
+      <li>· <span class="mono">Dialog</span> · 模态对话框</li>
+      <li>· <span class="mono">Progress</span> · 进度条</li>
+      <li>· <span class="mono">Badge</span> · 状态徽章</li>
+      <li>· <span class="mono">Select / Input / Switch</span> · 表单控件</li>
+      <li>· <span class="mono">DropdownMenu</span> · 托盘菜单</li>
+      <li>· <span class="mono">Alert</span> · 警告提示</li>
+    </ul>
+  </div>
+
+  <div>
+    <div style="font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-weight: 600;">技术栈</div>
+    <ul style="font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.8; list-style: none;">
+      <li>· Tauri 2.x（Rust 后端）</li>
+      <li>· Vue 3 + TypeScript 5</li>
+      <li>· Pinia 状态管理</li>
+      <li>· Tailwind CSS 3</li>
+      <li>· shadcn-vue UI 组件</li>
+      <li>· Radix Vue（底层原语）</li>
+    </ul>
+  </div>
+
+  <div>
+    <div style="font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-weight: 600;">色彩扩展</div>
+    <ul style="font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.8; list-style: none;">
+      <li>· <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: hsl(var(--success)); vertical-align: middle;"></span> success · 运行正常</li>
+      <li>· <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: hsl(var(--warning)); vertical-align: middle;"></span> warning · 需注意</li>
+      <li>· <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: hsl(var(--info)); vertical-align: middle;"></span> info · 进行中</li>
+      <li>· <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: hsl(var(--destructive)); vertical-align: middle;"></span> destructive · 错误</li>
+      <li>· 在 shadcn 官方 token 基础上扩展</li>
+    </ul>
+  </div>
+
+</div>
+
+<p style="text-align: center; margin-top: 48px; font-size: 11px; color: hsl(var(--muted-foreground)); font-family: 'JetBrains Mono', monospace;">
+  deepseek-harness-launcher prototype · shadcn-vue style · v4 · 2026-08
+</p>
+
+</body>
+</html>

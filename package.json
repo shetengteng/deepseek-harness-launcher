@@ -1,0 +1,49 @@
+{
+  "name": "deepseek-harness-launcher",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{vue,ts,tsx,css}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@vueuse/core": "^11.0.0",
+    "class-variance-authority": "^0.7",
+    "clsx": "^2",
+    "lucide-vue-next": "^0.460",
+    "pinia": "^2.3.0",
+    "reka-ui": "^2.10",
+    "tailwind-merge": "^2",
+    "tailwindcss-animate": "^1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/eslint-config-typescript": "^14",
+    "@vue/test-utils": "^2",
+    "autoprefixer": "^10",
+    "eslint": "^9",
+    "eslint-plugin-vue": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "postcss": "^8",
+    "prettier": "^3",
+    "shadcn-vue": "^0.11",
+    "tailwindcss": "^3.4",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vitest": "^2",
+    "vue-tsc": "^2.1.10"
+  }
+}

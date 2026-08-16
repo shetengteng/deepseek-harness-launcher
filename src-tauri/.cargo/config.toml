@@ -1,0 +1,10 @@
+[build]
+# Rustflags 默认在 cargo build/test/clippy 都生效。
+# 设计要求 clippy 设为 deny warnings；放在 rustflags 里让所有子命令统一遵守。
+# 注意：CI 里需要在 build 之外再跑一次 `cargo clippy -- -D warnings` 做严格检查，
+# 这里仅保证本地常规构建也走 deny warnings。
+rustflags = ["-D", "warnings"]
+
+[alias]
+# 快捷别名：`cargo lint` 等价 `cargo clippy --all-targets -- -D warnings`
+lint = "clippy --all-targets -- -D warnings"
