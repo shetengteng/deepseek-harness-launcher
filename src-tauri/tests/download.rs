@@ -448,3 +448,37 @@ async fn download_missing_shasums_returns_err() {
     // archive 文件应被下载但校验阶段失败
     let _ = archive_bytes;
 }
+
+/// 本地磁盘/权限错误（PR-020）：dest 目录不可写时，Io 错误必须原样返回
+/// （保留 kind=io → 前端展示磁盘/权限文案），且不消耗重试次数。
+#[tokio::test]
+#[cfg(unix)]
+async fn download_local_io_error_returns_immediately_without_retry() {
+    let server = MockServer::start().await;
+    let (archive_bytes, sha) = build_node_archive_fixture();
+    mount_node_files(&server, &archive_bytes, &sha).await;
+
+    let mirror = custom_mirror(server.uri());
+    let client = build_client();
+    let tmp = tempfile::tempdir().unwrap();
+    let ro = tmp.path().join("read-only");
+    std::fs::create_dir(&ro).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    let err = download_with_retry(&client, &mirror, "22.19.0", ARCHIVE_FILENAME, &ro, None, 3)
+        .await
+        .expect_err("write to read-only dir must fail");
+
+    // 保留 Io kind，而非被包成 NodeDownload"换镜像源"文案
+    assert!(
+        matches!(
+            err,
+            deepseek_harness_launcher_lib::error::LauncherError::Io(_)
+        ),
+        "unexpected error: {err:?}"
+    );
+    // 只发过 1 次 GET：本地错误不重试
+    let hits = server.received_requests().await.unwrap().len();
+    assert_eq!(hits, 1, "local io error should not be retried");
+}

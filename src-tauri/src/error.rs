@@ -252,6 +252,8 @@ fn node_download_user_message(inner: &str) -> String {
         "镜像返回了错误页面而非安装包。请更换镜像源后重试。".to_string()
     } else if lower.contains("disk") || lower.contains("no space") {
         "磁盘空间不足。请清理磁盘后重试（至少需要 200MB）。".to_string()
+    } else if lower.contains("not permitted") || lower.contains("permission") {
+        "没有写入权限。请检查应用数据目录权限（必要时用管理员身份运行）。".to_string()
     } else if lower.contains("404") {
         "镜像源上找不到该版本。请确认版本号或更换镜像源。".to_string()
     } else {
@@ -320,6 +322,18 @@ mod tests {
             "GET http://x returned suspiciously small body (Content-Length: 200 bytes)".into(),
         );
         assert!(err.user_message().contains("错误页面"));
+    }
+
+    #[test]
+    fn node_download_permission_error_maps_to_permission_hint() {
+        // 兜底分类：即使权限错误以字符串形式进入 NodeDownload，
+        // 也不能提示"更换镜像源"（PR-020 磁盘/网络错误识别）。
+        let err = LauncherError::NodeDownload(
+            "all 2 attempts failed: io error: Operation not permitted (os error 1)".into(),
+        );
+        let msg = err.user_message();
+        assert!(msg.contains("权限"), "unexpected: {msg}");
+        assert!(!msg.contains("镜像源"), "unexpected: {msg}");
     }
 
     #[test]

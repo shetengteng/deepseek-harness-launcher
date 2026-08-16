@@ -273,6 +273,13 @@ pub async fn download_with_retry(
                 }
             }
             Err(e) => {
+                // 本地磁盘/权限错误（EPERM / EACCES / ENOSPC）：重试与换镜像都无法解决，
+                // 直接返回 Io 错误，保留 kind=io 让前端展示磁盘/权限文案而非"换镜像源"。
+                if matches!(e, LauncherError::Io(_)) {
+                    tracing::error!(attempt, error = %e, "local io error, aborting retries");
+                    let _ = tokio::fs::remove_file(&dest_path).await;
+                    return Err(e);
+                }
                 tracing::warn!(attempt, error = %e, "download failed");
                 last_err = Some(e);
             }
