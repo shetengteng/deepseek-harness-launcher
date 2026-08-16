@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { useLauncherStore } from "../launcher";
+import { detectPlatformArch, useLauncherStore } from "../launcher";
 import type { CrashLimitPayload, StatusSnapshot } from "@/lib/tauri";
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
@@ -52,6 +52,8 @@ describe("useLauncherStore", () => {
         host_origin: null,
         dsh_version: null,
         node_version: null,
+        platform: "darwin",
+        arch: "arm64",
       } satisfies StatusSnapshot);
 
       const store = useLauncherStore();
@@ -67,6 +69,8 @@ describe("useLauncherStore", () => {
         host_origin: null,
         dsh_version: "0.1.0",
         node_version: "20.18.0",
+        platform: "darwin",
+        arch: "arm64",
       } satisfies StatusSnapshot);
 
       const store = useLauncherStore();
@@ -418,6 +422,15 @@ describe("useLauncherStore", () => {
 
   describe("installNode", () => {
     it("transitions through downloading to done on success", async () => {
+      // detectPlatformArch 只认后端快照：先应用一次 status
+      invokeMock.mockResolvedValueOnce({
+        phase: "first_run",
+        host_origin: null,
+        dsh_version: null,
+        node_version: null,
+        platform: "darwin",
+        arch: "arm64",
+      } satisfies StatusSnapshot);
       invokeMock.mockResolvedValueOnce("22.19.0"); // install_node_command
       // refreshStatus after install
       invokeMock.mockResolvedValueOnce({
@@ -425,9 +438,13 @@ describe("useLauncherStore", () => {
         host_origin: null,
         dsh_version: null,
         node_version: "22.19.0",
+        platform: "darwin",
+        arch: "arm64",
       });
 
       const store = useLauncherStore();
+      // detectPlatformArch 只认后端快照：先应用一次 status
+      await store.refreshStatus();
       store.mirrors = [
         {
           id: "npmmirror.com",
@@ -446,9 +463,18 @@ describe("useLauncherStore", () => {
     });
 
     it("resets to mirror_select and sets error on install failure", async () => {
+      invokeMock.mockResolvedValueOnce({
+        phase: "first_run",
+        host_origin: null,
+        dsh_version: null,
+        node_version: null,
+        platform: "darwin",
+        arch: "arm64",
+      } satisfies StatusSnapshot);
       invokeMock.mockRejectedValueOnce({ kind: "io", message: "disk full" });
 
       const store = useLauncherStore();
+      await store.refreshStatus();
       store.mirrors = [
         {
           id: "npmmirror.com",
@@ -477,12 +503,21 @@ describe("useLauncherStore", () => {
     });
 
     it("guards against concurrent calls", async () => {
+      invokeMock.mockResolvedValueOnce({
+        phase: "first_run",
+        host_origin: null,
+        dsh_version: null,
+        node_version: null,
+        platform: "darwin",
+        arch: "arm64",
+      } satisfies StatusSnapshot);
       let resolve: ((v: string) => void) | undefined;
       invokeMock.mockImplementationOnce(
         () => new Promise<string>((r) => (resolve = r)),
       );
 
       const store = useLauncherStore();
+      await store.refreshStatus();
       store.mirrors = [
         {
           id: "npmmirror.com",
@@ -701,6 +736,8 @@ describe("useLauncherStore", () => {
           host_origin: null,
           dsh_version: "0.2.0",
           node_version: "22.19.0",
+          platform: "darwin",
+          arch: "arm64",
         });
 
       const store = useLauncherStore();
@@ -771,6 +808,34 @@ describe("useLauncherStore", () => {
 
       expect(store.crashLimit).toBeNull();
       expect(store.phase).toBe("idle");
+    });
+  });
+
+  // ─── platform/arch 检测（后端快照为准，UA 不可靠） ───
+
+  describe("detectPlatformArch", () => {
+    it("returns backend-reported values after snapshot applied", async () => {
+      invokeMock.mockResolvedValueOnce({
+        phase: "first_run",
+        host_origin: null,
+        dsh_version: null,
+        node_version: null,
+        platform: "darwin",
+        arch: "arm64",
+      } satisfies StatusSnapshot);
+
+      const store = useLauncherStore();
+      await store.refreshStatus();
+
+      // jsdom UA 判不出 arm64；必须拿到后端值
+      expect(detectPlatformArch()).toEqual({ platform: "darwin", arch: "arm64" });
+    });
+
+    it("throws before any snapshot is applied", async () => {
+      // 模块级缓存在同文件测试间共享：用新模块实例验证初始态
+      vi.resetModules();
+      const { detectPlatformArch: freshDetect } = await import("../launcher");
+      expect(() => freshDetect()).toThrow(/fetchStatus/);
     });
   });
 });

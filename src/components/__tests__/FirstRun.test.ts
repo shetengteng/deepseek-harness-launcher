@@ -173,12 +173,22 @@ describe("FirstRun", () => {
         },
       ];
       invokeMock.mockResolvedValueOnce(fakeMirrors); // loadMirrors
+      invokeMock.mockResolvedValueOnce({
+        phase: "first_run",
+        host_origin: null,
+        dsh_version: null,
+        node_version: null,
+        platform: "darwin",
+        arch: "arm64",
+      }); // 手动 refreshStatus（应用 platform/arch 快照）
       invokeMock.mockResolvedValueOnce("22.19.0"); // install_node_command
       invokeMock.mockResolvedValueOnce({
         phase: "idle",
         host_origin: null,
         dsh_version: null,
         node_version: "22.19.0",
+        platform: "darwin",
+        arch: "arm64",
       }); // refreshStatus
 
       const wrapper = mount(FirstRun);
@@ -187,6 +197,9 @@ describe("FirstRun", () => {
       const store = useLauncherStore();
       // loadMirrors 已经默认选中第一个，确认一下
       expect(store.selectedMirrorId).toBe("npmmirror.com");
+
+      // detectPlatformArch 只认后端快照：为该测试文件应用一次 status
+      await store.refreshStatus();
 
       const btn = wrapper.findAll("button").find((b) =>
         b.text().includes("开始下载"),

@@ -1342,12 +1342,24 @@ mod tests {
             host_origin: Some("http://127.0.0.1:51329".to_string()),
             dsh_version: Some("0.1.0".to_string()),
             node_version: None,
+            platform: "darwin".to_string(),
+            arch: "arm64".to_string(),
         };
         let json = serde_json::to_value(&snap).expect("serialize");
         assert_eq!(json["phase"], "first_run");
         assert_eq!(json["host_origin"], "http://127.0.0.1:51329");
         assert_eq!(json["dsh_version"], "0.1.0");
         assert!(json["node_version"].is_null());
+        assert_eq!(json["platform"], "darwin");
+        assert_eq!(json["arch"], "arm64");
+    }
+
+    #[test]
+    fn host_platform_arch_matches_build_target() {
+        // 归一化后必须落在 Node archive 命名空间内
+        let (platform, arch) = host_platform_arch();
+        assert!(matches!(platform, "darwin" | "win" | "linux"));
+        assert!(matches!(arch, "arm64" | "x64"));
     }
 
     /// `launcher_status` 端到端：从真实临时文件加载并生成 snapshot。
