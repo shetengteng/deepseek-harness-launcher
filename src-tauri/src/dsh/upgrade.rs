@@ -8,7 +8,7 @@ use std::path::Path;
 
 use chrono::Utc;
 use reqwest::Client;
-use semver::{VersionReq, Version};
+use semver::{Version, VersionReq};
 
 use crate::dsh::install::{install_dsh, options_from_manifest};
 use crate::dsh::registry::{fetch_package_manifest, fetch_package_metadata, RegistryCache};
@@ -24,6 +24,28 @@ pub struct UpgradeCandidate {
     pub engines_node: String,
 }
 
+/// 有新版 dsh 但当前 Node 不满足 `engines.node`（设计 §5.4 / PR-018）。
+/// 前端据此弹"需要 Node X，当前 Y"确认框。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeBlock {
+    pub dsh_version: String,
+    pub engines_node: String,
+    pub current_node: Option<String>,
+}
+
+/// `check_for_upgrade` 的完整结果：候选版本与 Node 阻塞信息互斥存在。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UpgradeCheck {
+    pub candidate: Option<UpgradeCandidate>,
+    pub node_block: Option<NodeBlock>,
+}
+
+impl UpgradeCheck {
+    fn none() -> Self {
+        Self::default()
+    }
+}
+
 /// 检查是否有可升级的 dsh 版本。
 ///
 /// 设计 §5.3：
@@ -32,13 +54,13 @@ pub struct UpgradeCandidate {
 /// 3. `latest` 满足 `pinned_range`
 /// 4. 不等于 current
 /// 5. 不在 `ignored_versions`
-/// 6. engines.node 满足当前 Node
+/// 6. engines.node 满足当前 Node；不满足 → 返回 `node_block` 让前端走 Node 升级流程
 pub async fn check_for_upgrade(
     state: &AppState,
     registry: &str,
     cache: &RegistryCache,
     client: &Client,
-) -> Result<Option<UpgradeCandidate>> {
+) -> Result<UpgradeCheck> {
     // 1. 检查间隔
     if let Some(last_check) = state.dsh.last_check {
         let elapsed = Utc::now() - last_check;
@@ -49,7 +71,7 @@ pub async fn check_for_upgrade(
                 interval_hours = state.dsh.check_interval_hours,
                 "check_for_upgrade: too soon, skipping"
             );
-            return Ok(None);
+            return Ok(UpgradeCheck::none());
         }
     }
 
@@ -73,44 +95,84 @@ pub async fn check_for_upgrade(
             pinned_range = %state.dsh.pinned_range,
             "check_for_upgrade: latest does not match pinned_range"
         );
-        return Ok(None);
+        return Ok(UpgradeCheck::none());
     }
 
     // 4. 不等于 current
     if state.dsh.current.as_deref() == Some(&latest) {
         tracing::debug!(latest = %latest, "check_for_upgrade: already at latest");
-        return Ok(None);
+        return Ok(UpgradeCheck::none());
     }
 
     // 5. 不在 ignored_versions
     if state.dsh.ignored_versions.contains(&latest) {
         tracing::debug!(latest = %latest, "check_for_upgrade: version is ignored");
-        return Ok(None);
+        return Ok(UpgradeCheck::none());
     }
 
     // 6. 检查 engines.node
     let manifest = metadata.manifest_for(&latest)?;
     let engines_node = manifest.engines.node.clone();
     if !engines_node.is_empty() {
-        let satisfied = current_node_satisfies(
-            state.node.as_ref().map(|n| n.version.as_str()),
-            &engines_node,
-        )?;
+        let current_node = state.node.as_ref().map(|n| n.version.clone());
+        let satisfied = current_node_satisfies(current_node.as_deref(), &engines_node)?;
         if !satisfied {
             tracing::info!(
                 latest = %latest,
                 engines_node = %engines_node,
-                current_node = ?state.node.as_ref().map(|n| &n.version),
+                current_node = ?current_node,
                 "check_for_upgrade: Node version does not satisfy engines.node"
             );
-            return Ok(None);
+            return Ok(UpgradeCheck {
+                candidate: None,
+                node_block: Some(NodeBlock {
+                    dsh_version: latest,
+                    engines_node,
+                    current_node,
+                }),
+            });
         }
     }
 
-    Ok(Some(UpgradeCandidate {
-        version: latest,
-        engines_node,
-    }))
+    Ok(UpgradeCheck {
+        candidate: Some(UpgradeCandidate {
+            version: latest,
+            engines_node,
+        }),
+        node_block: None,
+    })
+}
+
+/// 从 `engines.node` range 解析要安装的 Node 版本（PR-018）。
+/// 优先用 `DEFAULT_NODE_VERSION`（经过完整测试的组合）；不满足则取 range 下界。
+pub fn resolve_node_target(engines_range: &str) -> Result<String> {
+    let req = VersionReq::parse(engines_range).map_err(|e| {
+        LauncherError::NodeVersion(format!("invalid engines.node '{engines_range}': {e}"))
+    })?;
+
+    let default = Version::parse(crate::node::version::DEFAULT_NODE_VERSION)
+        .expect("DEFAULT_NODE_VERSION is valid semver");
+    if req.matches(&default) {
+        return Ok(crate::node::version::DEFAULT_NODE_VERSION.to_string());
+    }
+
+    // 取 range 下界：">=24.1.0" → "24.1.0"
+    let lower = engines_range
+        .trim_start_matches(|c: char| !c.is_ascii_digit())
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .next()
+        .unwrap_or("");
+    let parsed = Version::parse(lower).map_err(|e| {
+        LauncherError::NodeVersion(format!(
+            "cannot resolve Node version from engines '{engines_range}': {e}"
+        ))
+    })?;
+    if !req.matches(&parsed) {
+        return Err(LauncherError::NodeVersion(format!(
+            "resolved Node {parsed} does not satisfy engines '{engines_range}'"
+        )));
+    }
+    Ok(parsed.to_string())
 }
 
 /// 准备升级：下载安装新版本，设 pending，更新 last_check。
@@ -221,7 +283,8 @@ mod tests {
         let result = check_for_upgrade(&state, "https://registry.npmjs.org", &cache, &client)
             .await
             .expect("ok");
-        assert!(result.is_none());
+        assert!(result.candidate.is_none());
+        assert!(result.node_block.is_none());
     }
 
     #[tokio::test]
@@ -287,5 +350,33 @@ mod tests {
             ">=22.0.0"
         )
         .unwrap());
+    }
+
+    // ─── PR-018: resolve_node_target ───
+
+    #[test]
+    fn resolve_node_target_prefers_default_when_satisfied() {
+        // 默认 Node 版本满足 range → 返回默认版本（经过完整测试的组合）
+        let target = resolve_node_target(">=20.0.0").unwrap();
+        assert_eq!(target, crate::node::version::DEFAULT_NODE_VERSION);
+    }
+
+    #[test]
+    fn resolve_node_target_exact_lower_bound() {
+        // 默认版本不满足 → 取 range 下界
+        let target = resolve_node_target(">=24.1.0").unwrap();
+        assert_eq!(target, "24.1.0");
+    }
+
+    #[test]
+    fn resolve_node_target_caret_range() {
+        // "^20.19.0" 下界是 20.19.0，默认 22.19.0 不满足 ^20.19.0
+        let target = resolve_node_target("^20.19.0").unwrap();
+        assert_eq!(target, "20.19.0");
+    }
+
+    #[test]
+    fn resolve_node_target_rejects_invalid_range() {
+        assert!(resolve_node_target("not-a-range").is_err());
     }
 }

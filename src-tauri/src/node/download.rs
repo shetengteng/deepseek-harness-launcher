@@ -280,9 +280,19 @@ pub async fn download_with_retry(
     }
     // 最后一次清理残留（download_archive 内部已清理 .part，但可能残留最终文件）
     let _ = tokio::fs::remove_file(&dest_path).await;
-    Err(last_err.unwrap_or_else(|| {
-        LauncherError::NodeDownload(format!("download exhausted retries for {archive_filename}"))
-    }))
+    Err(last_err
+        .map(|e| {
+            // 聚合重试信息（设计 M4.4：统一提示所有尝试失败）
+            LauncherError::NodeDownload(format!(
+                "all {max_retries} attempts failed for {archive_filename} via {}: {e}",
+                mirror.base_url.trim_end_matches('/')
+            ))
+        })
+        .unwrap_or_else(|| {
+            LauncherError::NodeDownload(format!(
+                "download exhausted retries for {archive_filename}"
+            ))
+        }))
 }
 
 #[cfg(test)]

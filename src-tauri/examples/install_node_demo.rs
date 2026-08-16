@@ -49,7 +49,10 @@ async fn main() {
     // 3. 用 npmmirror 源
     let mirror = &BUILTIN_MIRRORS[0];
     println!("[mirror] id={}, base_url={}", mirror.id, mirror.base_url);
-    println!("[mirror] archive_url={}", mirror.archive_url(version, platform, arch));
+    println!(
+        "[mirror] archive_url={}",
+        mirror.archive_url(version, platform, arch)
+    );
     println!("[mirror] shasums_url={}", mirror.shasums_url(version));
     println!();
 
@@ -112,7 +115,10 @@ async fn main() {
         // 尝试 spawn node
         println!();
         println!(">>> 步骤 4: 尝试 spawn node");
-        match std::process::Command::new(&node_bin).arg("--version").output() {
+        match std::process::Command::new(&node_bin)
+            .arg("--version")
+            .output()
+        {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 println!("[ok] spawn node SUCCESS: --version={}", stdout.trim());

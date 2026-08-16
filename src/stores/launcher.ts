@@ -11,9 +11,13 @@ import {
   installNode,
   listMirrors,
   probeMirrors,
+  restartHost,
+  rollbackDsh,
   startHost,
   shutdownHost,
   validateCustomMirror,
+  type CrashLimitPayload,
+  type HostRestartedPayload,
   type LauncherErrorPayload,
   type MirrorInfo,
   type ProgressEvent,
@@ -75,6 +79,17 @@ export const useLauncherStore = defineStore("launcher", () => {
 
   /** `shutdownHost` 是否在进行中。 */
   const stopping = ref(false);
+
+  // ─── 崩溃恢复（PR-017，设计 §5.5） ───
+
+  /** 达到崩溃重试上限（或自动重启失败）的 payload。非空时 CrashDialog 弹出。 */
+  const crashLimit = shallowRef<CrashLimitPayload | null>(null);
+
+  /** 崩溃弹窗"重试 / 回滚"操作是否进行中。 */
+  const crashRecovering = ref(false);
+
+  /** 自动重启后短暂显示"已自动恢复"提示。 */
+  const autoRestartedAttempt = ref<number | null>(null);
 
   // ─── 错误上下文（page-flow-analysis.md §3.4） ───
 
@@ -183,7 +198,11 @@ export const useLauncherStore = defineStore("launcher", () => {
   function applySnapshot(snap: StatusSnapshot): void {
     dshVersion.value = snap.dsh_version;
     nodeVersion.value = snap.node_version;
-    origin.value = snap.host_origin;
+    // 后端 host_origin 恒为 null（不持久化）。ready 状态下保留现有 origin，
+    // 避免崩溃恢复流程末尾的 refreshStatus 清掉正在使用的 origin。
+    if (!(phase.value === "ready" && snap.host_origin === null)) {
+      origin.value = snap.host_origin;
+    }
     // Rust 端 M1 阶段不返回 `ready`（host_origin 不持久化），这里仍做防御性映射。
     if (snap.phase === "ready" && snap.host_origin) {
       phase.value = "ready";
@@ -204,7 +223,10 @@ export const useLauncherStore = defineStore("launcher", () => {
       return;
     }
     // snap.phase === "idle"
-    if (phase.value !== "first_run") {
+    // 后端 `launcher_status` 不感知 Host 存活（host_origin 不持久化），
+    // ready 状态（Host 已由 restartHost/startHost 启动）不被降级为 idle，
+    // 否则崩溃恢复流程 rollbackAfterCrash 末尾的 refreshStatus 会把 ready 打回 idle。
+    if (phase.value !== "first_run" && phase.value !== "ready") {
       phase.value = "idle";
     }
   }
@@ -257,6 +279,79 @@ export const useLauncherStore = defineStore("launcher", () => {
     } finally {
       installingDsh.value = false;
     }
+  }
+
+  // ─── 崩溃恢复 actions（PR-017，设计 §5.5） ───
+
+  /** 崩溃弹窗"重试"：清零计数器后重启 Host。成功 → phase=ready + 更新 origin。 */
+  async function retryAfterCrash(): Promise<void> {
+    if (crashRecovering.value) return;
+    crashRecovering.value = true;
+    try {
+      const o = await restartHost();
+      origin.value = o;
+      phase.value = "ready";
+      crashLimit.value = null;
+      error.value = null;
+    } catch (e) {
+      fail(e, "startHost");
+    } finally {
+      crashRecovering.value = false;
+    }
+  }
+
+  /** 崩溃弹窗"回滚"：切到 known_good 后重启。成功 → phase=ready。 */
+  async function rollbackAfterCrash(): Promise<void> {
+    if (crashRecovering.value) return;
+    crashRecovering.value = true;
+    try {
+      await rollbackDsh();
+      const o = await restartHost();
+      origin.value = o;
+      phase.value = "ready";
+      crashLimit.value = null;
+      error.value = null;
+      await refreshStatus();
+    } catch (e) {
+      fail(e, "startHost");
+    } finally {
+      crashRecovering.value = false;
+    }
+  }
+
+  /** 崩溃弹窗"忽略"：不重启，回到 idle 视图。 */
+  function dismissCrash(): void {
+    crashLimit.value = null;
+    if (phase.value === "ready") {
+      phase.value = "idle";
+      origin.value = null;
+    }
+  }
+
+  /**
+   * 初始化崩溃恢复事件监听（PR-017）。App.vue 挂载时调用一次。
+   *
+   * - `host-crash-limit`：达到重试上限/自动重启失败 → 弹 CrashDialog
+   * - `host-restarted`：自动重启成功 → 更新 origin（iframe 自动跟随），短暂提示
+   */
+  async function initCrashEvents(): Promise<void> {
+    const { listen } = await import("@tauri-apps/api/event");
+
+    await listen<CrashLimitPayload>("host-crash-limit", (ev) => {
+      crashLimit.value = ev.payload;
+      // Host 已死：origin 失效。若正处于 ready，先保持视图，弹窗覆盖其上。
+    });
+
+    await listen<HostRestartedPayload>("host-restarted", (ev) => {
+      origin.value = ev.payload.origin;
+      phase.value = "ready";
+      crashLimit.value = null;
+      autoRestartedAttempt.value = ev.payload.attempt;
+      // 5 秒后清除"已自动恢复"提示
+      setTimeout(() => {
+        autoRestartedAttempt.value = null;
+      }, 5000);
+    });
   }
 
   /** 清除错误，决定下一步 phase。
@@ -506,6 +601,14 @@ export const useLauncherStore = defineStore("launcher", () => {
     starting,
     stopping,
     installingDsh,
+    // 崩溃恢复（PR-017）
+    crashLimit,
+    crashRecovering,
+    autoRestartedAttempt,
+    retryAfterCrash,
+    rollbackAfterCrash,
+    dismissCrash,
+    initCrashEvents,
     // 错误上下文
     lastFailedAction,
     preErrorPhase,

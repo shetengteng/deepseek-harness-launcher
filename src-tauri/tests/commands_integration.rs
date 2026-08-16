@@ -10,13 +10,16 @@
 
 #![cfg(unix)]
 
+use std::sync::Arc;
 use std::time::Duration;
 
-use deepseek_harness_launcher_lib::host::{HostSupervisor, HostSupervisorConfig, HostSupervisorError};
+use deepseek_harness_launcher_lib::host::{
+    HostSupervisor, HostSupervisorConfig, HostSupervisorError,
+};
 
 #[tokio::test]
 async fn shutdown_is_idempotent() {
-    let sup = HostSupervisor::new(HostSupervisorConfig::default());
+    let sup = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
 
     sup.shutdown().await.await_completion().await;
     // 第二次调用应该是 no-op，不 panic
@@ -27,7 +30,8 @@ async fn shutdown_is_idempotent() {
 
 #[tokio::test]
 async fn start_after_shutdown_returns_already_shutdown() {
-    let sup = HostSupervisor::new(HostSupervisorConfig::default());
+    // `start` 需要 `Arc<HostSupervisor>`（exit monitor 持有引用支持崩溃重启，设计 §5.5）
+    let sup = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
     sup.shutdown().await.await_completion().await;
 
     // 构造一个明显错误的 options（node 不存在），start 应在 spawn 阶段失败。

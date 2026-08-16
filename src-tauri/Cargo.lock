@@ -790,6 +790,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
+name = "deepseek-harness-launcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "directories",
+ "flate2",
+ "fs2",
+ "futures",
+ "futures-util",
+ "hex",
+ "reqwest 0.12.28",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "url",
+ "wiremock",
+ "zip",
+]
+
+[[package]]
 name = "deflate64"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,38 +1021,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "dsh-launcher"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "directories",
- "flate2",
- "futures",
- "futures-util",
- "hex",
- "reqwest 0.12.28",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "url",
- "wiremock",
- "zip",
 ]
 
 [[package]]
@@ -1255,6 +1256,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]

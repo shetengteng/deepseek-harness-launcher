@@ -8,15 +8,23 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+// Mock @tauri-apps/api/event 的 listen（PR-017 initCrashEvents 动态 import）。
+const listenMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (...args: unknown[]) => listenMock(...args),
+}));
+
 import { invoke } from "@tauri-apps/api/core";
 import { useLauncherStore } from "../launcher";
-import type { StatusSnapshot } from "@/lib/tauri";
+import type { CrashLimitPayload, StatusSnapshot } from "@/lib/tauri";
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   setActivePinia(createPinia());
   invokeMock.mockReset();
+  listenMock.mockReset();
+  listenMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -551,6 +559,218 @@ describe("useLauncherStore", () => {
 
       expect(store.wizardStep).toBe("mirror_select");
       expect(store.phase).toBe("error");
+    });
+  });
+
+  // ─── PR-017 崩溃恢复测试（设计 §5.5） ───
+
+  describe("initCrashEvents", () => {
+    it("registers host-crash-limit and host-restarted listeners", async () => {
+      const store = useLauncherStore();
+      await store.initCrashEvents();
+
+      const events = listenMock.mock.calls.map((c) => c[0]);
+      expect(events).toContain("host-crash-limit");
+      expect(events).toContain("host-restarted");
+    });
+
+    it("host-crash-limit event sets crashLimit payload", async () => {
+      const handlers = new Map<string, (ev: { payload: unknown }) => void>();
+      listenMock.mockImplementation(((
+        event: string,
+        handler: (ev: { payload: unknown }) => void,
+      ) => {
+        handlers.set(event, handler);
+        return Promise.resolve(() => undefined);
+      }) as typeof listenMock);
+
+      const store = useLauncherStore();
+      await store.initCrashEvents();
+
+      const payload: CrashLimitPayload = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: 1,
+        exit_signal: null,
+        known_good: "0.2.0",
+      };
+      handlers.get("host-crash-limit")!({ payload });
+
+      expect(store.crashLimit).toEqual(payload);
+    });
+
+    it("host-restarted event updates origin, phase and autoRestartedAttempt", async () => {
+      vi.useFakeTimers();
+      try {
+        const handlers = new Map<string, (ev: { payload: unknown }) => void>();
+        listenMock.mockImplementation(((
+          event: string,
+          handler: (ev: { payload: unknown }) => void,
+        ) => {
+          handlers.set(event, handler);
+          return Promise.resolve(() => undefined);
+        }) as typeof listenMock);
+
+        const store = useLauncherStore();
+        await store.initCrashEvents();
+
+        handlers.get("host-restarted")!({
+          payload: { attempt: 2, origin: "http://127.0.0.1:9999" },
+        });
+
+        expect(store.origin).toBe("http://127.0.0.1:9999");
+        expect(store.phase).toBe("ready");
+        expect(store.crashLimit).toBeNull();
+        expect(store.autoRestartedAttempt).toBe(2);
+
+        // 5 秒后提示清除
+        vi.advanceTimersByTime(5000);
+        expect(store.autoRestartedAttempt).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("retryAfterCrash", () => {
+    it("restarts host and clears crashLimit on success", async () => {
+      invokeMock.mockResolvedValueOnce("http://127.0.0.1:1234");
+
+      const store = useLauncherStore();
+      store.crashLimit = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: 1,
+        exit_signal: null,
+        known_good: null,
+      };
+
+      await store.retryAfterCrash();
+
+      expect(invokeMock.mock.calls[0]?.[0]).toBe("restart_host");
+      expect(store.phase).toBe("ready");
+      expect(store.origin).toBe("http://127.0.0.1:1234");
+      expect(store.crashLimit).toBeNull();
+      expect(store.crashRecovering).toBe(false);
+    });
+
+    it("transitions to error when restart fails", async () => {
+      invokeMock.mockRejectedValueOnce({ kind: "host", message: "spawn failed" });
+
+      const store = useLauncherStore();
+      store.crashLimit = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: 1,
+        exit_signal: null,
+        known_good: null,
+      };
+
+      await store.retryAfterCrash();
+
+      expect(store.phase).toBe("error");
+      expect(store.error?.kind).toBe("host");
+      expect(store.crashRecovering).toBe(false);
+    });
+
+    it("guards against concurrent calls", async () => {
+      let resolve: ((v: string) => void) | undefined;
+      invokeMock.mockImplementationOnce(
+        () => new Promise<string>((r) => (resolve = r)),
+      );
+
+      const store = useLauncherStore();
+      const p1 = store.retryAfterCrash();
+      const p2 = store.retryAfterCrash();
+
+      expect(store.crashRecovering).toBe(true);
+      resolve?.("http://127.0.0.1:1");
+      await Promise.all([p1, p2]);
+
+      expect(invokeMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("rollbackAfterCrash", () => {
+    it("rolls back to known_good then restarts", async () => {
+      invokeMock
+        .mockResolvedValueOnce("0.2.0") // rollback_dsh
+        .mockResolvedValueOnce("http://127.0.0.1:1234") // restart_host
+        .mockResolvedValueOnce({ // refreshStatus
+          phase: "idle",
+          host_origin: null,
+          dsh_version: "0.2.0",
+          node_version: "22.19.0",
+        });
+
+      const store = useLauncherStore();
+      store.crashLimit = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: 1,
+        exit_signal: null,
+        known_good: "0.2.0",
+      };
+
+      await store.rollbackAfterCrash();
+
+      expect(invokeMock.mock.calls[0]?.[0]).toBe("rollback_dsh_command");
+      expect(invokeMock.mock.calls[1]?.[0]).toBe("restart_host");
+      expect(store.phase).toBe("ready");
+      expect(store.origin).toBe("http://127.0.0.1:1234");
+      expect(store.crashLimit).toBeNull();
+      expect(store.dshVersion).toBe("0.2.0");
+    });
+
+    it("transitions to error when rollback fails", async () => {
+      invokeMock.mockRejectedValueOnce({
+        kind: "dsh_not_installed",
+        message: "no known_good",
+      });
+
+      const store = useLauncherStore();
+      await store.rollbackAfterCrash();
+
+      expect(store.phase).toBe("error");
+      expect(store.crashRecovering).toBe(false);
+    });
+  });
+
+  describe("dismissCrash", () => {
+    it("clears crashLimit and returns to idle from ready", () => {
+      const store = useLauncherStore();
+      store.phase = "ready";
+      store.origin = "http://127.0.0.1:1";
+      store.crashLimit = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: null,
+        exit_signal: 9,
+        known_good: null,
+      };
+
+      store.dismissCrash();
+
+      expect(store.crashLimit).toBeNull();
+      expect(store.phase).toBe("idle");
+      expect(store.origin).toBeNull();
+    });
+
+    it("keeps non-ready phase unchanged", () => {
+      const store = useLauncherStore();
+      store.phase = "idle";
+      store.crashLimit = {
+        crash_counter: 3,
+        retry_limit: 3,
+        exit_code: null,
+        exit_signal: null,
+        known_good: null,
+      };
+
+      store.dismissCrash();
+
+      expect(store.crashLimit).toBeNull();
+      expect(store.phase).toBe("idle");
     });
   });
 });

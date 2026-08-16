@@ -6,6 +6,7 @@
 //!  - `install`：跨平台解压 + 原子切换（设计 §M2.3）
 //!  - `version`：版本解析 + engines 校验（设计 §M2.4）
 
+pub mod disk;
 pub mod download;
 pub mod install;
 pub mod mirror;

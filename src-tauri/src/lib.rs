@@ -50,10 +50,26 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // PR-019：诊断导出的保存对话框（前端 `@tauri-apps/plugin-dialog` 的 save()）。
+        .plugin(tauri_plugin_dialog::init())
         .manage(commands::SharedState::new())
+        .setup(|app| {
+            // PR-017：注入崩溃恢复回调。supervisor 检测到 Host 意外退出时触发，
+            // 自动重启（未达上限）或 emit `host-crash-limit` 让前端弹窗（设计 §5.5）。
+            use tauri::Manager;
+
+            let handle = app.handle().clone();
+            app.state::<commands::SharedState>()
+                .supervisor
+                .set_exit_handler(std::sync::Arc::new(move |detail| {
+                    commands::spawn_crash_recovery(handle.clone(), detail);
+                }));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::launcher_status,
             commands::start_host,
+            commands::restart_host,
             commands::shutdown_host,
             commands::list_mirrors,
             commands::probe_mirrors_command,
@@ -68,6 +84,8 @@ pub fn run() {
             commands::set_check_interval_command,
             commands::ignore_version_command,
             commands::unignore_version_command,
+            commands::rollback_dsh_command,
+            commands::export_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

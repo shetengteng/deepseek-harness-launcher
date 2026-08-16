@@ -19,7 +19,22 @@ use deepseek_harness_launcher_lib::node::{
 };
 use tokio::sync::mpsc;
 
+/// 确定性伪随机字节（xorshift64）。制造不可压缩 payload，
+/// 保证 fixture 压缩后大于 `download_archive` 的 1MB 错误页防御阈值。
+fn pseudo_random_bytes(len: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed | 1;
+    let mut out = Vec::with_capacity(len);
+    for _ in 0..len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        out.push((state & 0xff) as u8);
+    }
+    out
+}
+
 /// 构造真实 tar.gz fixture（外层目录 `node-v22.19.0-test/`）。
+/// 含 2MB 不可压缩 payload，供端到端下载测试绕过 1MB 错误页防御。
 fn build_node_tar_gz() -> Vec<u8> {
     let mut tar_buf: Vec<u8> = Vec::new();
     {
@@ -45,6 +60,15 @@ fn build_node_tar_gz() -> Vec<u8> {
         header.set_mode(0o644);
         header.set_cksum();
         builder.append(&header, &pkg[..]).unwrap();
+        let payload = pseudo_random_bytes(2 * 1024 * 1024, 0x5eed);
+        let mut header = tar::Header::new_gnu();
+        header
+            .set_path("node-v22.19.0-test/lib/payload.bin")
+            .unwrap();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append(&header, &payload[..]).unwrap();
         builder.finish().unwrap();
     }
     let mut gz_buf: Vec<u8> = Vec::new();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 设置页。对应设计 §M3.5 + §10。
+// 设置页。对应设计 §M3.5 + §10 + §5.4（PR-018 Node 升级）+ §11.3（PR-019 诊断导出）。
 // 展示 dsh 状态、升级策略、已安装版本；支持手动检查更新。
 
 import { onMounted, ref } from "vue";
@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Ban,
   Undo2,
+  FileArchive,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,14 +25,17 @@ import {
   getDshState,
   checkForUpgrade,
   prepareUpgrade,
+  installNode,
   setPinnedRange,
   setAutoUpgrade,
   setCheckInterval,
   ignoreVersion,
   unignoreVersion,
+  exportDiagnostics,
   type DshStateSnapshot,
   type UpgradeCheckResult,
 } from "@/lib/tauri";
+import { detectPlatformArch } from "@/stores/launcher";
 
 const emit = defineEmits<{
   (e: "back"): void;
@@ -44,6 +48,14 @@ const checking = ref(false);
 const upgrading = ref(false);
 const upgradeResult = ref<UpgradeCheckResult | null>(null);
 const upgradeError = ref<string | null>(null);
+
+/** PR-018：Node 升级流程状态。 */
+const upgradingNode = ref(false);
+const nodeUpgradeError = ref<string | null>(null);
+
+/** PR-019：诊断导出状态。 */
+const exporting = ref(false);
+const exportInfo = ref<string | null>(null);
 
 // 本地编辑状态（提交前不回写 state）
 const pinnedRangeDraft = ref("");
@@ -113,7 +125,12 @@ async function handlePrepareUpgrade(): Promise<void> {
   upgradeError.value = null;
   try {
     const version = await prepareUpgrade();
-    upgradeResult.value = { available: true, version, engines_node: null };
+    upgradeResult.value = {
+      available: true,
+      version,
+      engines_node: null,
+      node_block: null,
+    };
     await loadDshState();
     emit("upgradeReady", version);
   } catch (e) {
@@ -123,6 +140,72 @@ async function handlePrepareUpgrade(): Promise<void> {
         : String(e);
   } finally {
     upgrading.value = false;
+  }
+}
+
+/** PR-018：升级 Node 后继续 dsh 升级。
+ * 流程：installNode(node_target) → prepareUpgrade() → 升级对话框。 */
+async function handleUpgradeNodeAndDsh(): Promise<void> {
+  const block = upgradeResult.value?.node_block;
+  if (!block) return;
+  upgradingNode.value = true;
+  nodeUpgradeError.value = null;
+  try {
+    // 1. 安装目标 Node 版本（磁盘/网络错误由后端校验并返回中文提示）
+    const { platform, arch } = detectPlatformArch();
+    await installNode({
+      version: block.node_target,
+      mirrorBaseUrl: block.mirror_base_url,
+      platform,
+      arch,
+    });
+
+    // 2. Node 就绪后安装 dsh 升级
+    const version = await prepareUpgrade();
+    upgradeResult.value = {
+      available: true,
+      version,
+      engines_node: block.engines_node,
+      node_block: null,
+    };
+    await loadDshState();
+    emit("upgradeReady", version);
+  } catch (e) {
+    nodeUpgradeError.value =
+      typeof e === "object" && e !== null && "user_message" in e
+        ? String(
+            (e as { user_message?: unknown }).user_message ??
+              (e as { message?: unknown }).message ??
+              e,
+          )
+        : String(e);
+  } finally {
+    upgradingNode.value = false;
+  }
+}
+
+/** PR-019：导出诊断信息（state.json + 日志 → zip）。 */
+async function handleExportDiagnostics(): Promise<void> {
+  exporting.value = true;
+  exportInfo.value = null;
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const dest = await save({
+      title: "导出诊断信息",
+      defaultPath: `dsh-launcher-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: "ZIP 压缩包", extensions: ["zip"] }],
+    });
+    if (!dest) return; // 用户取消
+
+    const size = await exportDiagnostics(dest);
+    exportInfo.value = `已导出（${(size / 1024).toFixed(1)} KB）：${dest}`;
+  } catch (e) {
+    exportInfo.value =
+      typeof e === "object" && e !== null && "message" in e
+        ? (e as { message: string }).message
+        : String(e);
+  } finally {
+    exporting.value = false;
   }
 }
 
@@ -314,10 +397,39 @@ async function handleUnignoreVersion(version: string): Promise<void> {
 
             <!-- 升级结果 -->
             <div
-              v-if="upgradeResult && !upgradeResult.available"
+              v-if="upgradeResult && !upgradeResult.available && !upgradeResult.node_block"
               class="text-sm text-muted-foreground"
             >
               已是最新版本
+            </div>
+
+            <!-- PR-018：Node 版本阻塞提示 + 升级 Node 流程 -->
+            <div
+              v-if="upgradeResult?.node_block"
+              class="rounded border border-amber-500/50 bg-amber-500/5 p-3 space-y-2"
+            >
+              <div class="text-sm">
+                新版本
+                <span class="font-mono font-semibold">{{ upgradeResult.node_block.dsh_version }}</span>
+                需要 Node
+                <span class="font-mono font-semibold">{{ upgradeResult.node_block.engines_node }}</span>
+                <template v-if="upgradeResult.node_block.current_node">
+                  （当前 {{ upgradeResult.node_block.current_node }}）
+                </template>
+                ，需先升级 Node 到
+                <span class="font-mono font-semibold">{{ upgradeResult.node_block.node_target }}</span>。
+              </div>
+              <Button
+                size="sm"
+                :disabled="upgradingNode"
+                @click="handleUpgradeNodeAndDsh"
+              >
+                <Download class="h-4 w-4 mr-2" />
+                {{ upgradingNode ? "升级 Node 中…" : `升级 Node 到 ${upgradeResult.node_block.node_target} 并安装` }}
+              </Button>
+              <div v-if="nodeUpgradeError" class="text-sm text-destructive">
+                {{ nodeUpgradeError }}
+              </div>
             </div>
 
             <div
@@ -395,6 +507,32 @@ async function handleUnignoreVersion(version: string): Promise<void> {
                 <Undo2 class="h-3 w-3" />
                 {{ v }}
               </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- PR-019：诊断导出 -->
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-base">诊断</CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-2">
+            <p class="text-xs text-muted-foreground">
+              把应用状态（state.json）与壳子/Host 日志打包为 zip，用于问题排查。
+            </p>
+            <Button
+              variant="outline"
+              :disabled="exporting"
+              @click="handleExportDiagnostics"
+            >
+              <FileArchive class="h-4 w-4 mr-2" />
+              {{ exporting ? "导出中…" : "导出诊断信息" }}
+            </Button>
+            <div
+              v-if="exportInfo"
+              class="text-xs break-all text-muted-foreground"
+            >
+              {{ exportInfo }}
             </div>
           </CardContent>
         </Card>

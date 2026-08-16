@@ -12,7 +12,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use deepseek_harness_launcher_lib::dsh::{install_dsh, verify_install, InstallDshOptions, LogCallback};
+use deepseek_harness_launcher_lib::dsh::{
+    install_dsh, verify_install, InstallDshOptions, LogCallback,
+};
 
 #[tokio::main]
 async fn main() {

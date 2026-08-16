@@ -7,6 +7,9 @@
 //!
 //! 错误通过 `LauncherError` 的 `Serialize` 实现序列化到前端，结构为 `{ kind, message, data }`。
 
+use std::io::Write;
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -18,14 +21,15 @@ use crate::state::{AppState, StateStatus};
 /// 注入到 Tauri 的共享状态。前端通过 `invoke` 间接触发命令，命令通过 `State<'_, SharedState>` 访问。
 pub struct SharedState {
     /// Host 监管器。一次 start 成功后缓存 origin，shutdown 后不可再 start。
-    pub supervisor: HostSupervisor,
+    /// `Arc` 包裹：exit monitor 与崩溃自动重启（设计 §5.5）需要克隆引用。
+    pub supervisor: Arc<HostSupervisor>,
 }
 
 impl SharedState {
     /// 在 `lib::run()` 里构造，注入到 `tauri::Builder::manage()`。
     pub fn new() -> Self {
         Self {
-            supervisor: HostSupervisor::new(HostSupervisorConfig::default()),
+            supervisor: Arc::new(HostSupervisor::new(HostSupervisorConfig::default())),
         }
     }
 }
@@ -78,7 +82,7 @@ pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
             let node_version = state.node.as_ref().map(|n| n.version.clone());
             let dsh_version = state.dsh.current.clone();
             let phase = match (node_version.as_ref(), dsh_version.as_ref()) {
-                (None, _) => "first_run", // Node 未装
+                (None, _) => "first_run",       // Node 未装
                 (Some(_), None) => "first_run", // dsh 未装
                 (Some(_), Some(_)) => "idle",   // 都装了
             };
@@ -95,15 +99,37 @@ pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
 /// 启动 dsh web Host 子进程。返回 origin URL，前端用 `webview.navigate` 或 `iframe.src` 加载。
 ///
 /// 幂等：已启动则返回缓存的 origin；已 shutdown 则返回 `Host` 错误。
+/// 用户主动启动成功 → 崩溃计数清零（设计 §5.5 规则 5）。
 #[tauri::command]
 pub async fn start_host(state: State<'_, SharedState>) -> Result<String> {
+    let origin = start_host_inner(&state.supervisor).await?;
+    Ok(origin)
+}
+
+/// `start_host` / `restart_host` / 崩溃自动重启共用的启动逻辑。
+/// 成功后重置崩溃计数（用户主动启动视为新一轮）。
+async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
     let opts = build_spawn_options()?;
-    let origin = state
-        .supervisor
-        .start(&opts)
-        .await
-        .map_err(map_host_error)?;
+    let origin = supervisor.start(&opts).await.map_err(map_host_error)?;
+
+    // 用户主动启动成功 → 清零崩溃计数（设计 §5.5）。
+    match AppState::load() {
+        Ok(StateStatus::Loaded(mut s)) => {
+            crate::host::reset_crash_counter(&mut s);
+            if let Err(e) = s.save() {
+                tracing::warn!(error = %e, "start_host: reset crash counter save failed");
+            }
+        }
+        _ => {}
+    }
+
     Ok(origin.as_str().to_string())
+}
+
+/// 崩溃弹窗用户点"重试"：清零计数器后重启 Host（设计 §5.5 / PR-017）。
+#[tauri::command]
+pub async fn restart_host(state: State<'_, SharedState>) -> Result<String> {
+    start_host_inner(&state.supervisor).await
 }
 
 /// 关闭 dsh web Host 子进程。幂等：多次调用安全。
@@ -128,7 +154,8 @@ fn build_spawn_options() -> Result<SpawnDshWebOptions> {
     let node_dir = current_node_dir().map_err(|e| match e {
         LauncherError::NodeDownload(msg) if msg.contains("read VERSION file failed") => {
             LauncherError::NodeNotInstalled {
-                reason: "node-runtime/VERSION not found; first-run wizard not completed".to_string(),
+                reason: "node-runtime/VERSION not found; first-run wizard not completed"
+                    .to_string(),
             }
         }
         other => other,
@@ -302,6 +329,10 @@ pub async fn install_node_command(app: tauri::AppHandle, args: InstallNodeArgs) 
     tracing::info!(staging_download_dir = %staging_download_dir.display(), "install_node_command: creating staging_download_dir");
     std::fs::create_dir_all(&staging_download_dir).map_err(LauncherError::Io)?;
 
+    // PR-020：下载前检查磁盘空间 ≥ 200MB。不足时返回 NodeDownload 错误
+    //（user_message 映射为"磁盘空间不足"提示）。
+    crate::node::disk::ensure_disk_space(&staging_download_dir)?;
+
     // mpsc channel 接收 ProgressEvent，转 Tauri emit
     let (tx, mut rx) = tokio::sync::mpsc::channel::<node::ProgressEvent>(64);
     let app_clone = app.clone();
@@ -374,8 +405,8 @@ pub async fn install_node_command(app: tauri::AppHandle, args: InstallNodeArgs) 
 #[tauri::command]
 pub async fn install_dsh_command(app: tauri::AppHandle) -> Result<String> {
     use crate::dsh::{
-        install_dsh, options_from_manifest, promote_to_current, fetch_dist_tags,
-        fetch_package_manifest, default_client, RegistryCache,
+        default_client, fetch_dist_tags, fetch_package_manifest, install_dsh,
+        options_from_manifest, promote_to_current, RegistryCache,
     };
     use tauri::Emitter;
 
@@ -388,11 +419,12 @@ pub async fn install_dsh_command(app: tauri::AppHandle) -> Result<String> {
         }
         StateStatus::Loaded(s) => *s,
     };
-    let node_state = state.node.clone().ok_or_else(|| {
-        LauncherError::NodeNotInstalled {
+    let node_state = state
+        .node
+        .clone()
+        .ok_or_else(|| LauncherError::NodeNotInstalled {
             reason: "state.node is None; complete first-run wizard first".to_string(),
-        }
-    })?;
+        })?;
 
     // 2. 解析 Node 路径
     let node_dir = crate::node::install::current_node_dir()?;
@@ -485,6 +517,47 @@ pub struct UpgradeCheckResult {
     pub available: bool,
     pub version: Option<String>,
     pub engines_node: Option<String>,
+    /// 有新版 dsh 但当前 Node 不满足 engines.node（PR-018）。
+    /// 前端据此弹 Node 升级确认框。
+    pub node_block: Option<NodeBlockInfo>,
+}
+
+/// Node 版本阻塞详情（设计 §5.4 / PR-018）。
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeBlockInfo {
+    /// 要求 Node 版本的 dsh 版本号。
+    pub dsh_version: String,
+    /// dsh 声明的 engines.node range，如 `>=24.0.0`。
+    pub engines_node: String,
+    /// 当前托管的 Node 版本。None 表示未安装。
+    pub current_node: Option<String>,
+    /// 解析出的建议安装的 Node 版本（`resolve_node_target`）。
+    pub node_target: String,
+    /// Node 下载镜像源（优先历史安装用过的源，其次内置默认源）。
+    pub mirror_base_url: String,
+}
+
+impl NodeBlockInfo {
+    /// 从 `dsh::upgrade::NodeBlock` 构造前端 payload。
+    /// `node_mirror`：state.node.mirror（历史安装源），None 时用内置默认源。
+    pub fn from_block(
+        block: &crate::dsh::upgrade::NodeBlock,
+        node_mirror: Option<&str>,
+    ) -> Result<Self> {
+        let node_target = crate::dsh::upgrade::resolve_node_target(&block.engines_node)?;
+        let mirror_base_url = node_mirror
+            .filter(|m| !m.is_empty())
+            .map(|m| m.to_string())
+            .unwrap_or_else(|| crate::node::pick_default_mirror().base_url.to_string());
+        Ok(Self {
+            dsh_version: block.dsh_version.clone(),
+            engines_node: block.engines_node.clone(),
+            current_node: block.current_node.clone(),
+            node_target,
+            mirror_base_url,
+        })
+    }
 }
 
 /// 返回 dsh 状态详情，供设置页展示。
@@ -528,7 +601,10 @@ pub async fn get_dsh_state() -> Result<DshStateSnapshot> {
 
 /// 检查 dsh 升级。不修改 state，仅返回是否有可用版本。
 ///
-/// 成功后调用方可以调 `prepare_upgrade_command` 下载安装。
+/// 三种结果：
+/// - `available=true`：可直接升级，调 `prepare_upgrade_command`
+/// - `node_block` 非空：新版 dsh 需要更高 Node，前端先走 Node 升级流程（PR-018）
+/// - 两者皆空：无可用升级
 #[tauri::command]
 pub async fn check_for_upgrade_command() -> Result<UpgradeCheckResult> {
     use crate::dsh::{check_for_upgrade, default_client, RegistryCache};
@@ -539,6 +615,7 @@ pub async fn check_for_upgrade_command() -> Result<UpgradeCheckResult> {
                 available: false,
                 version: None,
                 engines_node: None,
+                node_block: None,
             });
         }
         StateStatus::Loaded(s) => *s,
@@ -548,8 +625,19 @@ pub async fn check_for_upgrade_command() -> Result<UpgradeCheckResult> {
     let client = default_client();
     let cache = RegistryCache::new();
 
-    match check_for_upgrade(&state, &registry, &cache, &client).await {
-        Ok(Some(candidate)) => Ok(UpgradeCheckResult {
+    let check = check_for_upgrade(&state, &registry, &cache, &client).await?;
+    let node_mirror = state.node.as_ref().map(|n| n.mirror.as_str());
+    Ok(upgrade_check_to_result(check, node_mirror))
+}
+
+/// `UpgradeCheck` → `UpgradeCheckResult`。纯函数，便于单测。
+/// `node_mirror`：state.node.mirror（历史安装源），None 时用内置默认源。
+pub fn upgrade_check_to_result(
+    check: crate::dsh::upgrade::UpgradeCheck,
+    node_mirror: Option<&str>,
+) -> UpgradeCheckResult {
+    match check.candidate {
+        Some(candidate) => UpgradeCheckResult {
             available: true,
             version: Some(candidate.version),
             engines_node: if candidate.engines_node.is_empty() {
@@ -557,13 +645,34 @@ pub async fn check_for_upgrade_command() -> Result<UpgradeCheckResult> {
             } else {
                 Some(candidate.engines_node)
             },
-        }),
-        Ok(None) => Ok(UpgradeCheckResult {
-            available: false,
-            version: None,
-            engines_node: None,
-        }),
-        Err(e) => Err(e),
+            node_block: None,
+        },
+        None => match check.node_block {
+            // resolve 失败时降级为"无升级"，错误信息进日志（不阻塞普通升级路径）。
+            Some(block) => match NodeBlockInfo::from_block(&block, node_mirror) {
+                Ok(info) => UpgradeCheckResult {
+                    available: false,
+                    version: Some(block.dsh_version),
+                    engines_node: Some(block.engines_node.clone()),
+                    node_block: Some(info),
+                },
+                Err(e) => {
+                    tracing::warn!(error = %e, "resolve_node_target failed for node_block");
+                    UpgradeCheckResult {
+                        available: false,
+                        version: None,
+                        engines_node: None,
+                        node_block: None,
+                    }
+                }
+            },
+            None => UpgradeCheckResult {
+                available: false,
+                version: None,
+                engines_node: None,
+                node_block: None,
+            },
+        },
     }
 }
 
@@ -573,9 +682,7 @@ pub async fn check_for_upgrade_command() -> Result<UpgradeCheckResult> {
 /// 前端应提示用户重启生效，或 `auto_upgrade` 为 true 时自动重启。
 #[tauri::command]
 pub async fn prepare_upgrade_command() -> Result<String> {
-    use crate::dsh::{
-        check_for_upgrade, default_client, prepare_upgrade, RegistryCache,
-    };
+    use crate::dsh::{check_for_upgrade, default_client, prepare_upgrade, RegistryCache};
 
     let mut state = match AppState::load()? {
         StateStatus::FirstRun => {
@@ -590,15 +697,18 @@ pub async fn prepare_upgrade_command() -> Result<String> {
     let client = default_client();
     let cache = RegistryCache::new();
 
-    let candidate = check_for_upgrade(&state, &registry, &cache, &client)
-        .await?
+    let check = check_for_upgrade(&state, &registry, &cache, &client).await?;
+    let candidate = check
+        .candidate
         .ok_or_else(|| LauncherError::DshVersion("no upgrade available".to_string()))?;
 
     let node_dir = crate::node::install::current_node_dir()?;
     let dsh_dir = crate::paths::dsh_dir()?;
 
-    prepare_upgrade(&mut state, &registry, &candidate, &dsh_dir, &node_dir, &client, &cache)
-        .await?;
+    prepare_upgrade(
+        &mut state, &registry, &candidate, &dsh_dir, &node_dir, &client, &cache,
+    )
+    .await?;
 
     state.save()?;
 
@@ -613,9 +723,8 @@ pub async fn set_pinned_range_command(range: String) -> Result<()> {
     use semver::VersionReq;
 
     // 校验 semver range 合法性
-    VersionReq::parse(&range).map_err(|e| {
-        LauncherError::DshVersion(format!("invalid semver range '{range}': {e}"))
-    })?;
+    VersionReq::parse(&range)
+        .map_err(|e| LauncherError::DshVersion(format!("invalid semver range '{range}': {e}")))?;
 
     let mut state = match AppState::load()? {
         StateStatus::FirstRun => AppState::new(),
@@ -684,6 +793,253 @@ pub async fn unignore_version_command(version: String) -> Result<()> {
     Ok(())
 }
 
+// ─── PR-017: 崩溃恢复（设计 §5.5） ───
+
+/// `host-crash-limit` 事件 payload。前端弹 CrashDialog 展示。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct CrashLimitPayload {
+    /// 当前崩溃计数（含本次）。
+    pub crash_counter: u32,
+    /// 自动重试上限（`CRASH_RETRY_LIMIT`）。
+    pub retry_limit: u32,
+    /// 子进程 exit code（如有）。
+    pub exit_code: Option<i32>,
+    /// 子进程退出 signal（POSIX，如有）。
+    pub exit_signal: Option<i32>,
+    /// 可回滚的 known_good 版本。None 表示无稳定版本可回滚。
+    pub known_good: Option<String>,
+}
+
+/// `host-restarted` 事件 payload。自动重启成功后推送，前端更新 iframe origin。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HostRestartedPayload {
+    /// 本轮第几次崩溃后的重启（1 起）。
+    pub attempt: u32,
+    /// 重启后的新 origin。
+    pub origin: String,
+}
+
+/// 崩溃后决策（`decide_after_crash` 的结果）。纯数据，便于单测。
+#[derive(Debug, Clone, PartialEq)]
+pub enum CrashAction {
+    /// 自动重启成功。附带 attempt 序号 + 新 origin。
+    Restarted { attempt: u32, origin: String },
+    /// 达到上限或重启失败，需要前端弹窗。附带 CrashLimitPayload。
+    PromptUser(CrashLimitPayload),
+}
+
+/// 崩溃恢复决策核心：记录崩溃 → 决定自动重启或弹窗。
+///
+/// 设计 §5.5：
+/// 1. `record_crash` 更新计数（窗口外归 1）
+/// 2. counter < limit → 自动重启 current（注意：不走 `start_host_inner`，
+///    那会清零计数器导致永远到不了上限）
+/// 3. 重启失败或 counter >= limit → `PromptUser`
+///
+/// 抽成独立函数（不直接操作 AppHandle）便于单元测试。
+pub async fn decide_after_crash(
+    supervisor: &Arc<HostSupervisor>,
+    exit_detail: crate::host::HostExitDetail,
+) -> CrashAction {
+    // 1. 读 state，记录崩溃。state 读失败（首启前崩溃等）视为达到上限交给用户。
+    let mut state = match AppState::load() {
+        Ok(StateStatus::Loaded(s)) => *s,
+        _ => {
+            return CrashAction::PromptUser(CrashLimitPayload {
+                crash_counter: crate::host::CRASH_RETRY_LIMIT,
+                retry_limit: crate::host::CRASH_RETRY_LIMIT,
+                exit_code: exit_detail.code,
+                exit_signal: exit_detail.signal,
+                known_good: None,
+            });
+        }
+    };
+
+    let decision = crate::host::record_crash(&mut state, chrono::Utc::now());
+    let counter = state.crash_counter;
+    let known_good = state.dsh.known_good.clone();
+    if let Err(e) = state.save() {
+        tracing::warn!(error = %e, "decide_after_crash: save crash counter failed");
+    }
+
+    let prompt = || CrashLimitPayload {
+        crash_counter: counter,
+        retry_limit: crate::host::CRASH_RETRY_LIMIT,
+        exit_code: exit_detail.code,
+        exit_signal: exit_detail.signal,
+        known_good: known_good.clone(),
+    };
+
+    // 2. 未达上限 → 自动重启。重启失败 → 弹窗。
+    if decision == crate::host::CrashDecision::RestartCurrent {
+        match build_spawn_options() {
+            Ok(opts) => match supervisor.start(&opts).await {
+                Ok(origin) => {
+                    tracing::info!(attempt = counter, "dsh crashed, auto-restarted");
+                    CrashAction::Restarted {
+                        attempt: counter,
+                        origin: origin.as_str().to_string(),
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, attempt = counter, "auto-restart failed");
+                    CrashAction::PromptUser(prompt())
+                }
+            },
+            Err(e) => {
+                tracing::error!(error = %e, "build_spawn_options failed after crash");
+                CrashAction::PromptUser(prompt())
+            }
+        }
+    } else {
+        tracing::warn!(
+            counter = counter,
+            "crash retry limit reached, prompting user"
+        );
+        CrashAction::PromptUser(prompt())
+    }
+}
+
+/// 崩溃/意外退出的入口回调。由 `lib.rs` 的 `setup` 注入到 supervisor。
+/// 在 tokio 任务里执行 `decide_after_crash` 并把结果 emit 给前端。
+pub fn spawn_crash_recovery(app: tauri::AppHandle, detail: crate::host::HostExitDetail) {
+    tokio::spawn(async move {
+        use tauri::{Emitter, Manager};
+
+        let supervisor = app.state::<SharedState>().supervisor.clone();
+        let action = decide_after_crash(&supervisor, detail).await;
+        match action {
+            CrashAction::Restarted { attempt, origin } => {
+                let _ = app.emit("host-restarted", &HostRestartedPayload { attempt, origin });
+            }
+            CrashAction::PromptUser(payload) => {
+                let _ = app.emit("host-crash-limit", &payload);
+            }
+        }
+    });
+}
+
+/// 崩溃弹窗用户点"回滚"：切换到 known_good 版本（设计 §5.5 / M3.3）。
+/// 成功返回回滚到的版本号。前端随后可调 `restart_host` 重启。
+#[tauri::command]
+pub async fn rollback_dsh_command() -> Result<String> {
+    use crate::dsh::version::rollback_to_known_good;
+
+    let mut state = match AppState::load()? {
+        StateStatus::FirstRun => {
+            return Err(LauncherError::DshNotInstalled {
+                reason: "state.json not found".to_string(),
+            });
+        }
+        StateStatus::Loaded(s) => *s,
+    };
+    let dsh_dir = crate::paths::dsh_dir()?;
+    let version = rollback_to_known_good(&mut state, &dsh_dir)?;
+    state.save()?;
+    Ok(version)
+}
+
+// ─── PR-019: 诊断导出（设计 §11.3） ───
+
+/// 导出诊断信息：把 state.json + 壳子日志 + dsh 日志打包成 zip。
+///
+/// `dest`：前端通过 save 对话框拿到的目标路径（建议 `.zip` 后缀）。
+/// 返回写入的总字节数。
+#[tauri::command]
+pub async fn export_diagnostics(dest: String) -> Result<u64> {
+    let dest = std::path::PathBuf::from(dest);
+    export_diagnostics_to(&dest)
+}
+
+/// 打包诊断 zip 到 `dest`。独立函数便于单测（传临时目录路径）。
+pub fn export_diagnostics_to(dest: &std::path::Path) -> Result<u64> {
+    use zip::write::SimpleFileOptions;
+
+    let file = std::fs::File::create(dest).map_err(LauncherError::Io)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    let mut entries: usize = 0;
+
+    // 1. state.json
+    if let Some((name, path)) = state_json_entry() {
+        if add_file_to_zip(&mut zip, opts, &name, &path)? {
+            entries += 1;
+        }
+    }
+
+    // 2. 日志目录：壳子 tracing 日志 + dsh 子进程日志
+    for (prefix, dir) in log_dirs() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let file_name = p
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "unknown.log".to_string());
+                    let zip_name = format!("{prefix}/{file_name}");
+                    if add_file_to_zip(&mut zip, opts, &zip_name, &p)? {
+                        entries += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    zip.finish()
+        .map_err(|e| LauncherError::Io(std::io::Error::other(format!("zip finish failed: {e}"))))?;
+    let size = std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
+    tracing::info!(dest = %dest.display(), entries = entries, size = size, "diagnostics exported");
+    Ok(size)
+}
+
+/// state.json 的 zip 条目（存在时）。
+fn state_json_entry() -> Option<(String, std::path::PathBuf)> {
+    let path = crate::paths::state_file().ok()?;
+    if path.exists() {
+        Some(("state.json".to_string(), path))
+    } else {
+        None
+    }
+}
+
+/// 要打包的日志目录：(zip 内前缀, 磁盘路径)。两个目录在 macOS 上不同
+/// （壳子日志在 ~/Library/Logs，dsh 日志在 data/logs），其余平台同根。
+fn log_dirs() -> Vec<(&'static str, std::path::PathBuf)> {
+    let mut dirs = Vec::new();
+    if let Ok(d) = crate::paths::log_dir() {
+        dirs.push(("launcher-logs", d));
+    }
+    if let Ok(d) = crate::paths::dsh_log_dir() {
+        dirs.push(("dsh-logs", d));
+    }
+    dirs
+}
+
+/// 把单个文件加入 zip。文件不可读时跳过（返回 Ok(false)），不让单个日志阻塞导出。
+fn add_file_to_zip<W: Write + std::io::Seek, P: AsRef<std::path::Path>>(
+    zip: &mut zip::ZipWriter<W>,
+    opts: zip::write::SimpleFileOptions,
+    name: &str,
+    path: P,
+) -> Result<bool> {
+    let path = path.as_ref();
+    let content = match std::fs::read(path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(path = %path.display(), error = %e, "export: skip unreadable file");
+            return Ok(false);
+        }
+    };
+    zip.start_file(name, opts)
+        .map_err(|e| LauncherError::Io(std::io::Error::other(format!("zip start_file: {e}"))))?;
+    zip.write_all(&content).map_err(LauncherError::Io)?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -693,6 +1049,171 @@ mod tests {
     #[test]
     fn shared_state_default_creates_supervisor() {
         let _ = SharedState::default();
+    }
+
+    // ─── PR-018: UpgradeCheck → UpgradeCheckResult ───
+
+    #[test]
+    fn upgrade_check_to_result_candidate() {
+        let check = crate::dsh::upgrade::UpgradeCheck {
+            candidate: Some(crate::dsh::upgrade::UpgradeCandidate {
+                version: "0.2.0".to_string(),
+                engines_node: ">=22.0.0".to_string(),
+            }),
+            node_block: None,
+        };
+        let r = upgrade_check_to_result(check, None);
+        assert!(r.available);
+        assert_eq!(r.version.as_deref(), Some("0.2.0"));
+        assert_eq!(r.engines_node.as_deref(), Some(">=22.0.0"));
+        assert!(r.node_block.is_none());
+    }
+
+    #[test]
+    fn upgrade_check_to_result_no_upgrade() {
+        let r = upgrade_check_to_result(crate::dsh::upgrade::UpgradeCheck::default(), None);
+        assert!(!r.available);
+        assert!(r.version.is_none());
+        assert!(r.node_block.is_none());
+    }
+
+    #[test]
+    fn upgrade_check_to_result_node_block() {
+        let check = crate::dsh::upgrade::UpgradeCheck {
+            candidate: None,
+            node_block: Some(crate::dsh::upgrade::NodeBlock {
+                dsh_version: "0.3.0".to_string(),
+                engines_node: ">=24.0.0".to_string(),
+                current_node: Some("22.19.0".to_string()),
+            }),
+        };
+        let r = upgrade_check_to_result(check, Some("https://npmmirror.com/mirrors/node"));
+        assert!(!r.available);
+        assert_eq!(r.version.as_deref(), Some("0.3.0"));
+        let block = r.node_block.expect("node_block present");
+        assert_eq!(block.dsh_version, "0.3.0");
+        assert_eq!(block.engines_node, ">=24.0.0");
+        assert_eq!(block.current_node.as_deref(), Some("22.19.0"));
+        assert_eq!(block.node_target, "24.0.0");
+        // 历史安装源优先于内置默认源
+        assert_eq!(block.mirror_base_url, "https://npmmirror.com/mirrors/node");
+    }
+
+    #[test]
+    fn upgrade_check_to_result_node_block_falls_back_to_default_mirror() {
+        let check = crate::dsh::upgrade::UpgradeCheck {
+            candidate: None,
+            node_block: Some(crate::dsh::upgrade::NodeBlock {
+                dsh_version: "0.3.0".to_string(),
+                engines_node: ">=24.0.0".to_string(),
+                current_node: None,
+            }),
+        };
+        let r = upgrade_check_to_result(check, None);
+        let block = r.node_block.expect("node_block present");
+        assert_eq!(
+            block.mirror_base_url,
+            crate::node::pick_default_mirror().base_url
+        );
+        assert!(block.current_node.is_none());
+    }
+
+    #[test]
+    fn node_block_info_serializes_snake_case() {
+        let info = NodeBlockInfo {
+            dsh_version: "0.3.0".to_string(),
+            engines_node: ">=24.0.0".to_string(),
+            current_node: Some("22.19.0".to_string()),
+            node_target: "24.0.0".to_string(),
+            mirror_base_url: "https://npmmirror.com/mirrors/node".to_string(),
+        };
+        let json = serde_json::to_value(&info).expect("serialize");
+        assert_eq!(json["dsh_version"], "0.3.0");
+        assert_eq!(json["engines_node"], ">=24.0.0");
+        assert_eq!(json["current_node"], "22.19.0");
+        assert_eq!(json["node_target"], "24.0.0");
+        assert_eq!(
+            json["mirror_base_url"],
+            "https://npmmirror.com/mirrors/node"
+        );
+    }
+
+    // ─── PR-017: 崩溃恢复 payload ───
+
+    #[test]
+    fn crash_limit_payload_serializes_snake_case() {
+        let p = CrashLimitPayload {
+            crash_counter: 3,
+            retry_limit: 3,
+            exit_code: Some(1),
+            exit_signal: None,
+            known_good: Some("0.1.0".to_string()),
+        };
+        let json = serde_json::to_value(&p).expect("serialize");
+        assert_eq!(json["crash_counter"], 3);
+        assert_eq!(json["retry_limit"], 3);
+        assert_eq!(json["exit_code"], 1);
+        assert!(json["exit_signal"].is_null());
+        assert_eq!(json["known_good"], "0.1.0");
+    }
+
+    #[test]
+    fn crash_limit_payload_defaults_to_limit_when_no_state() {
+        // state.json 不存在时 decide_after_crash 直接 PromptUser（不 panic、不 spawn）。
+        // 开发机若存在 state.json 则跳过（路径不可控，避免污染）。
+        if crate::paths::state_file().unwrap().exists() {
+            return;
+        }
+        let sup = HostSupervisor::new(HostSupervisorConfig::default());
+        let action = futures::executor::block_on(decide_after_crash(
+            &Arc::new(sup),
+            crate::host::HostExitDetail {
+                code: Some(1),
+                signal: None,
+            },
+        ));
+        match action {
+            CrashAction::PromptUser(p) => {
+                assert_eq!(p.retry_limit, crate::host::CRASH_RETRY_LIMIT);
+                assert!(p.known_good.is_none());
+            }
+            other => panic!("expected PromptUser, got {other:?}"),
+        }
+    }
+
+    // ─── PR-019: 诊断导出 ───
+
+    #[test]
+    fn export_diagnostics_creates_valid_zip() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dest = tmp.path().join("diag.zip");
+        let size = export_diagnostics_to(&dest).expect("export");
+        assert!(dest.exists());
+        // 空 zip 也有 22 字节 EOCD 头；有 state.json/日志时更大。
+        assert!(size > 0);
+        // 用 zip 读回验证结构合法。
+        let f = std::fs::File::open(&dest).expect("open zip");
+        let mut archive = zip::ZipArchive::new(f).expect("valid zip archive");
+        for i in 0..archive.len() {
+            let name = archive
+                .by_index(i)
+                .expect("entry readable")
+                .name()
+                .to_string();
+            // 条目名必须是 state.json 或带前缀的日志路径
+            assert!(
+                name == "state.json"
+                    || name.starts_with("launcher-logs/")
+                    || name.starts_with("dsh-logs/"),
+                "unexpected entry: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn log_dirs_cover_both_dirs() {
+        let dirs = log_dirs();
+        assert!(dirs.len() >= 2, "expect launcher + dsh log dirs");
     }
 
     #[test]

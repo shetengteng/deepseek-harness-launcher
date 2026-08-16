@@ -87,6 +87,9 @@ pub struct AppState {
     pub auto_upgrade: bool,
     #[serde(default)]
     pub crash_counter: u32,
+    /// 最近一次崩溃时间。崩溃恢复窗口（设计 §5.5）用它判断是否同一轮崩溃。
+    #[serde(default)]
+    pub last_crash_at: Option<DateTime<Utc>>,
 }
 
 fn default_auto_upgrade() -> bool {
@@ -101,6 +104,7 @@ impl Default for AppState {
             dsh: DshState::default(),
             auto_upgrade: default_auto_upgrade(),
             crash_counter: 0,
+            last_crash_at: None,
         }
     }
 }

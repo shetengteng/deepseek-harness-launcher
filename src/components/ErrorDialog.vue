@@ -32,6 +32,19 @@ const emit = defineEmits<{
 
 const open = computed(() => props.error !== null);
 
+/** 展示文案：优先 `user_message`（Rust 端映射的中文提示 + 可操作建议，PR-019），
+ * 缺失时回退到 `message`。 */
+const displayMessage = computed(() => {
+  if (!props.error) return "";
+  return props.error.user_message ?? props.error.message;
+});
+
+/** 是否显示技术详情折叠区（user_message 存在且与 message 不同时展示原始信息）。 */
+const hasTechnicalDetail = computed(() => {
+  if (!props.error) return false;
+  return Boolean(props.error.user_message) && props.error.user_message !== props.error.message;
+});
+
 /** 重试按钮文案，根据失败的操作类型决定。 */
 const retryLabel = computed(() => {
   switch (props.lastFailedAction) {
@@ -69,9 +82,15 @@ function onDismiss() {
           v-if="props.error"
           class="break-words whitespace-pre-wrap"
         >
-          {{ props.error.message }}
+          {{ displayMessage }}
         </DialogDescription>
       </DialogHeader>
+      <div
+        v-if="hasTechnicalDetail"
+        class="rounded border bg-muted/30 p-2 text-xs font-mono max-h-[120px] overflow-auto"
+      >
+        <pre class="whitespace-pre-wrap break-words">{{ props.error?.message }}</pre>
+      </div>
       <div
         v-if="props.error?.data"
         class="rounded border bg-muted/30 p-2 text-xs font-mono max-h-[200px] overflow-auto"

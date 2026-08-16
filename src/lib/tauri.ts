@@ -9,6 +9,8 @@ export interface LauncherErrorPayload {
   kind: string;
   /** 人类可读错误信息（`thiserror::Error` 的 `Display`） */
   message: string;
+  /** 用户可见的中文文案 + 可操作提示（PR-019）。ErrorDialog 优先展示此字段。 */
+  user_message?: string;
   /** 可选的结构化数据（如 `state_corrupt` 的 `path`、`unsupported_schema_version` 的 `version`） */
   data?: Record<string, unknown>;
 }
@@ -67,6 +69,33 @@ export function startHost(): Promise<string> {
 /** 调 `shutdown_host`，幂等。 */
 export function shutdownHost(): Promise<void> {
   return invokeCommand<void>("shutdown_host");
+}
+
+// ─── PR-017: 崩溃恢复 ───
+
+/** `host-crash-limit` 事件 payload（`commands.rs::CrashLimitPayload`）。 */
+export interface CrashLimitPayload {
+  crash_counter: number;
+  retry_limit: number;
+  exit_code: number | null;
+  exit_signal: number | null;
+  known_good: string | null;
+}
+
+/** `host-restarted` 事件 payload（`commands.rs::HostRestartedPayload`）。 */
+export interface HostRestartedPayload {
+  attempt: number;
+  origin: string;
+}
+
+/** 调 `restart_host`：清零崩溃计数后重启 Host（崩溃弹窗"重试"按钮）。 */
+export function restartHost(): Promise<string> {
+  return invokeCommand<string>("restart_host");
+}
+
+/** 调 `rollback_dsh_command`：回滚到 known_good（崩溃弹窗"回滚"按钮）。 */
+export function rollbackDsh(): Promise<string> {
+  return invokeCommand<string>("rollback_dsh_command");
 }
 
 // ─── PR-011: 首启向导镜像源 + Node 安装 ───
@@ -159,6 +188,17 @@ export interface UpgradeCheckResult {
   available: boolean;
   version: string | null;
   engines_node: string | null;
+  /** 有新版 dsh 但当前 Node 不满足 engines.node（PR-018）。前端先走 Node 升级流程。 */
+  node_block: NodeBlockInfo | null;
+}
+
+/** Node 版本阻塞详情（PR-018）。对应 Rust `NodeBlockInfo`。 */
+export interface NodeBlockInfo {
+  dsh_version: string;
+  engines_node: string;
+  current_node: string | null;
+  node_target: string;
+  mirror_base_url: string;
 }
 
 /** 调 `get_dsh_state`：返回 dsh 状态详情。 */
@@ -201,4 +241,11 @@ export function ignoreVersion(version: string): Promise<void> {
 /** 取消忽略指定版本。 */
 export function unignoreVersion(version: string): Promise<void> {
   return invokeCommand<void>("unignore_version_command", { version });
+}
+
+// ─── PR-019: 诊断导出 ───
+
+/** 调 `export_diagnostics`：打包 state.json + 日志为 zip。返回写入字节数。 */
+export function exportDiagnostics(dest: string): Promise<number> {
+  return invokeCommand<number>("export_diagnostics", { dest });
 }

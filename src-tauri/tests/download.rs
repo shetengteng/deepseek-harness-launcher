@@ -29,8 +29,22 @@ use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+/// 确定性伪随机字节（xorshift64）。制造不可压缩 payload，
+/// 保证 fixture 压缩后仍大于 `download_archive` 的 1MB 错误页防御阈值。
+fn pseudo_random_bytes(len: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed | 1;
+    let mut out = Vec::with_capacity(len);
+    for _ in 0..len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        out.push((state & 0xff) as u8);
+    }
+    out
+}
+
 /// 构造一个真实的 `node-v22.19.0-darwin-arm64-arm64.tar.gz` fixture。
-/// 内容：`bin/node`（fake 二进制）+ `bin/npm` + `package.json`。
+/// 内容：`bin/node`（fake 二进制）+ `bin/npm` + `package.json` + 2MB 不可压缩 payload。
 /// 返回 (archive_bytes, archive_sha256)。
 fn build_node_archive_fixture() -> (Vec<u8>, String) {
     let mut tar_buf: Vec<u8> = Vec::new();
@@ -66,6 +80,17 @@ fn build_node_archive_fixture() -> (Vec<u8>, String) {
         header.set_mode(0o644);
         header.set_cksum();
         builder.append(&header, &pkg[..]).unwrap();
+        // 2MB 不可压缩 payload：绕过 download_archive 对 <1MB 错误页的防御，
+        // 贴近真实 Node archive（≥20MB）的体积特征。
+        let payload = pseudo_random_bytes(2 * 1024 * 1024, 0x5eed);
+        let mut header = tar::Header::new_gnu();
+        header
+            .set_path("node-v22.19.0-darwin-arm64/lib/payload.bin")
+            .unwrap();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append(&header, &payload[..]).unwrap();
         builder.finish().unwrap();
     }
     // gzip 压缩
@@ -261,8 +286,8 @@ async fn sha_mismatch_errors_and_deletes_file() {
 #[tokio::test]
 async fn progress_events_are_emitted() {
     let server = MockServer::start().await;
-    // 构造大于 64KB 的 archive，确保至少触发一次进度事件
-    let big_node_bin = vec![0u8; 200_000]; // 200KB
+    // 构造大于 1MB 的不可压缩 archive：既绕过错误页防御，又确保触发多次进度事件
+    let big_node_bin = pseudo_random_bytes(2 * 1024 * 1024, 0xfeed);
     let mut tar_buf: Vec<u8> = Vec::new();
     {
         let mut builder = Builder::new(&mut tar_buf);

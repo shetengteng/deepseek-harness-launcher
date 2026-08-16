@@ -1,11 +1,12 @@
 <script setup lang="ts">
-// 主视图。对应设计 §M1.5 + §M2.5（PR-011）+ §M3.5（PR-016）。
+// 主视图。对应设计 §M1.5 + §M2.5（PR-011）+ §M3.5（PR-016）+ §5.5（PR-017 崩溃恢复）。
 // 按 phase 渲染：booting → Loading；first_run → FirstRun 向导；idle → 启动/安装按钮；ready → iframe；settings → 设置页。
 
 import { computed, onMounted, ref } from "vue";
 import { Loader2, Download, Play, Settings } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import CrashDialog from "@/components/CrashDialog.vue";
 import ErrorDialog from "@/components/ErrorDialog.vue";
 import FirstRun from "@/components/FirstRun.vue";
 import SettingsView from "@/components/Settings.vue";
@@ -17,6 +18,8 @@ const showSettings = ref(false);
 
 onMounted(() => {
   void store.refreshStatus();
+  // PR-017：监听崩溃恢复事件（host-crash-limit / host-restarted）。
+  void store.initCrashEvents();
 });
 
 /** 是否需要先装 dsh 才能启动 Host。 */
@@ -100,7 +103,15 @@ const needInstallDsh = computed(() => store.dshVersion === null);
       <!-- ready：iframe 加载 dsh web -->
       <template v-else-if="store.displayPhase === 'ready' && store.origin">
         <!-- 顶部工具栏 -->
-        <div class="flex items-center justify-end px-3 py-1 border-b bg-background">
+        <div class="flex items-center justify-between px-3 py-1 border-b bg-background">
+          <!-- PR-017：自动重启成功后的短暂提示 -->
+          <span
+            v-if="store.autoRestartedAttempt !== null"
+            class="text-xs text-muted-foreground"
+          >
+            Harness 曾意外退出，已自动恢复（第 {{ store.autoRestartedAttempt }} 次）
+          </span>
+          <span v-else />
           <Button
             variant="ghost"
             size="icon"
@@ -122,6 +133,15 @@ const needInstallDsh = computed(() => store.dshVersion === null);
         :last-failed-action="store.lastFailedAction"
         @dismiss="store.resetError()"
         @retry="store.retryLastAction()"
+      />
+
+      <!-- 崩溃恢复弹窗（PR-017）：达到重试上限或自动重启失败时弹出 -->
+      <CrashDialog
+        :crash="store.crashLimit"
+        :recovering="store.crashRecovering"
+        @retry="store.retryAfterCrash()"
+        @rollback="store.rollbackAfterCrash()"
+        @dismiss="store.dismissCrash()"
       />
     </template>
   </main>

@@ -748,10 +748,10 @@ deepseek-harness-launcher/
 - ✅ PR-016 [M3] 前端设置页 + 升级对话框 + 事件流
 
 ### M4
-- ⬜ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗
-- ⬜ PR-018 [M4] Node 升级流程
-- ⬜ PR-019 [M4] 错误文案 + 诊断导出
-- ⬜ PR-020 [M4] 磁盘/网络错误识别
+- ✅ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（`host/crash.rs` 计数窗口策略 + supervisor 自动重启 + `host-crash-limit`/`host-restarted` 事件 + 前端 `CrashDialog.vue` + store 恢复 actions）
+- ✅ PR-018 [M4] Node 升级流程（`check_for_upgrade` 返回 `node_block` + `resolve_node_target` 版本解析 + 设置页"升级 Node 并安装"流程）
+- ✅ PR-019 [M4] 错误文案 + 诊断导出（`LauncherError::user_message` 中文文案 + `export_diagnostics` zip 打包 state.json/壳子日志/dsh 日志 + 设置页导出按钮）
+- ✅ PR-020 [M4] 磁盘/网络错误识别（`node/disk.rs` 200MB 下载前检查 + 下载错误文案区分网络/磁盘不足）
 
 ### M5
 - ⬜ PR-021 [M5] CI matrix + 缓存
