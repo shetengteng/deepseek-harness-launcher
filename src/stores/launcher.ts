@@ -39,8 +39,14 @@ export type WizardStep =
 /** 默认 Node 版本（设计 §M2.4）。与 Rust `DEFAULT_NODE_VERSION` 对齐。 */
 export const DEFAULT_NODE_VERSION = "22.19.0";
 
-/** 默认 platform / arch（前端按 UA 简化判断，Rust 端有最终决定权）。 */
+/** 后端上报的宿主 platform/arch（`launcher_status` 快照携带）。 */
+let hostPlatformArch: { platform: string; arch: string } | null = null;
+
+/** platform / arch 检测：优先用后端快照值（`std::env::consts`，权威），
+ * 快照未就绪时退回 UA 判断（仅测试环境用；WKWebView UA 在 Apple Silicon
+ * 上仍报 "Intel Mac OS X"，arm64 会被误判为 x64）。 */
 export function detectPlatformArch(): { platform: string; arch: string } {
+  if (hostPlatformArch) return hostPlatformArch;
   const ua = navigator.userAgent.toLowerCase();
   const arch =
     ua.includes("arm64") || ua.includes("aarch64") ? "arm64" : "x64";
@@ -196,6 +202,10 @@ export const useLauncherStore = defineStore("launcher", () => {
 
   /** 把 `StatusSnapshot` 应用到 store 状态。 */
   function applySnapshot(snap: StatusSnapshot): void {
+    // 宿主 platform/arch 以 Rust 端上报为准（UA 判 arch 在 WKWebView 上不可靠）
+    if (snap.platform && snap.arch) {
+      hostPlatformArch = { platform: snap.platform, arch: snap.arch };
+    }
     dshVersion.value = snap.dsh_version;
     nodeVersion.value = snap.node_version;
     // 后端 host_origin 恒为 null（不持久化）。ready 状态下保留现有 origin，

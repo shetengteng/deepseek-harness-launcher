@@ -25,6 +25,10 @@ export interface StatusSnapshot {
   dsh_version: string | null;
   /** 当前 Node 版本（`state.node.version`）。 */
   node_version: string | null;
+  /** 宿主平台（`darwin` / `win` / `linux`），Rust `std::env::consts` 归一化。 */
+  platform: string;
+  /** 宿主架构（`arm64` / `x64`）。WKWebView UA 误报 Intel，以此为准。 */
+  arch: string;
 }
 
 /**

@@ -52,6 +52,26 @@ pub struct StatusSnapshot {
     pub dsh_version: Option<String>,
     /// 当前 Node 版本（`state.node.version`），用于 UI 展示。
     pub node_version: Option<String>,
+    /// 宿主平台标识（`darwin` / `win` / `linux`），与 Node archive 命名一致。
+    /// WKWebView UA 在 Apple Silicon 上仍报 "Intel Mac OS X"，前端 UA 判 arch 不可靠，
+    /// 以 Rust `std::env::consts` 为准。
+    pub platform: String,
+    /// 宿主架构（`arm64` / `x64`），来源同上。
+    pub arch: String,
+}
+
+/// 归一化 `std::env::consts::OS`/`ARCH` 到 Node archive 命名（darwin/win/linux + arm64/x64）。
+pub fn host_platform_arch() -> (&'static str, &'static str) {
+    let platform = match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win",
+        _ => "linux",
+    };
+    let arch = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        _ => "x64",
+    };
+    (platform, arch)
 }
 
 /// 获取 launcher 当前状态。前端启动时调一次，根据 `phase` 决定渲染哪个视图。
@@ -71,12 +91,15 @@ pub async fn launcher_status() -> Result<StatusSnapshot> {
 ///
 /// 关键：`first_run` phase 下也透传 `node_version` / `dsh_version`，让前端决定 wizardStep。
 pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
+    let (platform, arch) = host_platform_arch();
     match status {
         StateStatus::FirstRun => StatusSnapshot {
             phase: "first_run".to_string(),
             host_origin: None,
             dsh_version: None,
             node_version: None,
+            platform: platform.to_string(),
+            arch: arch.to_string(),
         },
         StateStatus::Loaded(state) => {
             let node_version = state.node.as_ref().map(|n| n.version.clone());
@@ -91,6 +114,8 @@ pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
                 host_origin: None,
                 dsh_version,
                 node_version,
+                platform: platform.to_string(),
+                arch: arch.to_string(),
             }
         }
     }
@@ -303,9 +328,13 @@ pub async fn install_node_command(app: tauri::AppHandle, args: InstallNodeArgs) 
     let InstallNodeArgs {
         version,
         mirror_base_url,
-        platform,
-        arch,
+        platform: _,
+        arch: _,
     } = args;
+
+    // Rust 端最终决定权：无视前端上报的 platform/arch（WKWebView UA 在
+    // Apple Silicon 上误报 Intel），一律用宿主真实值拼 archive 文件名。
+    let (platform, arch) = host_platform_arch();
 
     // 构造 Mirror（用 Custom，因为 base_url 可能是内置源或自定义）
     let mirror = Mirror {
