@@ -2,6 +2,7 @@
 
 mod extract;
 mod paths;
+mod verify;
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +16,7 @@ pub use paths::{
     current_node_dir, current_node_dir_in, current_node_version, current_node_version_in,
     node_bin_path, node_npm_path,
 };
+pub use verify::verify_node_binary;
 
 /// Archive 类型。macOS/Linux 用 tar.gz，Windows 用 zip。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +25,30 @@ pub enum NodeArchiveKind {
     TarGz,
     /// `.zip`
     Zip,
+}
+
+impl NodeArchiveKind {
+    pub fn for_platform(platform: &str) -> Self {
+        if platform == "win" {
+            Self::Zip
+        } else {
+            Self::TarGz
+        }
+    }
+
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::TarGz => "tar.gz",
+            Self::Zip => "zip",
+        }
+    }
+}
+
+pub fn node_archive_filename(version: &str, platform: &str, arch: &str) -> String {
+    format!(
+        "node-v{version}-{platform}-{arch}.{}",
+        NodeArchiveKind::for_platform(platform).extension()
+    )
 }
 
 /// 推断当前平台的 archive 类型。
@@ -58,25 +84,38 @@ pub async fn install_node_to(
 ) -> Result<PathBuf> {
     std::fs::create_dir_all(runtime_dir).map_err(LauncherError::Io)?;
     let target_dir = runtime_dir.join(format!("node-v{version}"));
-    if target_dir.exists() {
-        tracing::info!(version, target = %target_dir.display(), "node already installed, skipping");
-        return Ok(target_dir);
+    let created = !target_dir.exists();
+    if created {
+        let staging_dir = runtime_dir.join(format!(".staging-v{version}"));
+        if staging_dir.exists() {
+            std::fs::remove_dir_all(&staging_dir).map_err(LauncherError::Io)?;
+        }
+        std::fs::create_dir_all(&staging_dir).map_err(LauncherError::Io)?;
+        send_extract_progress(progress_tx, None);
+
+        let extract_result = async {
+            extract::extract_archive(archive_path, &staging_dir, kind, None).await?;
+            std::fs::rename(&staging_dir, &target_dir).map_err(|error| {
+                LauncherError::NodeDownload(format!("rename staging to target failed: {error}"))
+            })?;
+            Ok(())
+        }
+        .await;
+        if let Err(error) = extract_result {
+            let _ = std::fs::remove_dir_all(&staging_dir);
+            let _ = std::fs::remove_dir_all(&target_dir);
+            return Err(error);
+        }
     }
 
-    let staging_dir = runtime_dir.join(format!(".staging-v{version}"));
-    if staging_dir.exists() {
-        std::fs::remove_dir_all(&staging_dir).map_err(LauncherError::Io)?;
+    if let Err(error) =
+        activate_installed_node(runtime_dir, version, &target_dir, progress_tx).await
+    {
+        if created {
+            let _ = std::fs::remove_dir_all(&target_dir);
+        }
+        return Err(error);
     }
-    std::fs::create_dir_all(&staging_dir).map_err(LauncherError::Io)?;
-    send_extract_progress(progress_tx, None);
-
-    extract::extract_archive(archive_path, &staging_dir, kind, None).await?;
-    std::fs::rename(&staging_dir, &target_dir).map_err(|error| {
-        LauncherError::NodeDownload(format!("rename staging to target failed: {error}"))
-    })?;
-    std::fs::write(runtime_dir.join("VERSION"), version).map_err(LauncherError::Io)?;
-
-    send_extract_progress(progress_tx, Some(0));
     tracing::info!(version, target = %target_dir.display(), "node installed");
     Ok(target_dir)
 }
@@ -93,39 +132,44 @@ pub(crate) async fn install_node_to_cancellable(
     std::fs::create_dir_all(runtime_dir).map_err(LauncherError::Io)?;
     let target_dir = runtime_dir.join(format!("node-v{version}"));
     let previous_version = std::fs::read(runtime_dir.join("VERSION")).ok();
-    if target_dir.exists() {
-        cancellation.check()?;
-        return Ok(InstalledNode {
-            target: target_dir,
-            created: false,
-            previous_version,
-            version: version.to_string(),
-        });
+    let created = !target_dir.exists();
+    if created {
+        let staging_dir = runtime_dir.join(format!(".staging-v{version}"));
+        if staging_dir.exists() {
+            std::fs::remove_dir_all(&staging_dir).map_err(LauncherError::Io)?;
+        }
+        std::fs::create_dir_all(&staging_dir).map_err(LauncherError::Io)?;
+        send_extract_progress(progress_tx, None);
+
+        let install_result = async {
+            extract::extract_archive(archive_path, &staging_dir, kind, Some(cancellation)).await?;
+            cancellation.check()?;
+            std::fs::rename(&staging_dir, &target_dir).map_err(|error| {
+                LauncherError::NodeDownload(format!("rename staging to target failed: {error}"))
+            })?;
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = install_result {
+            let _ = std::fs::remove_dir_all(&staging_dir);
+            if matches!(error, LauncherError::NodeInstallCancelled { .. }) {
+                cleanup_created_runtime(
+                    runtime_dir,
+                    &target_dir,
+                    version,
+                    previous_version.as_deref(),
+                );
+            }
+            return Err(error);
+        }
     }
 
-    let staging_dir = runtime_dir.join(format!(".staging-v{version}"));
-    if staging_dir.exists() {
-        std::fs::remove_dir_all(&staging_dir).map_err(LauncherError::Io)?;
-    }
-    std::fs::create_dir_all(&staging_dir).map_err(LauncherError::Io)?;
-    send_extract_progress(progress_tx, None);
-
-    let install_result = async {
-        extract::extract_archive(archive_path, &staging_dir, kind, Some(cancellation)).await?;
-        cancellation.check()?;
-        std::fs::rename(&staging_dir, &target_dir).map_err(|error| {
-            LauncherError::NodeDownload(format!("rename staging to target failed: {error}"))
-        })?;
-        cancellation.check()?;
-        std::fs::write(runtime_dir.join("VERSION"), version).map_err(LauncherError::Io)?;
-        cancellation.check()?;
-        Ok(())
-    }
-    .await;
-
-    if let Err(error) = install_result {
-        let _ = std::fs::remove_dir_all(&staging_dir);
-        if matches!(error, LauncherError::NodeInstallCancelled { .. }) {
+    cancellation.check()?;
+    if let Err(error) =
+        activate_installed_node(runtime_dir, version, &target_dir, progress_tx).await
+    {
+        if created {
             cleanup_created_runtime(
                 runtime_dir,
                 &target_dir,
@@ -135,25 +179,28 @@ pub(crate) async fn install_node_to_cancellable(
         }
         return Err(error);
     }
-
-    send_extract_progress(progress_tx, Some(0));
-    tracing::info!(version, target = %target_dir.display(), "node installed");
-    Ok(InstalledNode {
+    let installed = InstalledNode {
         target: target_dir,
-        created: true,
+        created,
         previous_version,
         version: version.to_string(),
-    })
+    };
+    if let Err(error) = cancellation.check() {
+        cleanup_cancelled_install(runtime_dir, &installed);
+        return Err(error);
+    }
+    tracing::info!(version, target = %installed.target.display(), "node installed");
+    Ok(installed)
 }
 
 pub(crate) fn cleanup_cancelled_install(runtime_dir: &Path, installed: &InstalledNode) {
+    restore_previous_selection(
+        runtime_dir,
+        &installed.version,
+        installed.previous_version.as_deref(),
+    );
     if installed.created {
-        cleanup_created_runtime(
-            runtime_dir,
-            &installed.target,
-            &installed.version,
-            installed.previous_version.as_deref(),
-        );
+        let _ = std::fs::remove_dir_all(&installed.target);
     }
 }
 
@@ -163,6 +210,11 @@ fn cleanup_created_runtime(
     version: &str,
     previous_version: Option<&[u8]>,
 ) {
+    restore_previous_selection(runtime_dir, version, previous_version);
+    let _ = std::fs::remove_dir_all(target_dir);
+}
+
+fn restore_previous_selection(runtime_dir: &Path, version: &str, previous_version: Option<&[u8]>) {
     let version_path = runtime_dir.join("VERSION");
     if std::fs::read(&version_path)
         .ok()
@@ -177,7 +229,6 @@ fn cleanup_created_runtime(
             }
         }
     }
-    let _ = std::fs::remove_dir_all(target_dir);
 }
 
 /// 安装 Node 到默认 `<data>/node-runtime/`。
@@ -197,6 +248,18 @@ pub async fn install_node(
     .await
 }
 
+async fn activate_installed_node(
+    runtime_dir: &Path,
+    version: &str,
+    target_dir: &Path,
+    progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
+) -> Result<()> {
+    verify_node_binary(target_dir, version).await?;
+    std::fs::write(runtime_dir.join("VERSION"), version).map_err(LauncherError::Io)?;
+    send_extract_progress(progress_tx, Some(0));
+    Ok(())
+}
+
 fn send_extract_progress(progress_tx: Option<&mpsc::Sender<ProgressEvent>>, total: Option<u64>) {
     if let Some(sender) = progress_tx {
         let _ = sender.try_send(ProgressEvent {
@@ -212,12 +275,43 @@ mod tests {
     use super::*;
     use crate::node::download::NodeDownloadOperations;
 
+    #[cfg(unix)]
+    fn write_fake_node(node_dir: &Path, version_line: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = node_dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let path = bin.join("node");
+        std::fs::write(&path, format!("#!/bin/sh\necho {version_line}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     #[test]
     fn archive_kind_for_current_platform_is_consistent() {
         #[cfg(target_os = "windows")]
         assert_eq!(archive_kind_for_current_platform(), NodeArchiveKind::Zip);
         #[cfg(not(target_os = "windows"))]
         assert_eq!(archive_kind_for_current_platform(), NodeArchiveKind::TarGz);
+    }
+
+    #[test]
+    fn archive_filename_matches_official_node_dist_names() {
+        assert_eq!(
+            node_archive_filename("22.19.0", "darwin", "arm64"),
+            "node-v22.19.0-darwin-arm64.tar.gz"
+        );
+        assert_eq!(
+            node_archive_filename("22.19.0", "linux", "x64"),
+            "node-v22.19.0-linux-x64.tar.gz"
+        );
+        assert_eq!(
+            node_archive_filename("22.19.0", "win", "x64"),
+            "node-v22.19.0-win-x64.zip"
+        );
+        assert_eq!(NodeArchiveKind::for_platform("win"), NodeArchiveKind::Zip);
+        assert_eq!(
+            NodeArchiveKind::for_platform("darwin"),
+            NodeArchiveKind::TarGz
+        );
     }
 
     #[tokio::test]
@@ -278,6 +372,102 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(runtime.path().join("VERSION")).unwrap(),
             "20.0.0"
+        );
+    }
+
+    #[test]
+    fn cancellation_after_switching_to_an_existing_runtime_restores_the_prior_selection() {
+        let runtime = tempfile::tempdir().unwrap();
+        let existing = runtime.path().join("node-v20.0.0");
+        let selected = runtime.path().join("node-v22.0.0");
+        std::fs::create_dir_all(&existing).unwrap();
+        std::fs::create_dir_all(&selected).unwrap();
+        std::fs::write(runtime.path().join("VERSION"), "22.0.0").unwrap();
+
+        cleanup_cancelled_install(
+            runtime.path(),
+            &InstalledNode {
+                target: selected.clone(),
+                created: false,
+                previous_version: Some(b"20.0.0".to_vec()),
+                version: "22.0.0".to_string(),
+            },
+        );
+
+        assert!(existing.exists());
+        assert!(selected.exists());
+        assert_eq!(
+            std::fs::read_to_string(runtime.path().join("VERSION")).unwrap(),
+            "20.0.0"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn switching_runtimes_updates_version_and_keeps_the_previous_install() {
+        let runtime = tempfile::tempdir().unwrap();
+        let previous = runtime.path().join("node-v22.19.0");
+        let next = runtime.path().join("node-v24.0.0");
+        write_fake_node(&previous, "v22.19.0");
+        write_fake_node(&next, "v24.0.0");
+        std::fs::write(runtime.path().join("VERSION"), "22.19.0").unwrap();
+        let archive = runtime.path().join("node.tar.gz");
+        std::fs::write(&archive, b"not used").unwrap();
+        let operations = NodeDownloadOperations::default();
+        let active = operations.register("switch").unwrap();
+
+        let installed = install_node_to_cancellable(
+            &archive,
+            "24.0.0",
+            NodeArchiveKind::TarGz,
+            runtime.path(),
+            None,
+            &active.cancellation(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(installed.target, next);
+        assert!(!installed.created);
+        assert!(previous.exists());
+        assert!(next.exists());
+        assert_eq!(
+            std::fs::read_to_string(runtime.path().join("VERSION")).unwrap(),
+            "24.0.0"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn failed_binary_check_does_not_switch_the_active_runtime() {
+        let runtime = tempfile::tempdir().unwrap();
+        let previous = runtime.path().join("node-v22.19.0");
+        let next = runtime.path().join("node-v24.0.0");
+        write_fake_node(&previous, "v22.19.0");
+        write_fake_node(&next, "v20.0.0");
+        std::fs::write(runtime.path().join("VERSION"), "22.19.0").unwrap();
+        let archive = runtime.path().join("node.tar.gz");
+        std::fs::write(&archive, b"not used").unwrap();
+        let operations = NodeDownloadOperations::default();
+        let active = operations.register("mismatch").unwrap();
+
+        let error = install_node_to_cancellable(
+            &archive,
+            "24.0.0",
+            NodeArchiveKind::TarGz,
+            runtime.path(),
+            None,
+            &active.cancellation(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(error, LauncherError::NodeVersion(_)));
+        assert!(previous.exists());
+        assert!(next.exists());
+        assert_eq!(
+            std::fs::read_to_string(runtime.path().join("VERSION")).unwrap(),
+            "22.19.0"
         );
     }
 }

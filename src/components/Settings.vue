@@ -1,22 +1,37 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 import LauncherIcon from "@/components/LauncherIcon.vue";
+import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   exportDiagnostics,
   getDshState,
   getLatestDshVersion,
+  installDshCli,
   installDsh,
   listMirrors,
+  parseNodeUpgradeRequired,
   restartHostAfterDshUpdate,
   setNodeMirror,
   setRegistry,
   uninstallManagedRuntime,
+  upgradeNode,
   type DshStateSnapshot,
+  type DshCliInstallResult,
   type LatestDshVersion,
   type MirrorInfo,
+  type NodeUpgradeRequired,
 } from "@/lib/tauri";
 
 const emit = defineEmits<{ upgradeReady: [origin: string] }>();
@@ -48,6 +63,10 @@ const exportInfo = ref<string | null>(null);
 const confirmingUninstall = ref(false);
 const uninstalling = ref(false);
 const uninstallError = ref<string | null>(null);
+const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
+const installingDshCli = ref(false);
+const dshCliInstall = ref<DshCliInstallResult | null>(null);
+const dshCliError = ref<string | null>(null);
 
 const messageOf = (error: unknown) =>
   typeof error === "object" && error !== null && "message" in error
@@ -93,17 +112,51 @@ async function installLatestDsh(): Promise<void> {
   upgradeError.value = null;
   try {
     await installDsh({ expectedVersion });
-    const restart = await restartHostAfterDshUpdate();
-    await loadDshState();
-    if (restart.rolled_back) {
-      upgradeError.value = `新版本无法启动，已恢复 ${restart.active_version}。`;
+    await finishLatestInstall();
+  } catch (error) {
+    const required = parseNodeUpgradeRequired(error);
+    if (required) {
+      nodeUpgrade.value = required;
+      return;
     }
-    emit("upgradeReady", restart.origin);
+    upgradeError.value = messageOf(error);
+  } finally {
+    upgrading.value = false;
+  }
+}
+
+async function confirmNodeUpgrade(): Promise<void> {
+  const required = nodeUpgrade.value;
+  const expectedVersion = latestDshVersion.value?.latest_version;
+  if (upgrading.value || !required || !expectedVersion) return;
+  upgrading.value = true;
+  upgradeError.value = null;
+  try {
+    await upgradeNode({
+      version: required.suggested_node,
+      operationId: crypto.randomUUID(),
+    });
+    nodeUpgrade.value = null;
+    await installDsh({ expectedVersion });
+    await finishLatestInstall();
   } catch (error) {
     upgradeError.value = messageOf(error);
   } finally {
     upgrading.value = false;
   }
+}
+
+function cancelNodeUpgrade(): void {
+  nodeUpgrade.value = null;
+}
+
+async function finishLatestInstall(): Promise<void> {
+  const restart = await restartHostAfterDshUpdate();
+  await loadDshState();
+  if (restart.rolled_back) {
+    upgradeError.value = `新版本无法启动，已恢复 ${restart.active_version}。`;
+  }
+  emit("upgradeReady", restart.origin);
 }
 
 async function handleExportDiagnostics(): Promise<void> {
@@ -171,6 +224,19 @@ async function handleSetRegistry(value: unknown): Promise<void> {
   }
 }
 
+async function handleInstallDshCli(): Promise<void> {
+  if (installingDshCli.value) return;
+  installingDshCli.value = true;
+  dshCliError.value = null;
+  try {
+    dshCliInstall.value = await installDshCli();
+  } catch (error) {
+    dshCliError.value = messageOf(error);
+  } finally {
+    installingDshCli.value = false;
+  }
+}
+
 onMounted(loadDshState);
 watch(
   () => props.exportDiagnosticsRequest,
@@ -214,6 +280,12 @@ watch(
           @refresh="refreshLatestDshVersion"
           @install="installLatestDsh"
         />
+        <SettingsCommandCard
+          :installing="installingDshCli"
+          :result="dshCliInstall"
+          :error="dshCliError"
+          @install="handleInstallDshCli"
+        />
         <SettingsSourcesCard
           :node-mirrors="nodeMirrors"
           :node-mirror="nodeMirrorDraft"
@@ -235,6 +307,32 @@ watch(
         />
       </template>
     </div>
+
+    <Dialog :open="nodeUpgrade !== null">
+      <DialogContent
+        class="sm:max-w-[420px]"
+        @escape-key-down.prevent
+        @pointer-down-outside.prevent
+      >
+        <DialogHeader>
+          <DialogTitle>需要升级 Node</DialogTitle>
+          <DialogDescription v-if="nodeUpgrade">
+            dsh {{ nodeUpgrade.dsh_version }} 需要 Node
+            {{ nodeUpgrade.engines_node }}，当前为
+            {{ nodeUpgrade.current_node }}。确认后将下载 Node
+            {{ nodeUpgrade.suggested_node }} 并继续更新。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2 sm:gap-2">
+          <Button variant="outline" :disabled="upgrading" @click="cancelNodeUpgrade">
+            取消更新
+          </Button>
+          <Button :disabled="upgrading" @click="confirmNodeUpgrade">
+            {{ upgrading ? "升级中…" : "确认升级并继续" }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 

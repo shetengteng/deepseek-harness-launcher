@@ -9,9 +9,11 @@ type ToastOptions = {
 
 const api = vi.hoisted(() => ({
   cancelDshInstall: vi.fn(),
+  cancelNodeInstall: vi.fn(),
   checkDshUpdate: vi.fn(),
   installDsh: vi.fn(),
   restartHostAfterDshUpdate: vi.fn(),
+  upgradeNode: vi.fn(),
 }));
 
 const notice = vi.hoisted(() => ({
@@ -51,7 +53,10 @@ const store = vi.hoisted(() => ({
   dismissCrash: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri", () => api);
+vi.mock("@/lib/tauri", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tauri")>();
+  return { ...actual, ...api };
+});
 vi.mock("@/components/ui/toast", () => toastApi);
 vi.mock("@tauri-apps/plugin-opener", () => opener);
 vi.mock("@tauri-apps/api/event", () => ({

@@ -22,8 +22,8 @@ defineEmits<{
 <template>
   <Card>
     <CardHeader><CardTitle class="text-base">问题排查</CardTitle></CardHeader>
-    <CardContent
-      ><div class="flex items-center justify-between gap-4 py-3">
+    <CardContent class="space-y-3"
+      ><div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <div class="text-sm font-medium">导出排查资料</div>
           <p class="text-xs text-muted-foreground">
@@ -49,7 +49,7 @@ defineEmits<{
   <Card>
     <CardHeader><CardTitle class="text-base">卸载</CardTitle></CardHeader>
     <CardContent class="space-y-3"
-      ><div class="flex items-center justify-between gap-4 py-3">
+      ><div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <div class="text-sm font-medium">移除 DeepSeek Harness</div>
           <p class="text-xs text-muted-foreground">

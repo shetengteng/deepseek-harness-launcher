@@ -27,7 +27,7 @@
 | Host | readiness 解析、子进程启动/关闭、输出缓冲和崩溃计数策略 |
 | 前端 | 首启双任务视图、启动遮罩、设置页、错误展示与托盘事件桥接 |
 
-2026-08-17 的本地基线：`cargo test --quiet` 通过 147 个 crate 测试和 4 个集成测试；`pnpm test` 通过 23 个测试；`pnpm lint && pnpm build` 通过。`cargo clippy --all-targets -- -D warnings` 仍由既有的 3 处 `too_many_arguments` 与 1 处 `trim_split_whitespace` 阻塞，未在本轮 P0 范围内修改。
+2026-08-17 的本地基线：`cargo test --quiet` 通过 160 个 crate 测试和 4 个集成测试；`pnpm test` 通过 27 个测试；`pnpm lint && pnpm build` 通过。`cargo clippy --all-targets -- -D warnings` 仍由既有的 3 处 `too_many_arguments` 与 1 处 `trim_split_whitespace` 阻塞，未在本轮 P0 范围内修改。
 
 ## 3. 当前测试待办
 

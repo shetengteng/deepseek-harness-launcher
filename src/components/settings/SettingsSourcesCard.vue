@@ -29,8 +29,8 @@ function nodeMirrorLabel(mirror: MirrorInfo): string {
 <template>
   <Card>
     <CardHeader><CardTitle class="text-base">下载来源</CardTitle></CardHeader>
-    <CardContent class="space-y-4">
-      <div class="flex items-center justify-between gap-4 py-3">
+    <CardContent class="space-y-3">
+      <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <Label>Node.js 下载源</Label>
           <p class="text-xs text-muted-foreground">
@@ -52,7 +52,7 @@ function nodeMirrorLabel(mirror: MirrorInfo): string {
           ></Select
         >
       </div>
-      <div class="flex items-center justify-between gap-4 py-3">
+      <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <Label>npm 下载源</Label>
           <p class="text-xs text-muted-foreground">

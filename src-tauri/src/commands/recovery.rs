@@ -61,7 +61,7 @@ pub async fn decide_after_crash(
     if decision != crate::host::CrashDecision::RestartCurrent {
         return CrashAction::PromptUser(prompt());
     }
-    match build_spawn_options() {
+    match build_spawn_options().await {
         Ok(options) => match supervisor.start(&options).await {
             Ok(origin) => CrashAction::Restarted {
                 attempt: counter,

@@ -3,16 +3,20 @@ use std::path::Path;
 use crate::error::{LauncherError, Result};
 use crate::host::SpawnDshWebOptions;
 
-pub(crate) fn build_spawn_options() -> Result<SpawnDshWebOptions> {
+pub(crate) async fn build_spawn_options() -> Result<SpawnDshWebOptions> {
     build_spawn_options_in(
         &crate::paths::node_runtime_dir()?,
         &crate::paths::dsh_dir()?,
     )
+    .await
 }
 
-fn build_spawn_options_in(node_runtime_dir: &Path, dsh_dir: &Path) -> Result<SpawnDshWebOptions> {
+async fn build_spawn_options_in(
+    node_runtime_dir: &Path,
+    dsh_dir: &Path,
+) -> Result<SpawnDshWebOptions> {
     use crate::dsh::{read_current_pointer, DSH_ENTRY_REL};
-    use crate::node::install::current_node_dir_in;
+    use crate::node::install::{current_node_dir_in, current_node_version_in, verify_node_binary};
 
     let node_dir = current_node_dir_in(node_runtime_dir).map_err(|error| match error {
         LauncherError::NodeDownload(message) if message.contains("read VERSION file failed") => {
@@ -23,15 +27,17 @@ fn build_spawn_options_in(node_runtime_dir: &Path, dsh_dir: &Path) -> Result<Spa
         }
         other => other,
     })?;
+    let node_version = current_node_version_in(node_runtime_dir).map_err(|error| {
+        LauncherError::NodeNotInstalled {
+            reason: format!("managed Node VERSION is invalid: {error}"),
+        }
+    })?;
+    verify_node_binary(&node_dir, &node_version)
+        .await
+        .map_err(|error| LauncherError::NodeNotInstalled {
+            reason: format!("managed Node validation failed: {error}"),
+        })?;
     let node_executable = crate::node::install::node_bin_path(&node_dir);
-    if !node_executable.is_file() {
-        return Err(LauncherError::NodeNotInstalled {
-            reason: format!(
-                "managed Node executable not found: {}",
-                node_executable.display()
-            ),
-        });
-    }
     let current_version = read_current_pointer(dsh_dir)
         .map_err(|error| LauncherError::PathResolve {
             what: "dsh_current_pointer",
@@ -46,7 +52,7 @@ fn build_spawn_options_in(node_runtime_dir: &Path, dsh_dir: &Path) -> Result<Spa
         .join("@deepseek-ai")
         .join("dsh")
         .join(DSH_ENTRY_REL);
-    if !cli_entry.exists() {
+    if !cli_entry.is_file() {
         return Err(LauncherError::DshNotInstalled {
             reason: format!(
                 "dsh cli entry not found: {} (version {current_version} may be broken)",
@@ -73,10 +79,12 @@ mod tests {
     use super::*;
     use crate::error::LauncherError;
 
-    use super::super::test_support::{write_dsh_entry, write_node_runtime};
+    use super::super::test_support::write_dsh_entry;
+    #[cfg(unix)]
+    use super::super::test_support::write_node_runtime;
 
-    #[test]
-    fn spawn_options_require_the_managed_node_binary() {
+    #[tokio::test]
+    async fn spawn_options_require_the_managed_node_binary() {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join("node-runtime");
         let dsh = temp.path().join("dsh");
@@ -84,13 +92,14 @@ mod tests {
         write_dsh_entry(&dsh, "0.2.0");
         crate::dsh::write_current_pointer(&dsh, "0.2.0").unwrap();
 
-        let error = build_spawn_options_in(&runtime, &dsh).unwrap_err();
+        let error = build_spawn_options_in(&runtime, &dsh).await.unwrap_err();
 
         assert!(matches!(error, LauncherError::NodeNotInstalled { .. }));
     }
 
-    #[test]
-    fn spawn_options_use_the_current_dsh_version_as_working_directory() {
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn spawn_options_use_the_current_dsh_version_as_working_directory() {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join("node-runtime");
         let dsh = temp.path().join("dsh");
@@ -99,7 +108,7 @@ mod tests {
         write_dsh_entry(&dsh, "0.2.0");
         crate::dsh::write_current_pointer(&dsh, "0.2.0").unwrap();
 
-        let options = build_spawn_options_in(&runtime, &dsh).unwrap();
+        let options = build_spawn_options_in(&runtime, &dsh).await.unwrap();
 
         assert_eq!(options.cwd, dsh.join("0.2.0"));
         assert!(options

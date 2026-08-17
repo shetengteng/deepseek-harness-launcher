@@ -77,12 +77,24 @@ pub async fn install_dsh_command(
     }
     let version = selected_install_version(bootstrap_plan.as_ref(), expected_version.as_deref())?;
     let manifest = metadata.manifest_for(&version)?;
-    ensure_node_compatible(
-        bootstrap_plan.as_ref(),
-        &manifest,
-        &node_state.version,
-        &version,
-    )?;
+    if let Some(engines_node) =
+        node_upgrade_requirement(bootstrap_plan.as_ref(), &manifest, &node_state.version)?
+    {
+        let (platform, arch) = crate::commands::host::host_platform_arch();
+        let (suggested_node, _) = crate::node::resolve_bootstrap_node_target(
+            Some(&engines_node),
+            platform,
+            arch,
+            &client,
+        )
+        .await?;
+        return Err(LauncherError::NodeUpgradeRequired {
+            dsh_version: version,
+            current_node: node_state.version,
+            engines_node,
+            suggested_node,
+        });
+    }
     let _ = app.emit(
         "dsh-install-progress",
         DshInstallProgressPayload {
@@ -111,18 +123,18 @@ pub async fn install_dsh_command(
     Ok(version)
 }
 
-fn ensure_node_compatible(
+fn node_upgrade_requirement(
     bootstrap_plan: Option<&crate::state::BootstrapPlan>,
     manifest: &crate::dsh::PackageManifest,
     node_version: &str,
-    dsh_version: &str,
-) -> Result<()> {
+) -> Result<Option<String>> {
     if let Some(plan) = bootstrap_plan {
         let manifest_engines =
             (!manifest.engines.node.trim().is_empty()).then_some(manifest.engines.node.as_str());
         if manifest_engines != plan.engines_node.as_deref() {
             return Err(LauncherError::DshRegistry(format!(
-                "frozen dsh {dsh_version} manifest engines.node changed after bootstrap resolution"
+                "frozen dsh {} manifest engines.node changed after bootstrap resolution",
+                manifest.version
             )));
         }
         if let Some(requirement) = plan.engines_node.as_deref() {
@@ -133,15 +145,14 @@ fn ensure_node_compatible(
                 )));
             }
         }
-    } else if !manifest.engines.node.trim().is_empty()
+        return Ok(None);
+    }
+    if !manifest.engines.node.trim().is_empty()
         && !crate::node::current_node_satisfies(Some(node_version), &manifest.engines.node)?
     {
-        return Err(LauncherError::NodeVersion(format!(
-            "dsh {dsh_version} requires Node {}, current version is {node_version}",
-            manifest.engines.node
-        )));
+        return Ok(Some(manifest.engines.node.clone()));
     }
-    Ok(())
+    Ok(None)
 }
 
 fn selected_install_version(
@@ -237,9 +248,56 @@ mod tests {
         let mut state = AppState::new();
         state.dsh.current = Some("0.1.0".to_string());
 
-        let error = ensure_node_compatible(None, &manifest, "22.19.0", "0.2.0").unwrap_err();
+        let requirement = node_upgrade_requirement(None, &manifest, "22.19.0").unwrap();
 
-        assert!(matches!(error, LauncherError::NodeVersion(_)));
+        assert_eq!(requirement.as_deref(), Some(">=24.0.0"));
         assert_eq!(state.dsh.current.as_deref(), Some("0.1.0"));
+    }
+
+    #[test]
+    fn compatible_node_does_not_request_an_upgrade() {
+        let manifest = crate::dsh::PackageManifest {
+            version: "0.2.0".to_string(),
+            engines: crate::dsh::EnginesField {
+                node: ">=22.0.0".to_string(),
+                ..Default::default()
+            },
+            dist: crate::dsh::DistInfo {
+                integrity: "sha512-test".to_string(),
+                tarball: "https://example.test/dsh-0.2.0.tgz".to_string(),
+            },
+        };
+
+        assert_eq!(
+            node_upgrade_requirement(None, &manifest, "22.19.0").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn bootstrap_still_rejects_an_incompatible_frozen_runtime() {
+        let manifest = crate::dsh::PackageManifest {
+            version: "0.2.0".to_string(),
+            engines: crate::dsh::EnginesField {
+                node: ">=24.0.0".to_string(),
+                ..Default::default()
+            },
+            dist: crate::dsh::DistInfo {
+                integrity: "sha512-test".to_string(),
+                tarball: "https://example.test/dsh-0.2.0.tgz".to_string(),
+            },
+        };
+        let plan = crate::state::BootstrapPlan {
+            dsh_version: "0.2.0".to_string(),
+            registry: "https://registry.npmjs.org".to_string(),
+            engines_node: Some(">=24.0.0".to_string()),
+            node_version: "24.0.0".to_string(),
+            requirement_source: "dsh-engines".to_string(),
+            resolved_at: chrono::Utc::now(),
+            phase: "node_installed".to_string(),
+        };
+
+        let error = node_upgrade_requirement(Some(&plan), &manifest, "22.19.0").unwrap_err();
+        assert!(matches!(error, LauncherError::NodeVersion(_)));
     }
 }

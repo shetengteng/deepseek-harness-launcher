@@ -52,10 +52,24 @@ pub fn user_message(error: &LauncherError) -> String {
             "没有可回滚的稳定版本。请重新安装 dsh。".to_string()
         }
         LauncherError::DshVersion(_) => "dsh 版本切换失败。请重试。".to_string(),
+        LauncherError::DshCli(message) if message.contains("already exists") => {
+            "目标位置已有其他 dsh 命令。为避免覆盖它，启动器没有做任何修改。".to_string()
+        }
+        LauncherError::DshCli(_) => {
+            "无法安装 dsh 命令。请检查用户目录写权限后重试。".to_string()
+        }
         LauncherError::DshNotInstalled { .. } => "dsh 尚未安装。请完成首次启动向导。".to_string(),
         LauncherError::NodeNotInstalled { .. } => {
             "Node 运行时尚未安装。请完成首次启动向导。".to_string()
         }
+        LauncherError::NodeUpgradeRequired {
+            dsh_version,
+            current_node,
+            engines_node,
+            suggested_node,
+        } => format!(
+            "dsh {dsh_version} 需要 Node {engines_node}，当前为 {current_node}。确认后将下载 Node {suggested_node} 并继续更新。"
+        ),
     }
 }
 
@@ -115,6 +129,20 @@ mod tests {
             operation_id: "operation-1".to_string(),
         })
         .contains("取消"));
+    }
+
+    #[test]
+    fn node_upgrade_required_asks_the_user_to_confirm() {
+        let message = user_message(&LauncherError::NodeUpgradeRequired {
+            dsh_version: "0.2.0".to_string(),
+            current_node: "22.19.0".to_string(),
+            engines_node: ">=24.0.0".to_string(),
+            suggested_node: "24.4.0".to_string(),
+        });
+        assert!(message.contains("0.2.0"));
+        assert!(message.contains("22.19.0"));
+        assert!(message.contains("24.4.0"));
+        assert!(message.contains("确认"));
     }
     #[test]
     fn host_readiness_timeout_is_distinguished() {

@@ -22,7 +22,9 @@ const {
   updateCurrentVersion,
   updateTargetVersion,
   updateError,
+  nodeUpgrade,
   startDshUpdate,
+  confirmNodeUpgrade,
   cancelDshUpdate,
   closeUpdateDialog,
 } = useDshUpdate();
@@ -71,6 +73,38 @@ function openUpdateSettings(): void {
         </DialogFooter>
       </template>
 
+      <template v-else-if="updateDialogState === 'confirming_node' && nodeUpgrade">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2">
+            <AlertTriangle class="h-5 w-5 text-warning" />
+            需要升级 Node
+          </DialogTitle>
+          <DialogDescription>
+            dsh {{ nodeUpgrade.dsh_version }} 需要 Node
+            {{ nodeUpgrade.engines_node }}，当前为
+            {{ nodeUpgrade.current_node }}。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-muted-foreground">当前 Node</span>
+            <span class="font-mono text-xs">{{ nodeUpgrade.current_node }}</span>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-muted-foreground">将安装</span>
+            <span class="font-mono text-xs text-info">
+              {{ nodeUpgrade.suggested_node }}
+            </span>
+          </div>
+        </div>
+
+        <DialogFooter class="gap-2 sm:gap-2">
+          <Button variant="outline" @click="cancelDshUpdate">取消更新</Button>
+          <Button @click="confirmNodeUpgrade">确认升级并继续</Button>
+        </DialogFooter>
+      </template>
+
       <template v-else>
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
@@ -110,7 +144,10 @@ function openUpdateSettings(): void {
         <DialogFooter>
           <Button
             variant="outline"
-            :disabled="updateDialogState !== 'installing'"
+            :disabled="
+              updateDialogState !== 'installing' &&
+              updateDialogState !== 'upgrading_node'
+            "
             @click="cancelDshUpdate"
           >
             {{ updateDialogState === "cancelling" ? "正在取消…" : "取消" }}

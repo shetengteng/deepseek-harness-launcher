@@ -24,7 +24,7 @@ pub async fn install_node_command(
 ) -> Result<String> {
     use crate::node::{
         cleanup_cancelled_install, download_with_retry_cancellable, install_node_to_cancellable,
-        remove_archive, NodeArchiveKind,
+        remove_archive,
     };
 
     let InstallNodeArgs {
@@ -35,13 +35,14 @@ pub async fn install_node_command(
         arch: _,
     } = args;
     let (platform, arch) = host_platform_arch();
+    let kind = node::NodeArchiveKind::for_platform(platform);
+    let archive_filename = node::node_archive_filename(&version, platform, arch);
     let mirror = Mirror {
         id: MirrorId::Custom(mirror_base_url.clone()),
         name: "user-selected",
         base_url: Box::leak(mirror_base_url.clone().into_boxed_str()),
         trusted: false,
     };
-    let archive_filename = format!("node-v{version}-{platform}-{arch}.tar.gz");
     let runtime_dir = crate::paths::node_runtime_dir()?;
     std::fs::create_dir_all(&runtime_dir)?;
     let staging_download_dir = runtime_dir.join(".downloads");
@@ -82,7 +83,7 @@ pub async fn install_node_command(
         let installed = install_node_to_cancellable(
             &archive_path,
             &version,
-            NodeArchiveKind::TarGz,
+            kind,
             &runtime_dir,
             Some(&tx),
             &cancellation,
@@ -145,6 +146,45 @@ pub async fn install_node_command(
     }
     state.save()?;
     Ok(version)
+}
+
+#[tauri::command]
+pub async fn upgrade_node_command(
+    app: tauri::AppHandle,
+    operations: State<'_, node::NodeDownloadOperations>,
+    version: String,
+    operation_id: String,
+) -> Result<String> {
+    let state = match AppState::load()? {
+        StateStatus::FirstRun => {
+            return Err(LauncherError::NodeNotInstalled {
+                reason: "cannot upgrade Node before the first-run runtime exists".to_string(),
+            })
+        }
+        StateStatus::Loaded(state) => *state,
+    };
+    let current = state
+        .node
+        .as_ref()
+        .ok_or_else(|| LauncherError::NodeNotInstalled {
+            reason: "cannot upgrade Node before a managed runtime exists".to_string(),
+        })?;
+    let mirror_base_url = state
+        .node_mirror
+        .clone()
+        .unwrap_or_else(|| current.mirror.clone());
+    install_node_command(
+        app,
+        operations,
+        InstallNodeArgs {
+            version,
+            operation_id,
+            mirror_base_url,
+            platform: String::new(),
+            arch: String::new(),
+        },
+    )
+    .await
 }
 
 async fn remove_cancelled_artifacts(

@@ -36,10 +36,19 @@ pub enum LauncherError {
     DshInstall(String),
     #[error("dsh version error: {0}")]
     DshVersion(String),
+    #[error("dsh CLI command error: {0}")]
+    DshCli(String),
     #[error("dsh not installed: {reason}")]
     DshNotInstalled { reason: String },
     #[error("node not installed: {reason}")]
     NodeNotInstalled { reason: String },
+    #[error("dsh {dsh_version} requires Node {engines_node}, current version is {current_node}")]
+    NodeUpgradeRequired {
+        dsh_version: String,
+        current_node: String,
+        engines_node: String,
+        suggested_node: String,
+    },
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -71,8 +80,10 @@ impl LauncherError {
             Self::DshRegistry(_) => "dsh_registry",
             Self::DshInstall(_) => "dsh_install",
             Self::DshVersion(_) => "dsh_version",
+            Self::DshCli(_) => "dsh_cli",
             Self::DshNotInstalled { .. } => "dsh_not_installed",
             Self::NodeNotInstalled { .. } => "node_not_installed",
+            Self::NodeUpgradeRequired { .. } => "node_upgrade_required",
         }
     }
     fn data(&self) -> Option<serde_json::Value> {
@@ -91,6 +102,17 @@ impl LauncherError {
             Self::NodeNotInstalled { reason } => {
                 Some(serde_json::json!({"what": "node", "reason": reason}))
             }
+            Self::NodeUpgradeRequired {
+                dsh_version,
+                current_node,
+                engines_node,
+                suggested_node,
+            } => Some(serde_json::json!({
+                "dsh_version": dsh_version,
+                "current_node": current_node,
+                "engines_node": engines_node,
+                "suggested_node": suggested_node,
+            })),
             _ => None,
         }
     }
@@ -135,5 +157,21 @@ mod tests {
         .expect("serialize");
         assert_eq!(value["kind"], "node_install_cancelled");
         assert_eq!(value["message"], "node installation cancelled: operation-1");
+    }
+
+    #[test]
+    fn node_upgrade_required_serializes_the_version_gap() {
+        let value = serde_json::to_value(LauncherError::NodeUpgradeRequired {
+            dsh_version: "0.2.0".to_string(),
+            current_node: "22.19.0".to_string(),
+            engines_node: ">=24.0.0".to_string(),
+            suggested_node: "24.4.0".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(value["kind"], "node_upgrade_required");
+        assert_eq!(value["data"]["dsh_version"], "0.2.0");
+        assert_eq!(value["data"]["current_node"], "22.19.0");
+        assert_eq!(value["data"]["engines_node"], ">=24.0.0");
+        assert_eq!(value["data"]["suggested_node"], "24.4.0");
     }
 }

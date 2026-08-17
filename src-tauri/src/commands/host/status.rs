@@ -32,11 +32,7 @@ pub fn host_platform_arch() -> (&'static str, &'static str) {
 pub async fn load_runtime_status() -> Result<StatusSnapshot> {
     let node_runtime_dir = crate::paths::node_runtime_dir()?;
     let dsh_dir = crate::paths::dsh_dir()?;
-    Ok(build_runtime_status_snapshot(
-        AppState::load()?,
-        &node_runtime_dir,
-        &dsh_dir,
-    ))
+    Ok(build_runtime_status_snapshot(AppState::load()?, &node_runtime_dir, &dsh_dir).await)
 }
 
 pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
@@ -69,7 +65,7 @@ pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
     }
 }
 
-fn build_runtime_status_snapshot(
+async fn build_runtime_status_snapshot(
     status: StateStatus,
     node_runtime_dir: &Path,
     _dsh_dir: &Path,
@@ -77,7 +73,7 @@ fn build_runtime_status_snapshot(
     let StateStatus::Loaded(state) = status else {
         return build_status_snapshot(StateStatus::FirstRun);
     };
-    let node_ready = managed_node_is_usable(&state, node_runtime_dir);
+    let node_ready = managed_node_is_usable(&state, node_runtime_dir).await;
     let (platform, arch) = host_platform_arch();
     let node_version = node_ready
         .then(|| state.node.as_ref().map(|node| node.version.clone()))
@@ -101,17 +97,22 @@ fn build_runtime_status_snapshot(
     }
 }
 
-fn managed_node_is_usable(state: &AppState, node_runtime_dir: &Path) -> bool {
+async fn managed_node_is_usable(state: &AppState, node_runtime_dir: &Path) -> bool {
     let Some(node_state) = state.node.as_ref() else {
         return false;
     };
     let Ok(node_dir) = crate::node::install::current_node_dir_in(node_runtime_dir) else {
         return false;
     };
-    node_dir
+    if !node_dir
         .file_name()
         .is_some_and(|name| name == std::ffi::OsStr::new(&format!("node-v{}", node_state.version)))
-        && crate::node::install::node_bin_path(&node_dir).is_file()
+    {
+        return false;
+    }
+    crate::node::install::verify_node_binary(&node_dir, &node_state.version)
+        .await
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -120,7 +121,9 @@ mod tests {
     use crate::state::{AppState, NodeState};
     use chrono::Utc;
 
-    use super::super::test_support::{write_dsh_entry, write_node_runtime};
+    use super::super::test_support::write_dsh_entry;
+    #[cfg(unix)]
+    use super::super::test_support::write_node_runtime;
 
     #[test]
     fn loaded_runtime_is_idle() {
@@ -144,8 +147,9 @@ mod tests {
         assert!(matches!(arch, "arm64" | "x64"));
     }
 
-    #[test]
-    fn status_keeps_dsh_startup_recovery_available_when_current_entry_is_missing() {
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn status_keeps_dsh_startup_recovery_available_when_current_entry_is_missing() {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join("node-runtime");
         let dsh = temp.path().join("dsh");
@@ -161,15 +165,16 @@ mod tests {
         state.dsh.current = Some("0.2.0".to_string());
 
         let status =
-            build_runtime_status_snapshot(StateStatus::Loaded(Box::new(state)), &runtime, &dsh);
+            build_runtime_status_snapshot(StateStatus::Loaded(Box::new(state)), &runtime, &dsh)
+                .await;
 
         assert_eq!(status.phase, "idle");
         assert_eq!(status.node_version.as_deref(), Some("22.19.0"));
         assert_eq!(status.dsh_version.as_deref(), Some("0.2.0"));
     }
 
-    #[test]
-    fn status_enters_full_repair_when_managed_node_is_missing() {
+    #[tokio::test]
+    async fn status_enters_full_repair_when_managed_node_is_missing() {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join("node-runtime");
         let dsh = temp.path().join("dsh");
@@ -185,7 +190,39 @@ mod tests {
         state.dsh.current = Some("0.2.0".to_string());
 
         let status =
-            build_runtime_status_snapshot(StateStatus::Loaded(Box::new(state)), &runtime, &dsh);
+            build_runtime_status_snapshot(StateStatus::Loaded(Box::new(state)), &runtime, &dsh)
+                .await;
+
+        assert_eq!(status.phase, "first_run");
+        assert_eq!(status.node_version, None);
+        assert_eq!(status.dsh_version, None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn status_enters_full_repair_when_managed_node_reports_the_wrong_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime = temp.path().join("node-runtime");
+        let dsh = temp.path().join("dsh");
+        std::fs::create_dir_all(&runtime).unwrap();
+        write_node_runtime(&runtime, "22.19.0");
+        let node_path = crate::node::install::node_bin_path(&runtime.join("node-v22.19.0"));
+        std::fs::write(&node_path, "#!/bin/sh\necho v20.0.0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&node_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_dsh_entry(&dsh, "0.2.0");
+        crate::dsh::write_current_pointer(&dsh, "0.2.0").unwrap();
+        let mut state = AppState::new();
+        state.node = Some(NodeState {
+            version: "22.19.0".to_string(),
+            installed_at: Utc::now(),
+            mirror: "https://example.test".to_string(),
+        });
+        state.dsh.current = Some("0.2.0".to_string());
+
+        let status =
+            build_runtime_status_snapshot(StateStatus::Loaded(Box::new(state)), &runtime, &dsh)
+                .await;
 
         assert_eq!(status.phase, "first_run");
         assert_eq!(status.node_version, None);

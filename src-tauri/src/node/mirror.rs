@@ -54,9 +54,9 @@ impl Mirror {
         join_url(self.base_url, DEFAULT_NODE_INDEX_PATH)
     }
 
-    /// 拼接 `{base_url}/v{version}/node-v{version}-{platform}-{arch}.tar.gz`。
+    /// 拼接 `{base_url}/v{version}/node-v{version}-{platform}-{arch}.{tar.gz|zip}`。
     pub fn archive_url(&self, version: &str, platform: &str, arch: &str) -> String {
-        let filename = format!("node-v{version}-{platform}-{arch}.tar.gz");
+        let filename = super::install::node_archive_filename(version, platform, arch);
         join_url(self.base_url, &format!("v{version}/{filename}"))
     }
 
@@ -155,8 +155,12 @@ mod tests {
         let mirror = &BUILTIN_MIRRORS[1];
         assert_eq!(mirror.index_url(), "https://nodejs.org/dist/index.json");
         assert_eq!(
-            mirror.archive_url("22.19.0", "darwin-arm64", "arm64"),
-            "https://nodejs.org/dist/v22.19.0/node-v22.19.0-darwin-arm64-arm64.tar.gz"
+            mirror.archive_url("22.19.0", "darwin", "arm64"),
+            "https://nodejs.org/dist/v22.19.0/node-v22.19.0-darwin-arm64.tar.gz"
+        );
+        assert_eq!(
+            mirror.archive_url("22.19.0", "win", "x64"),
+            "https://nodejs.org/dist/v22.19.0/node-v22.19.0-win-x64.zip"
         );
         assert_eq!(
             join_url("https://x.com/", "/index.json"),

@@ -63,7 +63,7 @@ pub async fn start_host(state: State<'_, SharedState>) -> Result<String> {
 
 async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
     let origin = supervisor
-        .start(&build_spawn_options()?)
+        .start(&build_spawn_options().await?)
         .await
         .map_err(map_host_error)?;
     reset_crash_counter_after_manual_start();
@@ -72,7 +72,7 @@ async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
 
 pub async fn restart_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
     let origin = supervisor
-        .restart(&build_spawn_options()?)
+        .restart(&build_spawn_options().await?)
         .await
         .map_err(map_host_error)?;
     reset_crash_counter_after_manual_start();

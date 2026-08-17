@@ -1,6 +1,7 @@
 //! DeepSeek Harness Launcher shell library.
 
 mod app;
+pub mod cli_shim;
 mod navigation;
 mod platform;
 mod tray;

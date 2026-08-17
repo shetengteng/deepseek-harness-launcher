@@ -6,7 +6,9 @@ const api = vi.hoisted(() =>
     [
       "getDshState",
       "getLatestDshVersion",
+      "installDshCli",
       "installDsh",
+      "upgradeNode",
       "restartHostAfterDshUpdate",
       "setNodeMirror",
       "setRegistry",
@@ -17,7 +19,10 @@ const api = vi.hoisted(() =>
   ),
 );
 
-vi.mock("@/lib/tauri", () => api);
+vi.mock("@/lib/tauri", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tauri")>();
+  return { ...actual, ...api };
+});
 
 import Settings from "@/components/Settings.vue";
 
@@ -108,6 +113,33 @@ test("shows the current DeepSeek Harness IP address and port", async () => {
   expect(wrapper.text()).toContain("127.0.0.1:51842");
 });
 
+test("installs the dsh command and shows the PATH instructions", async () => {
+  api.installDshCli.mockResolvedValue({
+    command_path: "/Users/test/.local/bin/dsh",
+    path_instruction: "关闭并重新打开 Terminal。",
+  });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  await button(wrapper, "安装命令").trigger("click");
+  await flushPromises();
+
+  expect(api.installDshCli).toHaveBeenCalledOnce();
+  expect(wrapper.text()).toContain("/Users/test/.local/bin/dsh");
+  expect(wrapper.text()).toContain("关闭并重新打开 Terminal。");
+});
+
+test("shows an actionable error when the dsh command cannot be installed", async () => {
+  api.installDshCli.mockRejectedValue({ message: "目标已有其他 dsh 命令" });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  await button(wrapper, "安装命令").trigger("click");
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("目标已有其他 dsh 命令");
+});
+
 test("does not expose the automatic recovery version in settings", async () => {
   api.getDshState.mockResolvedValue({
     ...state("0.0.9"),
@@ -133,4 +165,74 @@ test("retains the displayed current version when installing latest fails", async
   expect(wrapper.text()).toContain("0.0.9");
   expect(wrapper.text()).toContain("网络中断，请检查 npm 下载源后重试。");
   expect(wrapper.emitted("upgradeReady")).toBeUndefined();
+});
+
+test("asks to confirm a Node upgrade before changing the current runtime", async () => {
+  api.installDsh.mockRejectedValueOnce({
+    kind: "node_upgrade_required",
+    message: "dsh 0.2.0 requires Node >=24.0.0",
+    data: {
+      dsh_version: "0.1.0",
+      current_node: "22.19.0",
+      engines_node: ">=24.0.0",
+      suggested_node: "24.4.0",
+    },
+  });
+  const wrapper = mount(Settings, { attachTo: document.body });
+  await flushPromises();
+
+  await button(wrapper, "安装新版本").trigger("click");
+  await flushPromises();
+
+  expect(api.upgradeNode).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("需要升级 Node");
+  expect(document.body.textContent).toContain("24.4.0");
+  expect(wrapper.text()).toContain("0.0.9");
+
+  [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.trim() === "取消更新")
+    ?.click();
+  await flushPromises();
+
+  expect(api.upgradeNode).not.toHaveBeenCalled();
+  expect(api.installDsh).toHaveBeenCalledTimes(1);
+  expect(document.body.textContent).not.toContain("需要升级 Node");
+  expect(wrapper.text()).toContain("0.0.9");
+  wrapper.unmount();
+});
+
+test("upgrades Node after confirmation and then installs the displayed dsh", async () => {
+  api.installDsh
+    .mockRejectedValueOnce({
+      kind: "node_upgrade_required",
+      message: "dsh 0.1.0 requires Node >=24.0.0",
+      data: {
+        dsh_version: "0.1.0",
+        current_node: "22.19.0",
+        engines_node: ">=24.0.0",
+        suggested_node: "24.4.0",
+      },
+    })
+    .mockResolvedValueOnce("0.1.0");
+  api.upgradeNode.mockResolvedValue("24.4.0");
+  const wrapper = mount(Settings, { attachTo: document.body });
+  await flushPromises();
+
+  await button(wrapper, "安装新版本").trigger("click");
+  await flushPromises();
+  [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.trim() === "确认升级并继续")
+    ?.click();
+  await flushPromises();
+
+  expect(api.upgradeNode).toHaveBeenCalledWith({
+    version: "24.4.0",
+    operationId: expect.any(String),
+  });
+  expect(api.installDsh).toHaveBeenNthCalledWith(2, { expectedVersion: "0.1.0" });
+  expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
+  expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([
+    "http://127.0.0.1:1337/",
+  ]);
+  wrapper.unmount();
 });

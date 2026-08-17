@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DeepSeek Harness Launcher · icon directions</title>
+    <style>
+      :root { color: #f5f5f5; background: #111; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { max-width: 960px; margin: 0 auto; padding: 48px 28px 64px; }
+      h1 { margin: 0; font-size: 28px; letter-spacing: -.035em; }
+      .intro { max-width: 620px; margin: 10px 0 36px; color: #a3a3a3; line-height: 1.6; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+      article { padding: 22px; border: 1px solid #303030; border-radius: 18px; background: #181818; }
+      article.recommended { border-color: #fafafa; box-shadow: 0 0 0 1px #fafafa inset; }
+      .mark { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 12px; background: #f5f5f5; }
+      .mark.dark { background: #090909; }
+      svg { width: 132px; height: 132px; }
+      h2 { margin: 18px 0 6px; font-size: 15px; }
+      p { margin: 0; color: #a3a3a3; font-size: 13px; line-height: 1.55; }
+      .tag { display: inline-block; margin-left: 8px; padding: 2px 6px; border-radius: 999px; color: #111; background: #fafafa; font-size: 10px; font-weight: 700; letter-spacing: .03em; vertical-align: 2px; }
+      code { color: #d4d4d4; }
+    </style>
+  </head>
+  <body>
+    <h1>DeepSeek Harness Launcher</h1>
+    <p class="intro">六个黑白单色方向。共同保留“鲸鱼／深潜”的联想，同时以终端、启动或运行容器表达这是 Harness 的桌面启动器，不复刻 DeepSeek 的既有图形。</p>
+    <section class="grid" aria-label="icon concepts">
+      <article class="recommended">
+        <div class="mark dark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Launch whale">
+            <rect x="4" y="4" width="92" height="92" rx="25" fill="#000"/>
+            <path fill="#fff" d="M15 59.5C15 42.4 29.2 29 47 29c10.2 0 19.2 4.4 25.4 11.4 4.6-4.8 10.1-8.1 16-9.5.5 8.1-2.5 15.6-8.7 21 7.8 1.7 13.2 6.9 15.3 13.7-8.1 1.6-16.1-1-21.4-6.5-4.7 11-15.2 18.5-27.5 18.5-13.1 0-25.4-7-31.1-18.1Z"/>
+            <circle cx="67.2" cy="45.8" r="2.5" fill="#000"/>
+            <g transform="translate(-10 0)">
+              <path fill="#000" d="m42.8 47.1 8.1 7.8-8.1 7.8-2.8-2.9 5.1-4.9-5.1-4.9 2.8-2.9Zm12.5 13.8h10.3v3.8H55.3z"/>
+            </g>
+          </svg>
+        </div>
+        <h2>01 · Launch whale</h2>
+        <p>单一鲸鱼轮廓承载 <code>&gt;_</code> 提示符；在 16px 下仍保留强轮廓和高对比。</p>
+      </article>
+      <article>
+        <div class="mark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Tidal prompt">
+            <path fill="#000" d="M12 63c0-21 16-37 37-37 12.7 0 23.5 5.8 30.3 15.1 3.9-4.4 8.4-7.4 13.3-8.9.3 7.2-2.6 13.7-8.1 18.5 6.5 2.1 11.5 7.1 13.5 13.4-8.6 1.3-16.4-1.8-21.6-7.2C70.2 70.7 60.2 77 48.7 77 30.1 77 15.2 70.8 12 63Z"/>
+            <path d="m34 49 10 10-10 10m16-2h16" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="69" cy="43" r="2.7" fill="#fff"/>
+          </svg>
+        </div>
+        <h2>02 · Tidal prompt</h2>
+        <p>白底版本以反白的命令提示符强化“启动器”定位，整体更轻、更像开发者工具。</p>
+      </article>
+      <article>
+        <div class="mark dark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Whale current">
+            <path d="M17 58c2-19 17-32 36-32 10 0 19 3.7 25.9 10.2 3.6-4.4 8-7.7 13.1-9.6.4 7.8-2.5 14.8-8 20.1 5.9 2.8 10.2 8.2 11.8 14.3-8.5.8-15.8-2.1-20.7-7.2C69 67.7 58.8 75 46.5 75 33 75 21.6 68.5 17 58Z" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M33 62c8 6 19 8 31 4" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="68.5" cy="42.5" r="2.4" fill="#fff"/>
+          </svg>
+        </div>
+        <h2>03 · Whale current</h2>
+        <p>以连续粗线构成“流”，更贴近底层运行时与版本切换的持续性。</p>
+      </article>
+      <article>
+        <div class="mark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Harbor">
+            <rect x="13" y="16" width="74" height="68" rx="17" fill="#000"/>
+            <path fill="#fff" d="M23 59c0-14.4 11.5-24.5 25.3-24.5 8 0 15.2 3.2 20.2 8.8 3.5-4.4 7.7-7.2 12.5-8.8.2 6.6-2.1 12-6.4 16.1 5.8 1.8 9.4 5.6 11.2 10.5-6.3.9-11.5-1.1-15.4-4.5C66.5 64.4 58 69.5 48.4 69.5c-10.9 0-20.9-4.2-25.4-10.5Z"/>
+            <circle cx="65" cy="46" r="2.2" fill="#000"/>
+            <path d="M29 74h42" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2>04 · Harbor</h2>
+        <p>以圆角运行容器包住鲸鱼，底部水平线像终端基线，也像稳定的停泊面。</p>
+      </article>
+      <article>
+        <div class="mark dark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Depth beacon">
+            <circle cx="50" cy="50" r="37" fill="none" stroke="#fff" stroke-width="7"/>
+            <path fill="#fff" d="M20.5 58.5C23.6 43.7 35.4 34 49 34c8.7 0 16.3 3.7 21.4 9.4 3.7-4.2 8-7 12.8-8.4.3 6.8-2.1 12.8-6.5 17.2 6 1.7 10.1 5.6 12 10.5-7.6 1.3-14.7-1.2-19.5-5.8-4.8 8.7-13.9 14.6-24.4 14.6-10.5 0-20.4-4.8-24.3-13Z"/>
+            <circle cx="65.3" cy="47.8" r="2.3" fill="#000"/>
+          </svg>
+        </div>
+        <h2>05 · Depth beacon</h2>
+        <p>鲸鱼置于信号圈中，强调本地服务就绪与托盘状态，但在极小尺寸会更复杂。</p>
+      </article>
+      <article>
+        <div class="mark">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Terminal fin">
+            <path d="M17 30c0-8.3 6.7-15 15-15h36c8.3 0 15 6.7 15 15v40c0 8.3-6.7 15-15 15H32c-8.3 0-15-6.7-15-15V30Z" fill="#000"/>
+            <path fill="#fff" d="M27 62c0-12.5 9.6-21.2 21.6-21.2 7 0 13.1 2.9 17.3 7.8 3.1-3.5 6.7-5.9 10.8-7.1.2 5.6-1.8 10.5-5.5 14 5.1 1.5 8.3 4.7 9.9 8.9-6.2.8-11.6-1.4-15.2-5-3.8 6.9-11 11.6-19.3 11.6-9.1 0-16.9-3.4-19.6-9Z"/>
+            <circle cx="62.5" cy="51.5" r="2.1" fill="#000"/>
+            <path d="m29 28 7 6 7-6" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>06 · Terminal fin <span class="tag">推荐</span></h2>
+        <p>完整的终端窗口和下潜尾鳍，产品语义最直白，但不如 01 在托盘里干净。</p>
+      </article>
+    </section>
+  </body>
+</html>

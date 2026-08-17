@@ -11,7 +11,8 @@
 use std::time::Instant;
 
 use deepseek_harness_launcher_lib::node::{
-    download_with_retry, install_node_to, NodeArchiveKind, NodeDownloadOperations, BUILTIN_MIRRORS,
+    download_with_retry, install_node_to, node_archive_filename, NodeArchiveKind,
+    NodeDownloadOperations, BUILTIN_MIRRORS,
 };
 
 #[tokio::main]
@@ -26,7 +27,7 @@ async fn main() {
     } else {
         "x64"
     };
-    let archive_filename = format!("node-v{version}-{platform}-{arch}.tar.gz");
+    let archive_filename = node_archive_filename(version, platform, arch);
     println!("[setup] version={version}, platform={platform}, arch={arch}");
     println!("[setup] archive_filename={archive_filename}");
     println!();
@@ -84,7 +85,7 @@ async fn main() {
     let target_dir = install_node_to(
         &archive_path,
         version,
-        NodeArchiveKind::TarGz,
+        NodeArchiveKind::for_platform(platform),
         &runtime_dir,
         None,
     )

@@ -13,15 +13,25 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import {
   cancelDshInstall,
+  cancelNodeInstall,
   checkDshUpdate,
   installDsh,
+  parseNodeUpgradeRequired,
   restartHostAfterDshUpdate,
+  upgradeNode,
   type DshInstallProgressEvent,
+  type NodeUpgradeRequired,
 } from "@/lib/tauri";
 import { useLauncherStore } from "@/stores/launcher";
 
 export type DshUpdateDialogState =
-  "idle" | "installing" | "cancelling" | "restarting" | "failed";
+  | "idle"
+  | "confirming_node"
+  | "upgrading_node"
+  | "installing"
+  | "cancelling"
+  | "restarting"
+  | "failed";
 
 export function useDshUpdate() {
   const store = useLauncherStore();
@@ -32,18 +42,24 @@ export function useDshUpdate() {
   const updateCurrentVersion = ref<string | null>(null);
   const updateTargetVersion = ref<string | null>(null);
   const updateError = ref<string | null>(null);
+  const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
   const updateStage = ref<DshInstallProgressEvent["stage"]>("resolving");
   let unlistenUpdateProgress: (() => void) | null = null;
 
   const updateDialogOpen = computed(() => updateDialogState.value !== "idle");
   const updateInProgress = computed(
     () =>
+      updateDialogState.value === "upgrading_node" ||
       updateDialogState.value === "installing" ||
       updateDialogState.value === "cancelling" ||
       updateDialogState.value === "restarting",
   );
+  const updateBusy = computed(
+    () => updateInProgress.value || updateDialogState.value === "confirming_node",
+  );
   const updateProgress = computed(() => {
     if (updateDialogState.value === "restarting") return 100;
+    if (updateDialogState.value === "upgrading_node") return 28;
     switch (updateStage.value) {
       case "resolving":
         return 12;
@@ -58,6 +74,9 @@ export function useDshUpdate() {
   const updateStageMessage = computed(() => {
     if (updateDialogState.value === "cancelling") return "正在取消安装…";
     if (updateDialogState.value === "restarting") return "正在重启 dsh…";
+    if (updateDialogState.value === "upgrading_node") {
+      return `正在下载并切换 Node ${nodeUpgrade.value?.suggested_node ?? ""}…`;
+    }
     return {
       resolving: "正在从当前下载源获取最新版本…",
       downloading: "正在下载依赖…",
@@ -79,10 +98,36 @@ export function useDshUpdate() {
     updateDialogState.value = "idle";
     updateOperationId.value = null;
     updateError.value = null;
+    nodeUpgrade.value = null;
   }
 
-  function isDshInstallCancelled(error: unknown): boolean {
-    return messageOf(error).includes("dsh installation was cancelled");
+  function isCancelled(error: unknown): boolean {
+    if (typeof error === "object" && error !== null && "kind" in error) {
+      if (String((error as { kind: unknown }).kind) === "node_install_cancelled") {
+        return true;
+      }
+    }
+    const message = messageOf(error);
+    return (
+      message.includes("dsh installation was cancelled") ||
+      message.includes("node installation cancelled") ||
+      message.includes("已取消 Node")
+    );
+  }
+
+  async function finishInstalledUpdate(version: string): Promise<void> {
+    updateDialogState.value = "restarting";
+    const restart = await restartHostAfterDshUpdate();
+    store.dshVersion = restart.active_version;
+    store.setHostReady(restart.origin);
+    if (restart.rolled_back) {
+      updateDialogState.value = "failed";
+      updateError.value = `版本 ${version} 无法启动，已恢复 ${restart.active_version}。`;
+      return;
+    }
+    updateNotice.value?.dismiss();
+    updateNotice.value = null;
+    closeUpdateDialog();
   }
 
   async function installDisplayedUpdate(): Promise<void> {
@@ -96,24 +141,16 @@ export function useDshUpdate() {
     updateOperationId.value = operationId;
     try {
       const version = await installDsh({ operationId, expectedVersion });
-      updateDialogState.value = "restarting";
-      const restart = await restartHostAfterDshUpdate();
-      store.dshVersion = restart.active_version;
-      store.setHostReady(restart.origin);
-      if (restart.rolled_back) {
-        updateDialogState.value = "failed";
-        updateError.value = `版本 ${version} 无法启动，已恢复 ${restart.active_version}。`;
+      await finishInstalledUpdate(version);
+    } catch (error) {
+      if (updateDialogState.value === "cancelling" || isCancelled(error)) {
+        closeUpdateDialog();
         return;
       }
-      updateNotice.value?.dismiss();
-      updateNotice.value = null;
-      closeUpdateDialog();
-    } catch (error) {
-      if (
-        updateDialogState.value === "cancelling" ||
-        isDshInstallCancelled(error)
-      ) {
-        closeUpdateDialog();
+      const required = parseNodeUpgradeRequired(error);
+      if (required) {
+        nodeUpgrade.value = required;
+        updateDialogState.value = "confirming_node";
         return;
       }
       updateDialogState.value = "failed";
@@ -124,26 +161,75 @@ export function useDshUpdate() {
   }
 
   function startDshUpdate(): void {
-    if (updateInProgress.value || !updateTargetVersion.value) return;
+    if (updateBusy.value || !updateTargetVersion.value) return;
     updateError.value = null;
+    nodeUpgrade.value = null;
     updateStage.value = "resolving";
     updateDialogState.value = "installing";
     void installDisplayedUpdate();
   }
 
+  async function confirmNodeUpgrade(): Promise<void> {
+    const required = nodeUpgrade.value;
+    const expectedVersion = updateTargetVersion.value;
+    if (!required || !expectedVersion || updateInProgress.value) return;
+
+    const operationId = crypto.randomUUID();
+    updateOperationId.value = operationId;
+    updateDialogState.value = "upgrading_node";
+    try {
+      store.nodeVersion = await upgradeNode({
+        version: required.suggested_node,
+        operationId,
+      });
+      updateStage.value = "resolving";
+      updateDialogState.value = "installing";
+      const dshOperationId = crypto.randomUUID();
+      updateOperationId.value = dshOperationId;
+      const version = await installDsh({
+        operationId: dshOperationId,
+        expectedVersion,
+      });
+      await finishInstalledUpdate(version);
+    } catch (error) {
+      if (isCancelled(error) || String(updateDialogState.value) === "cancelling") {
+        closeUpdateDialog();
+        return;
+      }
+      updateDialogState.value = "failed";
+      updateError.value = messageOf(error);
+    } finally {
+      updateOperationId.value = null;
+    }
+  }
+
   async function cancelDshUpdate(): Promise<void> {
-    if (updateDialogState.value !== "installing") return;
+    if (updateDialogState.value === "confirming_node") {
+      closeUpdateDialog();
+      return;
+    }
+    if (
+      updateDialogState.value !== "installing" &&
+      updateDialogState.value !== "upgrading_node"
+    ) {
+      return;
+    }
     const operationId = updateOperationId.value;
     if (!operationId) return;
 
+    const previous = updateDialogState.value;
     updateDialogState.value = "cancelling";
     try {
-      if (!(await cancelDshInstall(operationId))) {
-        updateDialogState.value = "installing";
+      const cancelled =
+        previous === "upgrading_node"
+          ? await cancelNodeInstall(operationId)
+          : await cancelDshInstall(operationId);
+      if (!cancelled) {
+        updateDialogState.value = previous;
       }
     } catch (error) {
       console.warn("failed to cancel dsh update:", error);
-      updateDialogState.value = "installing";
+      updateDialogState.value = previous;
     }
   }
 
@@ -156,7 +242,7 @@ export function useDshUpdate() {
             Button,
             {
               size: "xs",
-              disabled: updateInProgress.value,
+              disabled: updateBusy.value,
               onClick: startDshUpdate,
             },
             () => [
@@ -227,7 +313,9 @@ export function useDshUpdate() {
     updateCurrentVersion,
     updateTargetVersion,
     updateError,
+    nodeUpgrade,
     startDshUpdate,
+    confirmNodeUpgrade,
     cancelDshUpdate,
     closeUpdateDialog,
   };

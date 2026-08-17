@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-/** Rust 端 `LauncherError` 序列化结构（`error.rs::SerializableError`）。 */
+/** `LauncherError` 序列化结构（`error.rs::SerializableError`）。 */
 export interface LauncherErrorPayload {
   /** 错误类型 tag，对应 `LauncherError::kind_str`：`state_corrupt` / `io` / `host` / `path_resolve` 等 */
   kind: string;
@@ -13,6 +13,35 @@ export interface LauncherErrorPayload {
   user_message?: string;
   /** 可选的结构化数据（如 `state_corrupt` 的 `path`、`unsupported_schema_version` 的 `version`） */
   data?: Record<string, unknown>;
+}
+
+/** dsh 更新因 Node 不兼容而需要用户确认升级。 */
+export interface NodeUpgradeRequired {
+  dsh_version: string;
+  current_node: string;
+  engines_node: string;
+  suggested_node: string;
+}
+
+export function parseNodeUpgradeRequired(
+  error: unknown,
+): NodeUpgradeRequired | null {
+  if (typeof error !== "object" || error === null || !("kind" in error)) {
+    return null;
+  }
+  const payload = error as LauncherErrorPayload;
+  if (payload.kind !== "node_upgrade_required" || !payload.data) return null;
+  const dshVersion = String(payload.data.dsh_version ?? "");
+  const currentNode = String(payload.data.current_node ?? "");
+  const enginesNode = String(payload.data.engines_node ?? "");
+  const suggestedNode = String(payload.data.suggested_node ?? "");
+  if (!dshVersion || !currentNode || !enginesNode || !suggestedNode) return null;
+  return {
+    dsh_version: dshVersion,
+    current_node: currentNode,
+    engines_node: enginesNode,
+    suggested_node: suggestedNode,
+  };
 }
 
 /** `launcher_status` 返回的快照（`commands.rs::StatusSnapshot`）。 */
@@ -227,6 +256,17 @@ export function installNode(args: InstallNodeArgs): Promise<string> {
   });
 }
 
+/** 更新场景下按当前镜像源安装目标 Node，并原子切换 VERSION。 */
+export function upgradeNode(options: {
+  version: string;
+  operationId: string;
+}): Promise<string> {
+  return invokeCommand<string>("upgrade_node_command", {
+    version: options.version,
+    operationId: options.operationId,
+  });
+}
+
 /** 取消当前 Node.js 安装任务。 */
 export function cancelNodeInstall(operationId: string): Promise<boolean> {
   return invokeCommand<boolean>("cancel_node_install_command", {
@@ -282,6 +322,16 @@ export function setNodeMirror(mirror: string): Promise<void> {
 /** 更新后续 dsh 安装和更新使用的 npm 下载源。 */
 export function setRegistry(registry: string): Promise<void> {
   return invokeCommand<void>("set_registry_command", { registry });
+}
+
+export interface DshCliInstallResult {
+  command_path: string;
+  path_instruction: string;
+}
+
+/** 安装解析启动器托管运行时的稳定 `dsh` 命令。 */
+export function installDshCli(): Promise<DshCliInstallResult> {
+  return invokeCommand<DshCliInstallResult>("install_dsh_cli_command");
 }
 
 // ─── PR-019: 诊断导出 ───
