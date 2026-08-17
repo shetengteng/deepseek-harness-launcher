@@ -5,9 +5,18 @@ use tokio::process::Command;
 
 use crate::error::{LauncherError, Result};
 
-use super::{default_log, verify_install, write_package_json, InstallDshOptions};
+use super::{
+    default_log, verify_install, write_package_json, DshInstallCancellation, InstallDshOptions,
+};
 
 pub async fn run_npm_install(opts: &InstallDshOptions) -> Result<String> {
+    run_npm_install_cancellable(opts, None).await
+}
+
+async fn run_npm_install_cancellable(
+    opts: &InstallDshOptions,
+    cancellation: Option<&DshInstallCancellation>,
+) -> Result<String> {
     let cwd = opts.version_dir();
     if !opts.package_json_path().exists() {
         return Err(LauncherError::DshInstall(format!(
@@ -68,9 +77,10 @@ pub async fn run_npm_install(opts: &InstallDshOptions) -> Result<String> {
 
     let stdout_task = stream_install_output(stdout, log.clone());
     let stderr_task = stream_install_output(stderr, log);
-    let status = wait_for_install(&mut child, opts.timeout_secs).await?;
+    let status = wait_for_install(&mut child, opts.timeout_secs, cancellation).await;
     let _ = stdout_task.await;
     let _ = stderr_task.await;
+    let status = status?;
 
     if !status.success() {
         return Err(LauncherError::DshInstall(format!(
@@ -96,7 +106,13 @@ fn stream_install_output(
 async fn wait_for_install(
     child: &mut tokio::process::Child,
     timeout_secs: u64,
+    cancellation: Option<&DshInstallCancellation>,
 ) -> Result<std::process::ExitStatus> {
+    if let Some(cancellation) = cancellation {
+        cancellation.check()?;
+        return wait_for_install_cancellable(child, timeout_secs, cancellation).await;
+    }
+
     if timeout_secs == 0 {
         return child.wait().await.map_err(|error| {
             LauncherError::DshInstall(format!("npm install wait failed: {error}"))
@@ -117,10 +133,17 @@ async fn wait_for_install(
 }
 
 pub async fn install_dsh(opts: &InstallDshOptions) -> Result<()> {
+    install_dsh_cancellable(opts, None).await
+}
+
+pub async fn install_dsh_cancellable(
+    opts: &InstallDshOptions,
+    cancellation: Option<&DshInstallCancellation>,
+) -> Result<()> {
     let version_dir = opts.version_dir();
     write_package_json(opts)?;
 
-    let install_result = run_npm_install(opts).await;
+    let install_result = run_npm_install_cancellable(opts, cancellation).await;
     let verify_result = if install_result.is_ok() {
         verify_install(opts)
     } else {
@@ -147,4 +170,51 @@ pub async fn install_dsh(opts: &InstallDshOptions) -> Result<()> {
             )))
         }
     }
+}
+
+async fn wait_for_install_cancellable(
+    child: &mut tokio::process::Child,
+    timeout_secs: u64,
+    cancellation: &DshInstallCancellation,
+) -> Result<std::process::ExitStatus> {
+    enum WaitOutcome {
+        Finished(std::io::Result<std::process::ExitStatus>),
+        Cancelled,
+        TimedOut,
+    }
+
+    let outcome = if timeout_secs == 0 {
+        tokio::select! {
+            status = child.wait() => WaitOutcome::Finished(status),
+            _ = cancellation.cancelled() => WaitOutcome::Cancelled,
+        }
+    } else {
+        tokio::select! {
+            status = child.wait() => WaitOutcome::Finished(status),
+            _ = tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)) => WaitOutcome::TimedOut,
+            _ = cancellation.cancelled() => WaitOutcome::Cancelled,
+        }
+    };
+
+    match outcome {
+        WaitOutcome::Finished(status) => status.map_err(|error| {
+            LauncherError::DshInstall(format!("npm install wait failed: {error}"))
+        }),
+        WaitOutcome::Cancelled => cancel_install(child, cancellation).await,
+        WaitOutcome::TimedOut => {
+            let _ = child.kill().await;
+            Err(LauncherError::DshInstall(format!(
+                "npm install timed out after {timeout_secs}s"
+            )))
+        }
+    }
+}
+
+async fn cancel_install(
+    child: &mut tokio::process::Child,
+    cancellation: &DshInstallCancellation,
+) -> Result<std::process::ExitStatus> {
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    Err(cancellation.error())
 }

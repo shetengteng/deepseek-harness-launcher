@@ -8,7 +8,12 @@ const store = vi.hoisted(() => ({
   installing: true,
   installingDsh: false,
   nodeInstallOperationId: "download-1" as string | null,
-  bootstrapPlan: { node_version: "22.19.0", dsh_version: "0.1.0" },
+  dshInstallOperationId: null as string | null,
+  bootstrapPlan: {
+    node_version: "22.19.0",
+    dsh_version: "0.1.0",
+    registry: "https://registry.npmjs.org",
+  },
   latestDshVersion: null,
   downloadPercent: 42,
   dshInstallProgress: 0,
@@ -16,27 +21,37 @@ const store = vi.hoisted(() => ({
   dshInstallStage: "resolving",
   startBootstrap: vi.fn(),
   restartNodeDownload: vi.fn(),
+  restartDshInstall: vi.fn(),
   applyProgressEvent: vi.fn(),
   applyDshInstallProgress: vi.fn(),
 }));
 
 vi.mock("@/stores/launcher", () => ({ useLauncherStore: () => store }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(vi.fn()) }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
 
 import FirstRun from "@/components/FirstRun.vue";
 
 const stubs = {
-  Button: { emits: ["click"], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+  Button: {
+    emits: ["click"],
+    template: "<button @click=\"$emit('click')\"><slot /></button>",
+  },
   Progress: { template: "<div />" },
-  MirrorSelector: { template: "<div data-testid=\"mirror-selector\" />" },
+  MirrorSelector: { template: '<div data-testid="mirror-selector" />' },
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   store.nodeVersion = null;
+  store.dshVersion = null;
   store.wizardStep = "downloading";
   store.installing = true;
+  store.installingDsh = false;
   store.nodeInstallOperationId = "download-1";
+  store.dshInstallOperationId = null;
+  store.bootstrapPlan.registry = "https://registry.npmjs.org";
 });
 
 test("shows advanced mirror controls without opening them by default", async () => {
@@ -54,9 +69,35 @@ test("restarts the active Node installation during extraction", async () => {
   const wrapper = shallowMount(FirstRun, { global: { stubs } });
   await flushPromises();
 
-  await wrapper.findAll("button").find((button) =>
-    button.text().includes("重新使用此来源下载"),
-  )!.trigger("click");
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("重新使用此来源下载"))!
+    .trigger("click");
 
   expect(store.restartNodeDownload).toHaveBeenCalledOnce();
+});
+
+test("allows switching the npm source while dsh is installing", async () => {
+  store.nodeVersion = "22.19.0";
+  store.installing = false;
+  store.installingDsh = true;
+  store.dshInstallOperationId = "dsh-install-1";
+  const wrapper = shallowMount(FirstRun, { global: { stubs } });
+  await flushPromises();
+
+  const advanced = wrapper.find("details");
+  expect(advanced.text()).toContain("切换 npm 下载源");
+  expect(advanced.text()).toContain("npm 下载源");
+  expect(wrapper.text()).toContain("DeepSeek Harness");
+  expect(wrapper.text()).not.toContain("@deepseek-ai/dsh");
+  expect(advanced.find('[data-testid="mirror-selector"]').exists()).toBe(false);
+
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("重新使用此 npm 来源下载"))!
+    .trigger("click");
+
+  expect(store.restartDshInstall).toHaveBeenCalledWith(
+    "https://registry.npmjs.org",
+  );
 });

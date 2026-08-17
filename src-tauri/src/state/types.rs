@@ -21,7 +21,6 @@ pub struct InstalledDsh {
 pub struct DshState {
     pub current: Option<String>,
     pub known_good: Option<String>,
-    pub pending: Option<String>,
     #[serde(default = "default_registry")]
     pub registry: String,
     #[serde(default)]
@@ -37,7 +36,6 @@ impl Default for DshState {
         Self {
             current: None,
             known_good: None,
-            pending: None,
             registry: default_registry(),
             installed: Vec::new(),
         }

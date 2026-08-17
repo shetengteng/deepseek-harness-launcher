@@ -50,20 +50,10 @@ const latestIsCurrent = computed(
       <p class="border-t pt-3 text-xs text-muted-foreground">
         更新只会在你点击按钮后下载。安装失败或新版本无法启动时，将继续保留当前版本。
       </p>
-      <div class="flex items-center justify-between gap-3">
-        <span class="text-xs text-muted-foreground">{{
-          dshState.pending
-            ? `已准备 ${dshState.pending}，重启后生效`
-            : "尚未准备更新"
-        }}</span
-        ><Button
+      <div class="flex justify-end">
+        <Button
           size="sm"
-          :disabled="
-            !latestVersion ||
-            upgrading ||
-            latestIsCurrent ||
-            Boolean(dshState.pending)
-          "
+          :disabled="!latestVersion || upgrading || latestIsCurrent"
           @click="$emit('install')"
           ><Download class="mr-2 h-4 w-4" />{{
             latestIsCurrent

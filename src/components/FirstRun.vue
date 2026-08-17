@@ -11,6 +11,14 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import MirrorSelector from "@/components/MirrorSelector.vue";
 import { useLauncherStore } from "@/stores/launcher";
 import type { DshInstallProgressEvent, ProgressEvent } from "@/lib/tauri";
@@ -27,7 +35,7 @@ const nodeMessage = computed(() =>
   nodeDone.value
     ? "SHA-256 已校验"
     : store.wizardStep === "resolving"
-      ? "正在确认 dsh 版本与 Node.js 要求…"
+      ? "正在确认 DeepSeek Harness 版本与 Node.js 要求…"
       : store.wizardStep === "extracting"
         ? "正在解压并原子切换…"
         : "正在下载并校验运行时…",
@@ -57,6 +65,16 @@ const restartingDownload = ref(false);
 const canRestartDownload = computed(
   () => store.installing && store.nodeInstallOperationId !== null,
 );
+const restartingDshInstall = ref(false);
+const canRestartDshInstall = computed(
+  () => store.installingDsh && store.dshInstallOperationId !== null,
+);
+const npmRegistry = computed({
+  get: () => store.bootstrapPlan?.registry ?? "https://registry.npmjs.org",
+  set: (registry: string) => {
+    if (store.bootstrapPlan) store.bootstrapPlan.registry = registry;
+  },
+});
 
 async function restartNodeDownload(): Promise<void> {
   if (!canRestartDownload.value) return;
@@ -65,6 +83,16 @@ async function restartNodeDownload(): Promise<void> {
     await store.restartNodeDownload();
   } finally {
     restartingDownload.value = false;
+  }
+}
+
+async function restartDshInstall(): Promise<void> {
+  if (!canRestartDshInstall.value) return;
+  restartingDshInstall.value = true;
+  try {
+    await store.restartDshInstall(npmRegistry.value);
+  } finally {
+    restartingDshInstall.value = false;
   }
 }
 
@@ -170,7 +198,7 @@ onUnmounted(() => {
               />
               <Package v-else class="h-4 w-4 shrink-0 text-muted-foreground" />
               <span class="truncate"
-                >@deepseek-ai/dsh
+                >DeepSeek Harness
                 {{
                   store.bootstrapPlan?.dsh_version ??
                   store.latestDshVersion?.latest_version ??
@@ -204,30 +232,78 @@ onUnmounted(() => {
           </div>
         </article>
 
-        <details v-if="!nodeDone" class="text-sm">
+        <details v-if="!dshDone" class="text-sm">
           <summary
             class="flex cursor-pointer list-none items-center gap-1 py-1 font-medium text-muted-foreground [&::-webkit-details-marker]:hidden"
           >
-            切换下载来源
+            {{ nodeDone ? "切换 npm 下载源" : "切换下载来源" }}
             <ChevronDown class="h-4 w-4" />
           </summary>
           <div class="mt-3 space-y-4 border-t pt-4">
-            <p class="text-xs leading-5 text-muted-foreground">
-              下载缓慢时可切换 Node.js
-              来源。重新开始会停止当前下载，并使用所选来源从头下载。
-            </p>
-            <MirrorSelector />
-            <Button
-              class="w-full"
-              variant="outline"
-              :disabled="!canRestartDownload || restartingDownload"
-              @click="restartNodeDownload"
-            >
-              <RotateCcw
-                :class="['mr-2 h-4 w-4', restartingDownload && 'animate-spin']"
-              />
-              {{ restartingDownload ? "正在重新开始…" : "重新使用此来源下载" }}
-            </Button>
+            <template v-if="nodeDone">
+              <p class="text-xs leading-5 text-muted-foreground">
+                安装缓慢时可切换 npm
+                下载源。重新开始会停止当前安装，并使用所选来源重新下载 DeepSeek
+                Harness。
+              </p>
+              <div class="space-y-2">
+                <Label for="dsh-registry">npm 下载源</Label>
+                <Select v-model="npmRegistry">
+                  <SelectTrigger id="dsh-registry" class="w-full">
+                    <SelectValue placeholder="选择下载源" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="https://registry.npmmirror.com">
+                      npmmirror.com
+                    </SelectItem>
+                    <SelectItem value="https://registry.npmjs.org">
+                      npmjs.com（官方）
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                class="w-full"
+                variant="outline"
+                :disabled="!canRestartDshInstall || restartingDshInstall"
+                @click="restartDshInstall"
+              >
+                <RotateCcw
+                  :class="[
+                    'mr-2 h-4 w-4',
+                    restartingDshInstall && 'animate-spin',
+                  ]"
+                />
+                {{
+                  restartingDshInstall
+                    ? "正在重新开始…"
+                    : "重新使用此 npm 来源下载"
+                }}
+              </Button>
+            </template>
+            <template v-else>
+              <p class="text-xs leading-5 text-muted-foreground">
+                下载缓慢时可切换 Node.js
+                来源。重新开始会停止当前下载，并使用所选来源从头下载。
+              </p>
+              <MirrorSelector />
+              <Button
+                class="w-full"
+                variant="outline"
+                :disabled="!canRestartDownload || restartingDownload"
+                @click="restartNodeDownload"
+              >
+                <RotateCcw
+                  :class="[
+                    'mr-2 h-4 w-4',
+                    restartingDownload && 'animate-spin',
+                  ]"
+                />
+                {{
+                  restartingDownload ? "正在重新开始…" : "重新使用此来源下载"
+                }}
+              </Button>
+            </template>
           </div>
         </details>
       </div>

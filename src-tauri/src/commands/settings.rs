@@ -9,7 +9,6 @@ use crate::state::{AppState, StateStatus};
 pub struct DshStateSnapshot {
     pub current: Option<String>,
     pub known_good: Option<String>,
-    pub pending: Option<String>,
     pub node_mirror: String,
     pub registry: String,
     pub installed: Vec<InstalledDshInfo>,
@@ -29,7 +28,6 @@ pub async fn get_dsh_state() -> Result<DshStateSnapshot> {
         StateStatus::FirstRun => Ok(DshStateSnapshot {
             current: None,
             known_good: None,
-            pending: None,
             node_mirror: crate::node::pick_default_mirror().base_url.to_string(),
             registry: "https://registry.npmjs.org".to_string(),
             installed: vec![],
@@ -37,7 +35,6 @@ pub async fn get_dsh_state() -> Result<DshStateSnapshot> {
         StateStatus::Loaded(state) => Ok(DshStateSnapshot {
             current: state.dsh.current,
             known_good: state.dsh.known_good,
-            pending: state.dsh.pending,
             node_mirror: state
                 .node_mirror
                 .clone()
@@ -93,7 +90,11 @@ pub async fn set_registry_command(registry: String) -> Result<()> {
         StateStatus::FirstRun => AppState::new(),
         StateStatus::Loaded(state) => *state,
     };
-    state.dsh.registry = validated_registry(&registry)?;
+    let registry = validated_registry(&registry)?;
+    state.dsh.registry = registry.clone();
+    if let Some(plan) = state.bootstrap_plan.as_mut() {
+        plan.registry = registry;
+    }
     state.save()
 }
 

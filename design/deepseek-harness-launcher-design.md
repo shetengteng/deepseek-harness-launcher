@@ -7,7 +7,7 @@
 核心目标：
 
 - **壳子常驻不变**：Tauri 二进制本身极少更新，体积小（~15 MB）
-- **dsh 独立版本管理**：显示并按需安装 registry 的最新 dsh 版本，无需重装整个应用
+- **dsh 独立版本管理**：轻量检查 registry 的最新 dsh 版本，发现新版时提示用户，只有用户确认后才安装
 - **Node 运行时托管**：首次启动时自动下载 Node 到用户目录，不污染系统、不依赖用户预装
 - **失败可回滚**：dsh 切换后启动失败自动回退到上个已知好版本
 
@@ -16,6 +16,13 @@
 - 不修改 dsh 本身的代码
 - 不替代 dsh 的 Web UI，只做容器
 - 不支持 dsh 之外的其他 agent harness
+
+产品原则：
+
+- 主窗口只承载 dsh Web UI，不增加壳子页面和操作负担
+- 新版本提示使用右侧非阻塞提示框；用户可以关闭，不强制更新或重启
+- 设置页只保留版本、检查更新、更新源和诊断信息等必要操作
+- 持久化只使用 `state.json` 和版本目录，不引入数据库、历史版本管理或复杂任务队列
 
 ## 2. 与 dsh 的关系
 
@@ -154,6 +161,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
     "known_good": "0.1.0-rc.5",
     "pending": null,
     "registry": "https://registry.npmjs.org",
+    "last_notified": null,
     "installed": [
       {
         "version": "0.1.0-rc.5",
@@ -163,7 +171,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
       {
         "version": "0.1.0-rc.6",
         "installed_at": "2026-08-15T10:00:00Z",
-        "status": "pending"
+        "status": "verified"
       }
     ]
   },
@@ -171,7 +179,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 }
 ```
 
-`bootstrap_plan` 在首启安装中保存冻结的精确 dsh 版本、Node 版本、registry、`engines.node`、解析时间与阶段；成功启动前不得用新的 `latest` 覆盖该计划。
+`bootstrap_plan` 在首启安装中保存冻结的精确 dsh 版本、Node 版本、registry、`engines.node`、解析时间与阶段；成功启动前不得用新的 `latest` 覆盖该计划。版本目录和 `state.json` 是唯一持久化来源，不使用数据库。
 
 ## 5. 核心流程
 
@@ -229,37 +237,39 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
    仍失败 → 弹错误对话框，附日志路径
 ```
 
-### 5.3 dsh 最新版本安装与切换
+### 5.3 dsh 更新提示、安装与切换
 
-首启、设置页打开或用户点击“刷新”时才请求 registry；日常启动不查询 dsh 更新，不在后台下载或切换 dsh。界面只显示 `dist-tags.latest` 解析得到的精确版本，不提供历史版本下拉，也不接受版本范围输入。
+应用启动后可以在后台轻量请求一次 registry 元数据，只读取 `dist-tags.latest`，不下载、不阻塞 dsh 启动。发现 `latest` 不同于当前版本时，从主窗口右侧划入非阻塞提示框。用户可以关闭提示，也可以点击按钮开始更新。设置页提供同一套“检查更新 / 更新到最新版本”入口。
 
 ```
-触发：首启确认安装 / 设置页点击“更新到最新版本”
-
-1. GET <registry>/@deepseek-ai/dsh，读取 dist-tags.latest
-2. 校验 latest 对应的精确 manifest 存在，向用户显示该精确版本
-3. 用户点击安装时，将本次 latest 冻结为目标版本：
-   - 首启写入 bootstrap_plan.dsh_version
-   - 已运行环境在当前安装请求内使用该精确版本，重试不重新解析 latest
-4. 目标 == current → 不安装，显示“已是最新版本”
-5. 读取目标 package.json.engines.node：
-   - 当前 Node 不满足 → 阻止安装并明确提示需要的 Node 版本；不修改 current 或 pending
-6. 目标已经完整安装 → 写 pending = 目标，等待用户重启
-7. 否则创建 dsh/<target>/，写 package.json，spawn npm install --prod，并做完整性校验
-8. 安装或校验失败 → 清理目标目录，保留 current、known_good 与 pending
-9. 成功后写 pending = <target>，显示“版本已就绪，重启后生效”；不自动重启
-10. 下次启动时：
-    - 尝试用 pending 版本启动
-    - 成功 → current = pending，known_good = 旧 current，清除 pending
-    - 失败 → 回滚到 known_good，并把失败版本标记为 broken
+1. 启动后轻量请求 <registry>/@deepseek-ai/dsh
+   - 请求失败 → 静默忽略，不影响当前 dsh 启动
+   - latest == current → 不提示
+   - latest != current 且不是最近已提示的版本 → 右侧显示“发现 dsh 新版本”提示，并记录 `last_notified`
+2. 用户点击“更新”：
+   - 使用提示中已展示的精确版本，重新取得并校验该版本 manifest
+   - 将精确版本、registry、engines.node 和 dist.integrity 冻结到本次安装请求
+   - 不接受历史版本、版本范围或手动版本输入
+3. 目标 == current → 显示“已是最新版本”
+4. 当前 Node 不满足 engines.node → 显示简单提示，保留当前版本，不开始安装
+5. 创建 dsh/<target>/，执行 npm install --prod，并校验入口与完整性
+6. 安装失败 → 清理目标目录，保留 current 和 known_good；提示“更新失败，当前版本未受影响”
+   - 用户可以“重试”或“更换源重试”
+7. 安装成功 → 设置 pending = target，显示“更新已准备好”
+   - 用户点击“立即重启”才重启 dsh
+   - 用户点击“稍后”则继续使用当前版本
+8. 重启 dsh 时：
+   - pending 启动成功 → current = pending，known_good = 旧 current，清除 pending
+   - pending 启动失败 → 清除 pending，回到 known_good，当前版本继续可用
 ```
 
 #### 可行性与边界
 
-- **数据来源已具备**：`dsh/registry.rs` 已能读取 `dist-tags.latest` 和精确 manifest。最新版本流程不需要向前端返回、排序或存储完整历史版本列表。
-- **安装一致性不变**：首次查询只用于显示；用户确认后将 `latest` 解析为精确版本并冻结到 `bootstrap_plan` 或当前安装请求，网络重试和重启都不会漂移目标。
-- **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；新版本仅在下一次启动验证成功后提升为 `current`。安装失败不改动当前版本，启动失败沿用 `known_good` 回滚。
-- **范围**：本期不提供 semver 范围输入、历史版本选择、后台轮询、自动下载或自动重启。未来若加入提醒，也只能提示当前 `latest`，仍须由用户明确点击更新。
+- **数据来源已具备**：`dsh/registry.rs` 已能读取 `dist-tags.latest` 和精确 manifest。更新提示只需要保存当前内存中的 latest，不需要历史版本列表或数据库。
+- `last_notified` 只记录最近一次提示的版本，不是历史版本列表；用户关闭提示后仍可在设置页手动检查。
+- **安装一致性不变**：提示只用于告知；用户点击更新后才冻结精确版本。网络重试继续使用同一目标版本，不因 registry 变化而漂移。
+- **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；安装失败不改动当前版本，启动失败清除 pending 并恢复 known-good。
+- **范围**：本期不提供历史版本选择、版本范围输入、自动下载、自动重启、复杂源管理或用户可调重试参数。
 
 ### 5.4 Node 升级流程
 
@@ -322,12 +332,12 @@ src-tauri/src/
 
 ```
 src/
-├── App.vue                    # 按 phase 切换 bootstrap、启动遮罩和 dsh Web UI
+├── App.vue                    # 按 phase 切换 bootstrap、启动遮罩、dsh Web UI 和更新提示
 ├── components/
 │   ├── MainView.vue           # dsh Web UI 容器与启动状态
 │   ├── FirstRun.vue           # 原型 03 的双任务 bootstrap 界面
 │   ├── Settings.vue           # 设置页
-│   ├── UpgradeDialog.vue      # 升级提示
+│   ├── UpdateNotice.vue       # 右侧更新提示、更新进度和重启确认
 │   ├── MirrorSelector.vue     # 仅失败恢复或设置页使用
 │   └── ui/                    # 自管 shadcn-vue 组件源码
 ├── stores/
@@ -429,21 +439,21 @@ dsh 有 160 多个 workspace 依赖（见 [apps/desktop/runtime/package.json](./
 
 macOS 额外处理：
 
-- 下载的 node 去除 `com.apple.quarantine` 扩展属性
+- 不主动移除下载文件的 `com.apple.quarantine` 扩展属性，保留 macOS 安全检查
 - Hardened Runtime 下要给 node 二进制单独签名
 - App Sandbox 要允许执行用户目录下的二进制（entitlements）
 
 ## 10. 配置项
 
-设置页暴露：
+设置页只暴露必要操作：
 
 | 配置                | 默认值       | 说明                                          |
 | ------------------- | ------------ | --------------------------------------------- |
-| `node_registry`     | 按地区选     | Node 下载镜像                                 |
-| `npm_registry`      | 按地区选     | npm 安装镜像                                  |
-| `crash_retry_limit` | `3`          | 崩溃自动重试次数                              |
-| `keep_versions`     | `2`          | 保留几个 dsh 版本（current + known_good + N） |
+| `node_registry`     | 自动选择     | 仅在首启失败或用户主动更换时使用              |
+| `npm_registry`      | 默认 registry | 仅在 dsh 更新失败时提供更换源重试              |
 | `working_directory` | 用户文档目录 | dsh 默认工作目录                              |
+
+`crash_retry_limit`、版本保留数量、完整性校验和回滚策略由壳子内部固定，不出现在设置页。
 
 ## 11. 错误处理
 
@@ -456,7 +466,7 @@ macOS 额外处理：
 | 无网络        | "无法连接网络，首次启动需要下载运行环境"   |
 | 镜像源全失败  | "所有镜像源不可达，请检查网络或更换镜像源" |
 | Node 下载损坏 | "Node 下载文件校验失败，请重试"            |
-| dsh 安装失败  | "dsh 安装失败（npm 错误信息），已清理"     |
+| dsh 更新失败  | "更新失败，当前版本未受影响。你可以重试或更换源" |
 | dsh 启动超时  | "dsh 90 秒内未启动完成，已回滚到旧版本"    |
 | dsh 启动崩溃  | "dsh 启动后崩溃，已回滚。日志：<path>"     |
 | 磁盘空间不足  | "磁盘空间不足，需要约 200 MB"              |

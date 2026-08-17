@@ -1,5 +1,7 @@
 //! dsh 安装协调。
 
+#[path = "install/cancellation.rs"]
+mod cancellation;
 #[path = "install/process.rs"]
 mod process;
 
@@ -11,7 +13,8 @@ use crate::node::install::node_bin_path;
 use super::integrity::verify_entry_exists;
 use super::registry::PackageManifest;
 
-pub use process::{install_dsh, run_npm_install};
+pub use cancellation::{DshInstallCancellation, DshInstallOperations};
+pub use process::{install_dsh, install_dsh_cancellable, run_npm_install};
 
 pub const DSH_PACKAGE_NAME: &str = "@deepseek-ai/dsh";
 

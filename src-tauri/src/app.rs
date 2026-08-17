@@ -41,6 +41,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::SharedState::new())
+        .manage(crate::dsh::DshInstallOperations::default())
         .manage(NodeDownloadOperations::default())
         .manage(ExitCoordinator {
             requested: AtomicBool::new(false),
@@ -73,6 +74,7 @@ pub fn run() {
             commands::host::launcher_status,
             commands::host::start_host,
             commands::host::restart_host,
+            commands::host::restart_host_after_dsh_update,
             commands::host::shutdown_host,
             commands::bootstrap::list_mirrors,
             commands::bootstrap::probe_mirrors_command,
@@ -82,6 +84,7 @@ pub fn run() {
             commands::node_install::install_node_command,
             commands::node_install::cancel_node_install_command,
             commands::dsh_install::install_dsh_command,
+            commands::dsh_install::cancel_dsh_install_command,
             commands::settings::get_dsh_state,
             commands::settings::set_node_mirror_command,
             commands::settings::set_registry_command,

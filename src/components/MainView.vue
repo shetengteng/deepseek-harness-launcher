@@ -28,6 +28,10 @@ const showSettings = ref(false);
 const showAbout = ref(false);
 const exportDiagnosticsRequest = ref(0);
 
+function handleUpgradeReady(origin: string): void {
+  store.setHostReady(origin);
+}
+
 useTrayEvents({
   openSettings: () => {
     showSettings.value = true;
@@ -86,7 +90,7 @@ const needInstallDsh = computed(() => store.dshVersion === null);
         </CardHeader>
         <CardContent class="flex flex-col gap-3 text-sm">
           <div class="flex justify-between">
-            <span class="text-muted-foreground">Harness 版本</span>
+            <span class="text-muted-foreground">DeepSeek Harness 版本</span>
             <span>{{ store.dshVersion ?? "未安装" }}</span>
           </div>
           <div class="flex justify-between">
@@ -120,7 +124,7 @@ const needInstallDsh = computed(() => store.dshVersion === null);
         class="flex items-center px-3 py-1 border-b bg-background"
       >
         <span class="text-xs text-muted-foreground">
-          Harness 曾意外退出，已自动恢复（第
+          DeepSeek Harness 曾意外退出，已自动恢复（第
           {{ store.autoRestartedAttempt }} 次）
         </span>
       </div>
@@ -167,6 +171,7 @@ const needInstallDsh = computed(() => store.dshVersion === null);
           class="min-h-0 flex-1"
           :node-version="store.nodeVersion"
           :export-diagnostics-request="exportDiagnosticsRequest"
+          @upgrade-ready="handleUpgradeReady"
         />
       </DialogContent>
     </Dialog>

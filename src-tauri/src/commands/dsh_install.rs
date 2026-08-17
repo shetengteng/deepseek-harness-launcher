@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, State};
 
 use crate::commands::bootstrap::latest_dsh_version;
 use crate::error::{LauncherError, Result};
@@ -24,12 +24,18 @@ fn dsh_install_stage_from_npm_log(line: &str) -> Option<&'static str> {
 #[tauri::command]
 pub async fn install_dsh_command(
     app: tauri::AppHandle,
-    defer_activation: Option<bool>,
+    operations: State<'_, crate::dsh::DshInstallOperations>,
+    operation_id: Option<String>,
 ) -> Result<String> {
     use crate::dsh::{
-        default_client, fetch_package_metadata, install_dsh, options_from_manifest,
-        promote_to_current, set_pending, RegistryCache,
+        default_client, fetch_package_metadata, install_dsh_cancellable, options_from_manifest,
+        promote_to_current, RegistryCache,
     };
+    let active_install = operation_id
+        .as_deref()
+        .map(|operation_id| operations.register(operation_id))
+        .transpose()?;
+    let cancellation = active_install.as_ref().map(|active| active.cancellation());
     let mut state = match AppState::load()? {
         StateStatus::FirstRun => {
             return Err(LauncherError::NodeNotInstalled {
@@ -66,6 +72,9 @@ pub async fn install_dsh_command(
         DshInstallProgressPayload { stage: "resolving" },
     );
     let metadata = fetch_package_metadata(&registry, &RegistryCache::new(), &client).await?;
+    if let Some(cancellation) = cancellation.as_ref() {
+        cancellation.check()?;
+    }
     let version = match bootstrap_plan.as_ref() {
         Some(plan) => plan.dsh_version.clone(),
         None => latest_dsh_version(&metadata)?,
@@ -112,19 +121,23 @@ pub async fn install_dsh_command(
             let _ = app_for_log.emit("dsh-install-progress", DshInstallProgressPayload { stage });
         }
     }));
-    install_dsh(&options).await?;
+    install_dsh_cancellable(&options, cancellation.as_ref()).await?;
     let _ = app.emit(
         "dsh-install-progress",
         DshInstallProgressPayload { stage: "verifying" },
     );
-    if defer_activation.unwrap_or(false) {
-        set_pending(&mut state, &version);
-    } else {
-        promote_to_current(&mut state, &dsh_dir, &version)?;
-        state.bootstrap_plan = None;
-    }
+    promote_to_current(&mut state, &dsh_dir, &version)?;
+    state.bootstrap_plan = None;
     state.save()?;
     Ok(version)
+}
+
+#[tauri::command]
+pub fn cancel_dsh_install_command(
+    operations: State<'_, crate::dsh::DshInstallOperations>,
+    operation_id: String,
+) -> bool {
+    operations.cancel(&operation_id)
 }
 
 #[cfg(test)]

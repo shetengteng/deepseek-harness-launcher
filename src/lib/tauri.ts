@@ -97,6 +97,18 @@ export function restartHost(): Promise<string> {
   return invokeCommand<string>("restart_host");
 }
 
+export interface DshUpgradeRestartResult {
+  origin: string;
+  active_version: string;
+  rolled_back: boolean;
+}
+
+export function restartHostAfterDshUpdate(): Promise<DshUpgradeRestartResult> {
+  return invokeCommand<DshUpgradeRestartResult>(
+    "restart_host_after_dsh_update",
+  );
+}
+
 /** 调 `rollback_dsh_command`：回滚到 known_good（崩溃弹窗"回滚"按钮）。 */
 export function rollbackDsh(): Promise<string> {
   return invokeCommand<string>("rollback_dsh_command");
@@ -199,10 +211,19 @@ export function cancelNodeInstall(operationId: string): Promise<boolean> {
   });
 }
 
-/** 安装冻结版本或 registry 当前的 `latest`。
- * `deferActivation` 为 true 时只设为 pending，等待用户重启后试运行。 */
-export function installDsh(deferActivation = false): Promise<string> {
-  return invokeCommand<string>("install_dsh_command", { deferActivation });
+/** 安装冻结版本或 registry 当前的 `latest`，并立即设为当前版本。 */
+export function installDsh(operationId?: string): Promise<string> {
+  return invokeCommand<string>(
+    "install_dsh_command",
+    operationId ? { operationId } : undefined,
+  );
+}
+
+/** 取消当前 dsh 安装任务。 */
+export function cancelDshInstall(operationId: string): Promise<boolean> {
+  return invokeCommand<boolean>("cancel_dsh_install_command", {
+    operationId,
+  });
 }
 
 // ─── 设置页状态与来源配置 ───
@@ -211,7 +232,6 @@ export function installDsh(deferActivation = false): Promise<string> {
 export interface DshStateSnapshot {
   current: string | null;
   known_good: string | null;
-  pending: string | null;
   node_mirror: string;
   registry: string;
   installed: InstalledDshInfo[];

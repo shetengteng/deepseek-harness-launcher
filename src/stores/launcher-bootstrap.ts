@@ -1,4 +1,5 @@
 import {
+  cancelDshInstall,
   cancelNodeInstall,
   getLatestDshVersion,
   installDsh,
@@ -6,6 +7,7 @@ import {
   listMirrors,
   probeMirrors,
   resolveBootstrapPlan,
+  setRegistry,
   validateCustomMirror,
   type DshInstallProgressEvent,
   type LauncherErrorPayload,
@@ -32,6 +34,7 @@ export function createBootstrapActions({
 }: BootstrapDependencies) {
   let activeBootstrap: Promise<void> | null = null;
   let activeNodeInstall: Promise<boolean> | null = null;
+  let activeDshInstall: Promise<void> | null = null;
 
   async function loadLatestDshVersionAction(): Promise<void> {
     try {
@@ -92,6 +95,19 @@ export function createBootstrapActions({
     state.selectedMirrorId.value = id;
   }
 
+  async function setRegistryAction(registry: string): Promise<boolean> {
+    try {
+      await setRegistry(registry);
+      if (state.bootstrapPlan.value) {
+        state.bootstrapPlan.value.registry = registry;
+      }
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  }
+
   function installNodeAction(options?: { version?: string }): Promise<boolean> {
     if (activeNodeInstall) return activeNodeInstall;
 
@@ -103,7 +119,8 @@ export function createBootstrapActions({
       try {
         const mirror = state.selectedMirror.value;
         if (!mirror) throw new Error("未选择镜像源");
-        const plan = state.bootstrapPlan.value ?? (await resolveBootstrapPlan());
+        const plan =
+          state.bootstrapPlan.value ?? (await resolveBootstrapPlan());
         state.bootstrapPlan.value = plan;
         state.wizardStep.value = "downloading";
         const { platform, arch } = detectPlatformArch();
@@ -155,22 +172,55 @@ export function createBootstrapActions({
     await startBootstrapAction({ keepSelectedMirror: true });
   }
 
-  async function installDshAction(): Promise<void> {
-    if (state.installingDsh.value) return;
-    state.installingDsh.value = true;
-    state.dshInstallStage.value = "resolving";
-    state.dshInstallActivity.value = 0;
-    try {
-      state.bootstrapPlan.value ??= await resolveBootstrapPlan();
-      await installDsh();
-      state.dshInstallStage.value = "verifying";
-      await refreshStatus();
-      state.lastFailedAction.value = null;
-    } catch (error) {
-      fail(error, "installDsh");
-    } finally {
-      state.installingDsh.value = false;
-    }
+  async function restartDshInstallAction(registry: string): Promise<void> {
+    if (!(await setRegistryAction(registry))) return;
+
+    const operationId = state.dshInstallOperationId.value;
+    if (!operationId) return;
+
+    const bootstrap = activeBootstrap;
+    const dshInstall = activeDshInstall;
+    const cancelled = await cancelDshInstall(operationId);
+    if (!cancelled) return;
+
+    await (bootstrap ?? dshInstall);
+    state.error.value = null;
+    state.lastFailedAction.value = null;
+    await startBootstrapAction({ keepSelectedMirror: true });
+  }
+
+  function installDshAction(): Promise<void> {
+    if (activeDshInstall) return activeDshInstall;
+
+    const task = (async (): Promise<void> => {
+      state.installingDsh.value = true;
+      state.dshInstallStage.value = "resolving";
+      state.dshInstallActivity.value = 0;
+      state.dshInstallOperationId.value = crypto.randomUUID();
+      try {
+        state.bootstrapPlan.value ??= await resolveBootstrapPlan();
+        await installDsh(state.dshInstallOperationId.value);
+        state.dshInstallStage.value = "verifying";
+        await refreshStatus();
+        state.lastFailedAction.value = null;
+      } catch (error) {
+        if (isDshInstallCancelled(error)) {
+          state.error.value = null;
+          state.phase.value = "first_run";
+          return;
+        }
+        fail(error, "installDsh");
+      } finally {
+        state.installingDsh.value = false;
+        state.dshInstallOperationId.value = null;
+      }
+    })();
+
+    activeDshInstall = task;
+    void task.then(() => {
+      if (activeDshInstall === task) activeDshInstall = null;
+    });
+    return task;
   }
 
   function startBootstrapAction(options?: {
@@ -205,7 +255,8 @@ export function createBootstrapActions({
           await installDshAction();
           if (state.error.value) return;
         }
-        if (state.nodeVersion.value && state.dshVersion.value) await startHost();
+        if (state.nodeVersion.value && state.dshVersion.value)
+          await startHost();
       } catch (error) {
         fail(error, "bootstrap");
       } finally {
@@ -255,8 +306,10 @@ export function createBootstrapActions({
     autoPickMirror,
     validateCustomMirrorAction,
     selectMirror,
+    setRegistryAction,
     installNodeAction,
     restartNodeDownloadAction,
+    restartDshInstallAction,
     installDshAction,
     startBootstrapAction,
     applyProgressEvent,
@@ -271,6 +324,17 @@ function isNodeInstallCancelled(error: unknown): boolean {
     error !== null &&
     "kind" in error &&
     (error as { kind: unknown }).kind === "node_install_cancelled"
+  );
+}
+
+function isDshInstallCancelled(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "kind" in error &&
+    "message" in error &&
+    (error as { kind: unknown }).kind === "dsh_install" &&
+    String((error as { message: unknown }).message).includes("cancelled")
   );
 }
 

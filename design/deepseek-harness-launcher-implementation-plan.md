@@ -487,11 +487,10 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - 校验 known_good 存在且目录存在
   - known_good → current（指针 + state）
   - **known_good 字段清空**（已提升为 current，没有更老的 known_good）
-  - 失败版本（原 current）→ ignored_versions（去重）
+  - 失败版本（原 current）→ installed 中标记为 broken
   - installed 中标记 broken
   - 清除 pending
 - [x] `set_pending(state, version)` / `clear_pending(state)`：pending 字段管理
-- [x] `ignore_version(state, version)`：加入 ignored_versions（幂等，去重）
 - [x] `prune_old_versions(state, dsh_dir, keep_extra) -> Result<Vec<String>>`：
   - 保留集：current + known_good + pending + 最新 `keep_extra` 个（按版本号降序）
   - **从文件系统扫描版本目录**（不依赖 state.dsh.installed，避免 state 与 FS 不同步）
@@ -502,11 +501,11 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 ### M3.3 测试
 
-- [x] 单元测试 29 个（`version.rs`）：指针读写 roundtrip、覆盖、switch、promote 首次 / 旧变 known_good / 清 pending / 失败、rollback 成功 / 无 known_good / 目录缺失 / 去重、set/clear pending、ignore 幂等、prune 保留 current+known_good / 保留 extra / 保留 pending / 跳过指针 / 空目录、list 排序 / 排除指针 / 空目录、is_version_installed、完整升级回滚场景、多次回滚累积 ignored、同版本 promote 无自引用
+- [x] 单元测试 28 个（`version.rs`）：指针读写 roundtrip、覆盖、switch、promote 首次 / 旧变 known_good / 清 pending / 失败、rollback 成功 / 无 known_good / 目录缺失、set/clear pending、prune 保留 current+known_good / 保留 extra / 保留 pending / 跳过指针 / 空目录、list 排序 / 排除指针 / 空目录、is_version_installed、完整升级回滚场景、同版本 promote 无自引用
 - [x] 集成测试 19 个（`tests/version_dsh.rs`，mock 版本目录 + state 持久化）：
   - 完整升级生命周期成功
   - 升级失败触发回滚
-  - 多次升级失败累积 ignored
+  - 多次升级失败后仍保留 current，失败版本标记为 broken
   - 无 known_good 时回滚报错
   - known_good 目录缺失时回滚报错
   - switch 仅改指针不改 state
@@ -516,15 +515,14 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - prune 保留 pending
   - prune 不删指针文件
   - list 返回所有版本（排序）
-  - ignore 幂等
   - clear_pending
-  - 完整场景：升级→失败回滚→再升级→清理
+  - 完整场景：升级→失败回滚→再次更新→清理
   - state 序列化/反序列化 roundtrip
   - 同版本 promote 两次不产生自引用 known_good
   - state save + reload
   - 原子指针切换一致性
 - [x] 本地演示脚本 `examples/version_dsh_demo.rs`：9 步流程可视化
-  - 首次安装 → 升级成功 → 升级失败回滚 → 再升级成功 → 主动忽略 → 清理旧版本 → 状态总结 → 手动 switch → clear_pending
+  - 首次安装 → 升级成功 → 升级失败回滚 → 再升级成功 → 清理旧版本 → 状态总结 → 手动 switch → clear_pending
 
 **验收**：`cargo test` 249/249（lib 175 + commands 4 + mirror 9 + download 7 + install_dsh 12 + registry 14 + version_dsh 19 + 其他 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿；`cargo run --example version_dsh_demo` 输出完整升级回滚流程。
 
@@ -564,15 +562,15 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 - `pnpm exec vue-tsc --noEmit` 通过（无类型错误）
 - 启动应用 → 首启向导 → 选镜像源 → 下载 Node → 显示"安装 dsh"按钮 → 点击安装 → 完成后显示"启动 Host" → 启动成功进入 dsh web
 
-**后续策略**：这段历史实现中的后台检查、自动下载与升级提示已由 PR-020c 收敛为仅更新当前 `latest`；`Settings.vue` 的通用设置布局继续复用。
+**后续策略**：这段历史实现中的复杂后台升级流程已由 PR-020c 收敛为轻量版本检查、右侧更新提示和用户主动安装；`Settings.vue` 的通用设置布局继续复用。
 
 ### M3.3b 首启体验与原型 03 对齐 ✅ PR-020b
 
-**目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，用户点击后才安装；不提供历史版本选择、范围规则或后台自动 dsh 升级。
+**目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，用户点击后才安装；不提供历史版本选择、范围规则或复杂版本管理。
 
 - [x] 后端首启编排：
   - `get_latest_dsh_version_command` 查询 registry 元数据，验证 `dist-tags.latest` 对应 manifest 后返回精确版本
-  - `resolve_bootstrap_plan_command()` 无入参，只把用户确认时的 `latest` 解析为精确 manifest、Node 目标并持久化 `bootstrap_plan`
+  - `resolve_bootstrap_plan_command(expected_version)` 接收界面已展示的精确版本，重新校验该版本 manifest、Node 目标并持久化 `bootstrap_plan`，不得漂移到新的 `latest`
   - `install_node_command` 完成后将计划标记为 `node_installed`；`install_dsh_command` 只消费冻结的版本和 registry，不得在重试时重新读取 `latest`
   - dsh 完整性校验成功后清除计划并自动调用 `start_host`；Host 就绪后进入 dsh Web UI
   - `state.json` schema 迁移到 `3`：保留 Node、current、known_good、pending 和已安装版本；移除范围、轮询、自动升级和忽略版本字段
@@ -592,37 +590,40 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - Vue：显示当前 `latest`、开始安装、双任务状态展示、任务级错误重试
   - 手动：清除 `state.json` 后启动，确认显示最新精确版本；断网/安装失败后重试不改变已冻结版本
 
-### M3.4 显式安装最新 dsh ✅ PR-020c
+### M3.4 更新提示与显式安装最新 dsh ⬜ PR-020c
 
-**目标**：以用户明确点击“更新到最新版本”替代后台更新策略。应用只显示 registry 当前 `latest` 的精确版本，不提供历史版本列表或选择器。
+**目标**：应用启动后轻量检查一次 registry；发现新版时通过主窗口右侧非阻塞提示告知用户。只有用户点击提示或设置页按钮后才下载，不自动重启。
 
-- [x] 后端：
-  - `install_dsh_command` 在首启复用冻结计划，其他场景仅解析当前 `latest`，并复用 `engines.node` 校验、`install_dsh`、完整性校验和 `set_pending`
-  - 当前版本就是 `latest` 时前端禁用更新；安装完成且版本已存在时仍只设 `pending`
-  - 删除定时检查、候选计算、自动安装、自动重启、忽略版本以及相关 state、Tauri 命令和测试；日常启动不请求 registry
+- [ ] 后端：
+  - `install_dsh_command` 在首启复用冻结计划，其他场景接收提示中展示的精确版本，重新校验该版本 manifest 后冻结安装目标
+  - 启动时的版本检查只读取元数据，失败不影响 dsh 启动；不引入定时任务或数据库
+  - `state.json` 只增加一个 `last_notified` 版本字段，避免同一版本在每次启动时重复打扰
+  - 当前版本就是 `latest` 时前端禁用更新；安装成功后设置 `pending`，由用户点击“立即重启”触发切换
+  - 安装失败清理目标目录，保留当前版本，并提供同版本重试或更换源重试
   - Node 不兼容时不写 `pending` 或 `current`，并返回可操作错误
-- [x] 前端：
-  - 设置页保留当前、已验证和待切换版本徽章，展示当前 `latest`、刷新按钮和“更新到最新版本”按钮
-  - 用户未点击时不下载；安装失败保留显示的当前版本，并提示用户检查网络或 npm 下载源
-  - registry 请求失败时保留当前运行版本，并提供刷新；不阻塞 dsh 启动
-- [x] 可行性验证：
+- [ ] 前端：
+  - 增加右侧非阻塞 `UpdateNotice`：显示当前版本、新版本和“更新”按钮，关闭后不影响使用
+  - 设置页只展示当前版本、最新版本、检查/更新按钮、自动源和诊断信息
+  - 用户未点击时不下载；安装失败显示“当前版本未受影响”，提供“重试 / 更换源重试”
+- [ ] 可行性验证：
   - `dsh/registry.rs` 已有 `dist-tags.latest`、精确 manifest、缓存和错误处理，无需排序或返回完整版本列表
   - `dsh/install.rs` 已按精确版本创建隔离目录，`dsh/version.rs` 已支持 `pending`、`current`、`known_good` 和回滚；无需变更安装目录协议
   - `semver` crate 仅用于 Node `engines` 校验，不再解释或排序用户提供的 dsh 版本
-- [x] 测试与验收：
+- [ ] 测试与验收：
   - Rust：`latest` 精确 manifest 校验、Node 不兼容时不写 pending、安装失败不提升 current、回滚
   - Vue：展示/刷新最新版本、同版本禁用更新、显式安装、网络错误时保留当前版本
-  - 手动：registry 发布新版本后，应用不主动下载；用户刷新、确认更新并重启后才切换
+  - 手动：registry 发布新版本后，启动时只提示；用户点击更新、安装完成并确认重启后才切换
 
 ### M3.5 既有升级功能的收敛
 
-PR-015 与 PR-016 的版本范围输入、轮询检查、自动下载、自动重启和“发现更新”对话框不再是产品功能。PR-020c 已删除相应的状态字段、Tauri 命令、Pinia action、事件监听和 UI 控件；保留 registry 查询、安装进度、版本指针与回滚实现。历史 PR 记录仅用于追溯，不代表当前需求。
+PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、自动重启和复杂升级设置不再是产品功能。当前保留轻量版本检查、右侧更新提示、用户主动安装、安装进度、版本指针与回滚实现。历史 PR 记录仅用于追溯，不代表当前需求。
 
 **验收**：
 
-- 设置页默认显示 `latest（<当前解析版本>）`，并允许选择任何可安装的精确版本
-- 没有用户操作时，启动应用或等待 24 小时均不发起 dsh registry 请求、下载或重启
-- 选择和安装新版本后，仍可在失败时回滚到 `known_good`
+- 启动应用时最多发起一次轻量 dsh registry 检查；检查失败不阻塞启动
+- 右侧提示只展示新版和“更新”按钮；没有用户点击时不下载、不重启
+- 安装失败保留当前版本，并可重试或更换源重试
+- 安装完成后由用户确认重启；启动失败清除 `pending` 并回滚到 `known_good`
 
 ---
 
@@ -791,7 +792,7 @@ PR-015 与 PR-016 的版本范围输入、轮询检查、自动下载、自动�
 - ⚠️ PR-015 [M3] 历史升级编排实现；由 PR-020c 删除并替换为显式版本安装
 - ⚠️ PR-016 [M3] 历史升级设置与对话框；由 PR-020c 收敛为最新版本更新 UI
 - ✅ PR-020b [M3] 首启 latest 展示 + 冻结安装计划（详见 §M3.3b）
-- ⬜ PR-020c [M3] 显式版本安装与切换，移除后台升级策略（详见 §M3.4）
+- ⬜ PR-020c [M3] 更新提示、显式安装与重启切换（详见 §M3.4）
 
 ### M4
 

@@ -25,7 +25,6 @@ pub fn promote_to_current(state: &mut AppState, dsh_dir: &Path, version: &str) -
 
     state.dsh.known_good = old_current.filter(|old| old != version);
     state.dsh.current = Some(version.to_string());
-    state.dsh.pending = None;
     set_installed_status(&mut state.dsh, version, "verified");
     Ok(())
 }
@@ -40,21 +39,12 @@ pub fn rollback_to_known_good(state: &mut AppState, dsh_dir: &Path) -> Result<St
     write_current_pointer(dsh_dir, &known_good)?;
     state.dsh.current = Some(known_good.clone());
     state.dsh.known_good = None;
-    state.dsh.pending = None;
 
     if let Some(failed) = failed_version {
         set_installed_status(&mut state.dsh, &failed, "broken");
     }
     set_installed_status(&mut state.dsh, &known_good, "verified");
     Ok(known_good)
-}
-
-pub fn set_pending(state: &mut AppState, version: &str) {
-    state.dsh.pending = Some(version.to_string());
-}
-
-pub fn clear_pending(state: &mut AppState) {
-    state.dsh.pending = None;
 }
 
 fn ensure_version_dir(dsh_dir: &Path, version: &str, operation: &str) -> Result<()> {

@@ -12,7 +12,7 @@ pub use pointers::{
     read_current_pointer, read_known_good_pointer, write_current_pointer, write_known_good_pointer,
     CURRENT_POINTER_NAME, KNOWN_GOOD_POINTER_NAME,
 };
-pub use state::{clear_pending, promote_to_current, rollback_to_known_good, set_pending, switch};
+pub use state::{promote_to_current, rollback_to_known_good, switch};
 
 #[cfg(test)]
 #[path = "version/tests.rs"]

@@ -16,14 +16,18 @@ export function createHostActions(
   fail: FailureHandler,
   refreshStatus: () => Promise<void>,
 ) {
+  function setHostReady(origin: string): void {
+    state.origin.value = origin;
+    state.phase.value = "ready";
+    state.error.value = null;
+    state.lastFailedAction.value = null;
+  }
+
   async function startHostAction(): Promise<void> {
     if (state.starting.value) return;
     state.starting.value = true;
     try {
-      state.origin.value = await startHost();
-      state.phase.value = "ready";
-      state.error.value = null;
-      state.lastFailedAction.value = null;
+      setHostReady(await startHost());
     } catch (error) {
       fail(error, "startHost");
     } finally {
@@ -91,8 +95,7 @@ export function createHostActions(
       state.crashLimit.value = event.payload;
     });
     await listen<HostRestartedPayload>("host-restarted", (event) => {
-      state.origin.value = event.payload.origin;
-      state.phase.value = "ready";
+      setHostReady(event.payload.origin);
       state.crashLimit.value = null;
       state.autoRestartedAttempt.value = event.payload.attempt;
       setTimeout(() => {
@@ -102,6 +105,7 @@ export function createHostActions(
   }
 
   return {
+    setHostReady,
     startHostAction,
     shutdownHostAction,
     retryAfterCrash,

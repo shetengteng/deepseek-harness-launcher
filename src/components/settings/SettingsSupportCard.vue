@@ -53,7 +53,8 @@ defineEmits<{
         <div class="min-w-0">
           <div class="text-sm font-medium">移除 DeepSeek Harness</div>
           <p class="text-xs text-muted-foreground">
-            删除托管的 dsh、Node.js 运行时和设置，保留启动器与诊断日志
+            删除托管的 DeepSeek Harness、Node.js
+            运行时和设置，保留启动器与诊断日志
           </p>
         </div>
         <Button

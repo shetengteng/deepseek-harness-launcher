@@ -7,6 +7,7 @@ const api = vi.hoisted(() =>
       "getDshState",
       "getLatestDshVersion",
       "installDsh",
+      "restartHostAfterDshUpdate",
       "setNodeMirror",
       "setRegistry",
       "listMirrors",
@@ -21,14 +22,15 @@ vi.mock("@/lib/tauri", () => api);
 import Settings from "@/components/Settings.vue";
 
 function button(wrapper: ReturnType<typeof mount>, label: string) {
-  return wrapper.findAll("button").find((item) => item.text().trim() === label)!;
+  return wrapper
+    .findAll("button")
+    .find((item) => item.text().trim() === label)!;
 }
 
 function state(current: string | null) {
   return {
     current,
     known_good: null,
-    pending: null,
     installed: [],
     node_mirror: "https://nodejs.org/dist",
     registry: "https://registry.npmjs.org",
@@ -40,6 +42,11 @@ beforeEach(() => {
   api.getDshState.mockResolvedValue(state("0.0.9"));
   api.listMirrors.mockResolvedValue([]);
   api.getLatestDshVersion.mockResolvedValue({ latest_version: "0.1.0" });
+  api.restartHostAfterDshUpdate.mockResolvedValue({
+    origin: "http://127.0.0.1:1337/",
+    active_version: "0.1.0",
+    rolled_back: false,
+  });
 });
 
 test("requires explicit confirmation before uninstalling managed runtime", async () => {
@@ -63,8 +70,11 @@ test("updates only to the registry latest version after explicit confirmation", 
   await button(wrapper, "更新到最新版本").trigger("click");
   await flushPromises();
 
-  expect(api.installDsh).toHaveBeenCalledWith(true);
-  expect(wrapper.emitted("upgradeReady")?.[0]).toEqual(["0.1.0"]);
+  expect(api.installDsh).toHaveBeenCalledWith();
+  expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
+  expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([
+    "http://127.0.0.1:1337/",
+  ]);
 });
 
 test("disables the update when current version is already latest", async () => {
@@ -77,7 +87,9 @@ test("disables the update when current version is already latest", async () => {
 });
 
 test("retains the displayed current version when installing latest fails", async () => {
-  api.installDsh.mockRejectedValue({ message: "网络中断，请检查 npm 下载源后重试。" });
+  api.installDsh.mockRejectedValue({
+    message: "网络中断，请检查 npm 下载源后重试。",
+  });
   const wrapper = mount(Settings);
   await flushPromises();
 

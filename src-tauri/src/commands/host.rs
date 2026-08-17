@@ -36,6 +36,14 @@ pub struct StatusSnapshot {
     pub arch: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DshUpgradeRestartResult {
+    pub origin: String,
+    pub active_version: String,
+    pub rolled_back: bool,
+}
+
 pub fn host_platform_arch() -> (&'static str, &'static str) {
     let platform = match std::env::consts::OS {
         "macos" => "darwin",
@@ -113,6 +121,37 @@ pub async fn restart_host(state: State<'_, SharedState>) -> Result<String> {
 }
 
 #[tauri::command]
+pub async fn restart_host_after_dsh_update(
+    state: State<'_, SharedState>,
+) -> Result<DshUpgradeRestartResult> {
+    let active_version = current_dsh_version()?;
+    match restart_host_inner(&state.supervisor).await {
+        Ok(origin) => Ok(DshUpgradeRestartResult {
+            origin,
+            active_version,
+            rolled_back: false,
+        }),
+        Err(restart_error) => {
+            let restart_error = restart_error.to_string();
+            let active_version = rollback_failed_dsh_update()?;
+            let origin = restart_host_inner(&state.supervisor)
+                .await
+                .map_err(|rollback_error| {
+                    LauncherError::Host(format!(
+                        "dsh update restart failed: {restart_error}; rollback restart failed: {rollback_error}"
+                    ))
+                })?;
+            tracing::warn!(%restart_error, %active_version, "dsh update failed to start; restored known-good version");
+            Ok(DshUpgradeRestartResult {
+                origin,
+                active_version,
+                rolled_back: true,
+            })
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn shutdown_host(state: State<'_, SharedState>) -> Result<()> {
     let shutdown = state.supervisor.shutdown().await;
     shutdown.await_completion().await;
@@ -126,6 +165,41 @@ fn reset_crash_counter_after_manual_start() {
             tracing::warn!(%error, "failed to save reset crash counter");
         }
     }
+}
+
+fn current_dsh_version() -> Result<String> {
+    match AppState::load()? {
+        StateStatus::Loaded(state) => {
+            state
+                .dsh
+                .current
+                .clone()
+                .ok_or_else(|| LauncherError::DshNotInstalled {
+                    reason: "state.dsh.current is None".to_string(),
+                })
+        }
+        StateStatus::FirstRun => Err(LauncherError::DshNotInstalled {
+            reason: "state.json not found".to_string(),
+        }),
+    }
+}
+
+fn rollback_failed_dsh_update() -> Result<String> {
+    let mut state = match AppState::load()? {
+        StateStatus::Loaded(state) => *state,
+        StateStatus::FirstRun => {
+            return Err(LauncherError::DshNotInstalled {
+                reason: "state.json not found".to_string(),
+            })
+        }
+    };
+    let version = rollback_dsh_update(&mut state, &crate::paths::dsh_dir()?)?;
+    state.save()?;
+    Ok(version)
+}
+
+fn rollback_dsh_update(state: &mut AppState, dsh_dir: &std::path::Path) -> Result<String> {
+    crate::dsh::rollback_to_known_good(state, dsh_dir)
 }
 
 pub(super) fn build_spawn_options() -> Result<SpawnDshWebOptions> {
@@ -208,5 +282,21 @@ mod tests {
         let (platform, arch) = host_platform_arch();
         assert!(matches!(platform, "darwin" | "win" | "linux"));
         assert!(matches!(arch, "arm64" | "x64"));
+    }
+
+    #[test]
+    fn failed_update_restores_known_good_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let dsh_dir = temp.path().join("dsh");
+        std::fs::create_dir_all(dsh_dir.join("0.1.0")).unwrap();
+        std::fs::create_dir_all(dsh_dir.join("0.2.0")).unwrap();
+        let mut state = AppState::new();
+
+        crate::dsh::promote_to_current(&mut state, &dsh_dir, "0.1.0").unwrap();
+        crate::dsh::promote_to_current(&mut state, &dsh_dir, "0.2.0").unwrap();
+
+        assert_eq!(rollback_dsh_update(&mut state, &dsh_dir).unwrap(), "0.1.0");
+        assert_eq!(state.dsh.current.as_deref(), Some("0.1.0"));
+        assert!(state.dsh.known_good.is_none());
     }
 }

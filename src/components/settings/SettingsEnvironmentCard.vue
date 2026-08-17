@@ -12,7 +12,7 @@ defineProps<{ dshState: DshStateSnapshot; nodeVersion: string | null }>();
     <CardContent class="space-y-3">
       <div class="flex items-center justify-between gap-4">
         <div>
-          <div class="text-sm">正在使用的 dsh 版本</div>
+          <div class="text-sm">正在使用的 DeepSeek Harness 版本</div>
           <div class="text-xs text-muted-foreground">
             当前启动的 DeepSeek Harness
           </div>
@@ -42,18 +42,6 @@ defineProps<{ dshState: DshStateSnapshot; nodeVersion: string | null }>();
           </div>
         </div>
         <span class="font-mono text-sm">{{ nodeVersion ?? "尚未安装" }}</span>
-      </div>
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <div class="text-sm">下次启动将使用的版本</div>
-          <div class="text-xs text-muted-foreground">
-            已下载完成，重启后会自动切换
-          </div>
-        </div>
-        <Badge v-if="dshState.pending" variant="outline">{{
-          dshState.pending
-        }}</Badge
-        ><span v-else class="text-sm text-muted-foreground">暂时没有</span>
       </div>
     </CardContent>
   </Card>

@@ -112,6 +112,7 @@ export const useLauncherStore = defineStore("launcher", () => {
   return {
     ...state,
     refreshStatus,
+    setHostReady: host.setHostReady,
     startHost: host.startHostAction,
     shutdownHost: host.shutdownHostAction,
     retryAfterCrash: host.retryAfterCrash,
@@ -126,8 +127,10 @@ export const useLauncherStore = defineStore("launcher", () => {
     autoPickMirror: bootstrap.autoPickMirror,
     validateCustomMirror: bootstrap.validateCustomMirrorAction,
     selectMirror: bootstrap.selectMirror,
+    setRegistry: bootstrap.setRegistryAction,
     installNode: bootstrap.installNodeAction,
     restartNodeDownload: bootstrap.restartNodeDownloadAction,
+    restartDshInstall: bootstrap.restartDshInstallAction,
     installDsh: bootstrap.installDshAction,
     applyProgressEvent: bootstrap.applyProgressEvent,
     applyDshInstallProgress: bootstrap.applyDshInstallProgress,

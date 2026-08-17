@@ -58,12 +58,10 @@ fn promote_updates_state_and_preserves_the_previous_current_as_known_good() {
     let mut state = AppState::new();
 
     promote_to_current(&mut state, &dsh_dir, "0.1.0").unwrap();
-    state.dsh.pending = Some("0.2.0".to_string());
     promote_to_current(&mut state, &dsh_dir, "0.2.0").unwrap();
 
     assert_eq!(state.dsh.current.as_deref(), Some("0.2.0"));
     assert_eq!(state.dsh.known_good.as_deref(), Some("0.1.0"));
-    assert!(state.dsh.pending.is_none());
     assert_eq!(state.dsh.installed.len(), 2);
     assert_eq!(
         read_known_good_pointer(&dsh_dir).unwrap().as_deref(),
@@ -91,14 +89,13 @@ fn promote_rejects_a_missing_version_directory() {
 }
 
 #[test]
-fn rollback_restores_known_good_marks_failure_and_clears_pending() {
+fn rollback_restores_known_good_and_marks_failure() {
     let (_temp, dsh_dir) = setup_dsh_dir();
     create_version(&dsh_dir, "0.1.0");
     create_version(&dsh_dir, "0.2.0");
     let mut state = AppState::new();
     promote_to_current(&mut state, &dsh_dir, "0.1.0").unwrap();
     promote_to_current(&mut state, &dsh_dir, "0.2.0").unwrap();
-    set_pending(&mut state, "0.2.0");
 
     assert_eq!(
         rollback_to_known_good(&mut state, &dsh_dir).unwrap(),
@@ -106,7 +103,6 @@ fn rollback_restores_known_good_marks_failure_and_clears_pending() {
     );
     assert_eq!(state.dsh.current.as_deref(), Some("0.1.0"));
     assert!(state.dsh.known_good.is_none());
-    assert!(state.dsh.pending.is_none());
     assert_eq!(
         state
             .dsh
@@ -135,16 +131,7 @@ fn rollback_requires_an_existing_known_good_directory() {
 }
 
 #[test]
-fn pending_helpers_update_only_the_pending_field() {
-    let mut state = AppState::new();
-    set_pending(&mut state, "0.3.0");
-    assert_eq!(state.dsh.pending.as_deref(), Some("0.3.0"));
-    clear_pending(&mut state);
-    assert!(state.dsh.pending.is_none());
-}
-
-#[test]
-fn prune_keeps_current_known_good_pending_and_requested_recent_versions() {
+fn prune_keeps_current_known_good_and_requested_recent_versions() {
     let (_temp, dsh_dir) = setup_dsh_dir();
     for version in ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"] {
         create_version(&dsh_dir, version);
@@ -152,11 +139,10 @@ fn prune_keeps_current_known_good_pending_and_requested_recent_versions() {
     let mut state = AppState::new();
     state.dsh.current = Some("0.5.0".to_string());
     state.dsh.known_good = Some("0.4.0".to_string());
-    state.dsh.pending = Some("0.1.0".to_string());
 
     let pruned = prune_old_versions(&state, &dsh_dir, 1).unwrap();
-    assert_eq!(pruned, vec!["0.2.0"]);
-    for version in ["0.1.0", "0.3.0", "0.4.0", "0.5.0"] {
+    assert_eq!(pruned, vec!["0.1.0", "0.2.0"]);
+    for version in ["0.3.0", "0.4.0", "0.5.0"] {
         assert!(dsh_dir.join(version).exists());
     }
 }

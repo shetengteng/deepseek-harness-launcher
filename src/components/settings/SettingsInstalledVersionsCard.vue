@@ -9,8 +9,6 @@ function statusBadgeVariant(status: string) {
   switch (status) {
     case "verified":
       return undefined;
-    case "pending":
-      return "secondary" as const;
     case "broken":
       return "destructive" as const;
     default:
@@ -22,8 +20,6 @@ function statusLabel(status: string) {
   switch (status) {
     case "verified":
       return "可用";
-    case "pending":
-      return "下次启动时使用";
     case "broken":
       return "无法使用";
     default:

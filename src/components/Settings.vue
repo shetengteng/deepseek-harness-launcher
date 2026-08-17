@@ -11,6 +11,7 @@ import {
   getLatestDshVersion,
   installDsh,
   listMirrors,
+  restartHostAfterDshUpdate,
   setNodeMirror,
   setRegistry,
   uninstallManagedRuntime,
@@ -19,7 +20,7 @@ import {
   type MirrorInfo,
 } from "@/lib/tauri";
 
-const emit = defineEmits<{ upgradeReady: [version: string] }>();
+const emit = defineEmits<{ upgradeReady: [origin: string] }>();
 const props = withDefaults(
   defineProps<{
     nodeVersion?: string | null;
@@ -89,9 +90,13 @@ async function installLatestDsh(): Promise<void> {
   upgrading.value = true;
   upgradeError.value = null;
   try {
-    const version = await installDsh(true);
+    await installDsh();
+    const restart = await restartHostAfterDshUpdate();
     await loadDshState();
-    emit("upgradeReady", version);
+    if (restart.rolled_back) {
+      upgradeError.value = `新版本无法启动，已恢复 ${restart.active_version}。`;
+    }
+    emit("upgradeReady", restart.origin);
   } catch (error) {
     upgradeError.value = messageOf(error);
   } finally {
@@ -106,7 +111,7 @@ async function handleExportDiagnostics(): Promise<void> {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const destination = await save({
       title: "导出诊断信息",
-      defaultPath: `dsh-launcher-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
+      defaultPath: `deepseek-harness-launcher-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
       filters: [{ name: "ZIP 压缩包", extensions: ["zip"] }],
     });
     if (!destination) return;

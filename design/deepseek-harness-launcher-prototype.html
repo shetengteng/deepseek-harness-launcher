@@ -395,6 +395,16 @@
   }
   .progress-indicator.success { background: hsl(var(--success)); }
 
+  .progress-indeterminate .progress-indicator {
+    width: 42%;
+    animation: progress-loop 1.4s ease-in-out infinite;
+  }
+
+  @keyframes progress-loop {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(250%); }
+  }
+
   /* ============ shadcn 组件：Separator ============ */
   .separator {
     height: 1px;
@@ -1052,6 +1062,105 @@
     justify-content: flex-end;
   }
 
+  /* ============ 右侧更新提示 ============ */
+  .update-drawer-demo {
+    width: 460px;
+    height: 300px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background:
+      radial-gradient(circle at 30% 20%, hsl(var(--success) / 0.04) 0%, transparent 50%),
+      hsl(var(--background));
+    box-shadow: 0 10px 38px -10px hsl(0 0% 0% / 0.35);
+  }
+
+  .update-drawer-demo-content {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+  }
+
+  .update-drawer {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 310px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 12px 36px -12px hsl(0 0% 0% / 0.6);
+    overflow: hidden;
+    animation: slide-in-right 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .update-drawer-header {
+    padding: 12px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .update-drawer-icon {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background: hsl(var(--info) / 0.12);
+    color: hsl(var(--info));
+    border: 1px solid hsl(var(--info) / 0.25);
+  }
+
+  .update-drawer-icon svg { width: 15px; height: 15px; }
+
+  .update-drawer-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
+
+  .update-drawer-close {
+    margin-left: auto;
+    color: hsl(var(--muted-foreground));
+    font-size: 16px;
+  }
+
+  .update-drawer-body {
+    padding: 13px 14px 14px;
+  }
+
+  .update-drawer-body p {
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+
+  .update-drawer-version {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .update-drawer-version span:first-child { color: hsl(var(--muted-foreground)); }
+  .update-drawer-version span:last-child { color: hsl(var(--info)); }
+
   /* ============ Accessibility ============ */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -1186,7 +1295,7 @@
           </div>
           <div>
             <h2>正在准备运行环境</h2>
-            <p class="firstrun-desc">首次启动需要下载 Node.js 运行时和 dsh，仅此一次，约 55 MB。</p>
+            <p class="firstrun-desc">首次启动需要准备运行环境，完成后即可使用。</p>
           </div>
 
           <div class="download-section">
@@ -1212,21 +1321,16 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
                 @deepseek-ai/dsh 0.1.0-rc.6
               </span>
-              <span class="download-size mono">30 MB</span>
-            </div>
-            <div class="progress">
-              <div class="progress-indicator" style="width: 62%"></div>
+              <span class="download-size mono">依赖安装</span>
+              </div>
+            <div class="progress progress-indeterminate">
+              <div class="progress-indicator"></div>
             </div>
             <div class="progress-text">
               <span>npm install 进行中</span>
-              <span>62% · 约 30 秒</span>
+              <span>正在安装依赖</span>
             </div>
           </div>
-
-          <label class="firstrun-options">
-            <div class="checkbox"></div>
-            <span>我已有 Node，手动指定路径</span>
-          </label>
         </div>
       </div>
     </div>
@@ -1270,11 +1374,11 @@
           <h2>设置</h2>
 
           <div class="panel-section">
-            <div class="panel-section-title">运行时版本</div>
+            <div class="panel-section-title">运行状态</div>
             <div class="setting-row">
               <div>
                 <div class="setting-label">dsh 当前版本</div>
-                <div class="setting-desc">已知好版本：0.1.0-rc.5</div>
+                <div class="setting-desc">当前正在使用</div>
               </div>
               <div class="setting-control">
                 <span class="version-display">0.1.0-rc.6</span>
@@ -1289,104 +1393,50 @@
                 <span class="version-display">v22.19.0</span>
               </div>
             </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-title">更新</div>
             <div class="setting-row">
               <div>
-                <div class="setting-label">最新 dsh 版本</div>
-                <div class="setting-desc">仅在点击更新后下载，失败时保留当前版本</div>
+                <div class="setting-label">最新版本</div>
+                <div class="setting-desc">发现新版时右侧提示；不会自动下载或重启</div>
               </div>
               <div class="setting-control">
-                <button class="button button-secondary">检查最新版本</button>
+                <button class="btn btn-outline btn-sm">检查更新</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">有新版本可用</div>
+                <div class="setting-desc">0.1.0-rc.7 · 更新失败时当前版本继续可用</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary btn-sm">更新到最新版本</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">下载源</div>
+                <div class="setting-desc">自动选择；失败时可更换源重试</div>
+              </div>
+              <div class="setting-control">
+                <span class="version-display">自动选择</span>
               </div>
             </div>
           </div>
 
           <div class="panel-section">
-            <div class="panel-section-title">升级策略</div>
+            <div class="panel-section-title">帮助</div>
             <div class="setting-row">
               <div>
-                <div class="setting-label">自动检查 dsh 更新</div>
-                <div class="setting-desc">每 24 小时检查一次</div>
-              </div>
-              <div class="setting-control">
-                <div class="switch" data-state="checked"></div>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">自动应用更新</div>
-                <div class="setting-desc">下载完成后下次启动时切换</div>
-              </div>
-              <div class="setting-control">
-                <div class="switch" data-state="checked"></div>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">启动失败自动回滚</div>
-                <div class="setting-desc">回退到上个已知好版本</div>
-              </div>
-              <div class="setting-control">
-                <div class="switch" data-state="checked"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-section">
-            <div class="panel-section-title">镜像源</div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">Node 下载源</div>
-              </div>
-              <div class="setting-control">
-                <select class="select">
-                  <option>npmmirror.com</option>
-                  <option>nodejs.org</option>
-                  <option>tsinghua</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">npm registry</div>
-              </div>
-              <div class="setting-control">
-                <select class="select">
-                  <option>registry.npmmirror.com</option>
-                  <option>registry.npmjs.org</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-section">
-            <div class="panel-section-title">手动操作</div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">检查 dsh 更新</div>
+                <div class="setting-label">诊断信息</div>
+                <div class="setting-desc">遇到问题时导出日志</div>
               </div>
               <div class="setting-control">
                 <button class="btn btn-outline btn-sm">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                  立即检查
+                  导出日志
                 </button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">清理旧版本</div>
-                <div class="setting-desc">保留当前 + 已知好版本</div>
-              </div>
-              <div class="setting-control">
-                <button class="btn btn-outline btn-sm">清理</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">重启 dsh 进程</div>
-                <div class="setting-desc">不影响主窗口，仅重启后台</div>
-              </div>
-              <div class="setting-control">
-                <button class="btn btn-outline btn-sm">重启</button>
               </div>
             </div>
           </div>
@@ -1446,30 +1496,41 @@
     </div>
   </div>
 
-  <!-- 7. 系统通知 -->
+  <!-- 7. 右侧更新提示 -->
   <div class="screen-group">
-    <div class="screen-label"><span class="num">07</span> 系统通知 · 后台检查到新版<br>点击进入升级对话框</div>
-    <div class="notification">
-      <div class="notification-header">
-        <div class="notification-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+    <div class="screen-label"><span class="num">07</span> 右侧更新提示 · 非阻塞<br>用户可以关闭，也可以点击更新</div>
+    <div class="update-drawer-demo">
+      <div class="update-drawer-demo-content">dsh Web UI</div>
+      <div class="update-drawer">
+        <div class="update-drawer-header">
+          <div class="update-drawer-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+          </div>
+          <div class="update-drawer-title">发现 dsh 新版本</div>
+          <div class="update-drawer-close">×</div>
         </div>
-        <div class="notification-title">发现 dsh 新版本</div>
-        <div class="notification-app">deepseek-harness-launcher</div>
-      </div>
-      <div class="notification-body">
-        <strong>0.1.0-rc.6</strong> 已可用，当前为 0.1.0-rc.5。重启后生效。
-      </div>
-      <div class="notification-actions">
-        <button class="btn btn-ghost btn-sm">稍后</button>
-        <button class="btn btn-primary btn-sm">立即升级</button>
+        <div class="update-drawer-body">
+          <p>有新版本可用。更新会在你点击后开始，不会打断当前会话。</p>
+          <div class="update-drawer-version">
+            <span>当前版本</span>
+            <span>0.1.0-rc.6</span>
+          </div>
+          <div class="update-drawer-version">
+            <span>新版本</span>
+            <span>0.1.0-rc.7</span>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost btn-sm">稍后</button>
+            <button class="btn btn-primary btn-sm">更新</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 8. 升级对话框 -->
+  <!-- 8. 更新中 -->
   <div class="screen-group">
-    <div class="screen-label"><span class="num">08</span> 升级对话框 · 独立窗口<br>从通知或托盘菜单触发</div>
+    <div class="screen-label"><span class="num">08</span> 更新中 · 用户主动触发<br>不展示不可靠的下载总量</div>
     <div class="window window-modal">
       <div class="titlebar">
         <div class="traffic-lights">
@@ -1482,24 +1543,30 @@
       <div class="window-content">
         <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
           <div class="modal">
-            <div class="modal-icon success">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            <div class="modal-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             </div>
-            <h3>发现 dsh 新版本</h3>
-            <p>新版本已下载完成，重启后生效。当前会话将继续使用旧版本。</p>
+            <h3>正在更新 dsh</h3>
+            <p>正在下载并校验新版本，当前会话继续使用旧版本。</p>
             <div class="modal-versions">
               <div class="modal-version-row">
                 <span class="label">当前</span>
-                <span>0.1.0-rc.5</span>
+                <span>0.1.0-rc.6</span>
               </div>
               <div class="modal-version-row">
-                <span class="label">新版</span>
-                <span style="color: hsl(var(--success))">0.1.0-rc.6</span>
+                <span class="label">目标</span>
+                <span style="color: hsl(var(--info))">0.1.0-rc.7</span>
               </div>
             </div>
+            <div class="progress progress-indeterminate" style="margin-bottom: 8px;">
+              <div class="progress-indicator" style="background: hsl(var(--info));"></div>
+            </div>
+            <div class="progress-text" style="margin-bottom: 16px;">
+              <span>正在安装依赖</span>
+              <span>请稍候</span>
+            </div>
             <div class="modal-actions">
-              <button class="btn btn-outline">下次再说</button>
-              <button class="btn btn-primary">立即重启升级</button>
+              <button class="btn btn-outline">取消</button>
             </div>
           </div>
         </div>
@@ -1507,9 +1574,9 @@
     </div>
   </div>
 
-  <!-- 9. 启动失败回滚 -->
+  <!-- 9. 更新失败 -->
   <div class="screen-group">
-    <div class="screen-label"><span class="num">09</span> 启动失败 · 独立错误窗口<br>自动回滚后弹出</div>
+    <div class="screen-label"><span class="num">09</span> 更新失败 · 当前版本不受影响<br>提供重试和更换源</div>
     <div class="window window-modal">
       <div class="titlebar">
         <div class="traffic-lights">
@@ -1525,17 +1592,13 @@
             <div class="modal-icon warning">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </div>
-            <h3>dsh 0.1.0-rc.6 启动失败</h3>
-            <p>新版 dsh 在 90 秒内未输出就绪信号，已自动回滚到上个已知好版本。</p>
-            <div class="error-detail"><span class="err">[ERROR]</span> Host readiness timed out after 90000ms
-  at HostSupervisor.start (host-supervisor.ts:142)
-  at boot (main.ts:78)
-<span class="info">[INFO]</span> rolling back to 0.1.0-rc.5
-<span class="info">[INFO]</span> restarting dsh web...</div>
+            <h3>dsh 更新失败</h3>
+            <p>新版本没有安装成功，当前版本仍然可以继续使用。</p>
+            <div class="error-detail"><span class="err">更新失败</span>
+请检查网络，或更换下载源后重试。</div>
             <div class="modal-actions">
-              <button class="btn btn-outline">导出日志</button>
-              <button class="btn btn-ghost">忽略此版本</button>
-              <button class="btn btn-primary">继续使用旧版</button>
+              <button class="btn btn-outline">更换源</button>
+              <button class="btn btn-primary">重试</button>
             </div>
           </div>
         </div>
@@ -1637,9 +1700,9 @@
     </div>
   </div>
 
-  <!-- 12. 镜像源选择器（独立片段，演示 shadcn Select） -->
+  <!-- 12. 更换源重试 -->
   <div class="screen-group">
-    <div class="screen-label"><span class="num">12</span> 镜像源选择器 · 设置面板片段<br>shadcn Select + 自定义输入</div>
+    <div class="screen-label"><span class="num">12</span> 更换源重试 · 仅在更新失败时显示<br>不作为常驻设置</div>
     <div class="window window-panel" style="height: auto; min-height: 320px;">
       <div class="titlebar">
         <div class="traffic-lights">
@@ -1647,83 +1710,48 @@
           <div class="light minimize"></div>
           <div class="light maximize"></div>
         </div>
-        <div class="titlebar-title">镜像源</div>
+        <div class="titlebar-title">更换下载源</div>
       </div>
       <div class="window-content">
         <div class="panel">
           <div class="panel-section">
-            <div class="panel-section-title">Node 下载源</div>
+            <div class="panel-section-title">更新 dsh</div>
             <div class="setting-row">
               <div>
-                <div class="setting-label">官方 / 镜像</div>
-                <div class="setting-desc">影响 Node 二进制下载速度</div>
+                <div class="setting-label">下载源</div>
+                <div class="setting-desc">选择后继续更新当前版本</div>
               </div>
               <div class="setting-control">
                 <select class="select">
-                  <option>npmmirror.com (推荐)</option>
-                  <option>nodejs.org (官方)</option>
-                  <option>tsinghua</option>
-                  <option>自定义...</option>
+                  <option>自动选择</option>
+                  <option>registry.npmjs.org</option>
+                  <option>registry.npmmirror.com</option>
                 </select>
               </div>
             </div>
             <div class="setting-row">
               <div>
-                <div class="setting-label">自定义 URL</div>
-                <div class="setting-desc">支持 <span class="mono">{version}</span> / <span class="mono">{platform}</span> 占位符</div>
+                <div class="setting-label">当前版本</div>
+                <div class="setting-desc">更新失败不会影响当前版本</div>
               </div>
-              <div class="setting-control" style="flex: 1; max-width: 200px;">
-                <input class="input" placeholder="https://npmmirror.com/mirrors/node/v{version}/node-{platform}.tar.gz">
+              <div class="setting-control">
+                <span class="version-display">0.1.0-rc.6</span>
               </div>
             </div>
           </div>
-
-          <div class="panel-section">
-            <div class="panel-section-title">npm Registry</div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">registry</div>
-                <div class="setting-desc">影响 dsh 包下载</div>
-              </div>
-              <div class="setting-control">
-                <select class="select">
-                  <option>registry.npmmirror.com</option>
-                  <option>registry.npmjs.org</option>
-                  <option>自定义...</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">校验下载完整性</div>
-                <div class="setting-desc">SHA-256 校验，失败自动重试</div>
-              </div>
-              <div class="setting-control">
-                <div class="switch" data-state="checked"></div>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <div class="setting-label">最大重试次数</div>
-              </div>
-              <div class="setting-control">
-                <select class="select">
-                  <option>3 (默认)</option>
-                  <option>5</option>
-                  <option>10</option>
-                </select>
-              </div>
-            </div>
+          <div class="modal-actions" style="margin-top: 4px;">
+            <button class="btn btn-outline">取消</button>
+            <button class="btn btn-primary">使用此源重试</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 13. 升级进度对话框 -->
+  <!-- 13. 更新完成 -->
   <div class="screen-group">
-    <div class="screen-label"><span class="num">13</span> 升级进度 · 独立窗口<br>下载 + 校验 + 切换</div>
-    <div class="window window-modal" style="height: 380px;">
+    <div class="screen-label"><span class="num">13</span> 更新完成 · 等待用户重启<br>当前会话继续使用旧版本</div>
+    <div class="window window-modal" style="height: 340px;">
       <div class="titlebar">
         <div class="traffic-lights">
           <div class="light close"></div>
@@ -1735,37 +1763,26 @@
       <div class="window-content">
         <div class="modal-overlay" style="position: relative; background: transparent; backdrop-filter: none;">
           <div class="modal" style="width: 380px;">
-            <div class="modal-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            <div class="modal-icon success">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </div>
-            <h3>正在升级 dsh</h3>
-            <p>下载并校验新版本，完成后下次启动生效。</p>
+            <h3>更新已准备好</h3>
+            <p>新版本已安装并通过校验，重启 dsh 后生效。当前会话继续使用旧版本。</p>
 
-            <div class="download-section" style="margin-bottom: 14px;">
-              <div class="download-row">
-                <span class="download-name">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                  @deepseek-ai/dsh 0.1.0-rc.6
-                </span>
-                <span class="badge badge-success" style="background: hsl(var(--info) / 0.12); color: hsl(var(--info)); border-color: hsl(var(--info) / 0.25);">下载中</span>
+            <div class="modal-versions">
+              <div class="modal-version-row">
+                <span class="label">当前</span>
+                <span>0.1.0-rc.6</span>
               </div>
-              <div class="progress">
-                <div class="progress-indicator" style="width: 78%; background: hsl(var(--info));"></div>
-              </div>
-              <div class="progress-text">
-                <span>23.4 MB / 30 MB</span>
-                <span>78% · 约 12 秒</span>
+              <div class="modal-version-row">
+                <span class="label">新版</span>
+                <span style="color: hsl(var(--success))">0.1.0-rc.7</span>
               </div>
             </div>
-
-            <div class="error-detail" style="margin-bottom: 16px;"><span class="info">[INFO]</span> downloading from registry.npmmirror.com
-<span class="info">[INFO]</span> verifying SHA-256: 8a3f2c1b...
-<span class="info">[INFO]</span> installing to ~/Library/.../dsh/0.1.0-rc.6
-<span class="info">[INFO]</span> awaiting verification...</div>
 
             <div class="modal-actions">
-              <button class="btn btn-outline">取消</button>
-              <button class="btn btn-ghost" disabled style="opacity: 0.5; cursor: not-allowed;">后台运行</button>
+              <button class="btn btn-outline">稍后</button>
+              <button class="btn btn-primary">立即重启 dsh</button>
             </div>
           </div>
         </div>
@@ -1783,7 +1800,7 @@
     <ul style="font-size: 12px; color: hsl(var(--muted-foreground)); line-height: 1.8; list-style: none;">
       <li>· 主窗口让给 dsh Web UI，壳子不抢空间</li>
       <li>· 壳子功能收在托盘与独立面板</li>
-      <li>· 升级 / 错误使用独立窗口，不打扰主流程</li>
+      <li>· 更新提示从右侧非阻塞划入，错误提供重试入口</li>
       <li>· 所有交互遵循 shadcn-vue 视觉规范</li>
     </ul>
   </div>

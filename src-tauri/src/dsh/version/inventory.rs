@@ -74,15 +74,11 @@ pub fn is_version_installed(dsh_dir: &Path, version: &str) -> bool {
 }
 
 fn protected_versions(state: &AppState) -> HashSet<String> {
-    [
-        state.dsh.current.as_ref(),
-        state.dsh.known_good.as_ref(),
-        state.dsh.pending.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .cloned()
-    .collect()
+    [state.dsh.current.as_ref(), state.dsh.known_good.as_ref()]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect()
 }
 
 fn is_pointer_name(name: &str) -> bool {

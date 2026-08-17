@@ -18,10 +18,11 @@ pub use bootstrap::{
     LatestDshVersion, MirrorInfo,
 };
 pub use diagnostics::{export_diagnostics, export_diagnostics_to};
-pub use dsh_install::{install_dsh_command, DshInstallProgressPayload};
+pub use dsh_install::{cancel_dsh_install_command, install_dsh_command, DshInstallProgressPayload};
 pub use host::{
-    build_status_snapshot, host_platform_arch, launcher_status, restart_host, restart_host_inner,
-    shutdown_host, start_host, SharedState, StatusSnapshot,
+    build_status_snapshot, host_platform_arch, launcher_status, restart_host,
+    restart_host_after_dsh_update, restart_host_inner, shutdown_host, start_host,
+    DshUpgradeRestartResult, SharedState, StatusSnapshot,
 };
 pub use maintenance::{rollback_dsh_command, uninstall_managed_runtime};
 pub use node_install::{cancel_node_install_command, install_node_command, InstallNodeArgs};

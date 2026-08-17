@@ -262,7 +262,7 @@
 
 ### PR-020c 最新版本手动更新
 
-**测试目标**：只展示 registry `latest`，用户明确确认后才安装；任何失败都保留当前版本。
+**测试目标**：启动时轻量检查 registry；发现新版后从右侧非阻塞提示告知用户，只有用户明确确认后才安装；任何安装失败都保留当前版本。
 
 | 文件           | 用例                     | 期望                                          |
 | -------------- | ------------------------ | --------------------------------------------- |
@@ -270,10 +270,17 @@
 | `commands.rs`  | `latest` 缺失 manifest   | 返回 registry 错误，不安装                    |
 | `install.rs`   | 安装失败                 | 清理 staging 目录，不改 `current`             |
 | `version.rs`   | pending 版本启动失败     | 回滚到 `known_good` 并标记失败版本为 `broken` |
-| `Settings.vue` | 显示当前 latest          | 显示精确版本与刷新按钮                        |
-| `Settings.vue` | current 等于 latest      | 禁用更新按钮                                  |
-| `Settings.vue` | 明确点击更新             | 仅调用 `installDsh(true)`                     |
-| `Settings.vue` | 安装失败                 | 保留当前版本并显示可操作错误                  |
+| `App.vue`      | 启动检查失败             | 不阻塞 dsh 启动，不弹错误窗口                  |
+| `UpdateNotice` | latest 不同于 current    | 右侧显示非阻塞提示与“更新”按钮                |
+| `UpdateNotice` | 用户关闭提示             | 不下载、不重启，继续使用当前版本              |
+| `UpdateNotice` | 同一版本再次启动         | 不重复弹出，设置页仍可手动检查                  |
+| `Settings.vue` | 显示当前 latest          | 显示精确版本与“检查更新”按钮                  |
+| `Settings.vue` | current 等于 latest      | 禁用“更新到最新版本”按钮                      |
+| `Settings.vue` | 明确点击更新             | 使用已展示的精确版本调用安装                  |
+| `install.rs`   | 安装成功                 | 设置 `pending`，不立即重启                    |
+| `install.rs`   | 安装失败                 | 清理目标目录，保留当前版本并显示可操作错误    |
+| `UpdateNotice` | 用户选择重试             | 重试同一精确版本，不重新漂移到新的 `latest`   |
+| `UpdateNotice` | 用户更换源重试           | 使用新源重试同一精确版本                      |
 
 ---
 
