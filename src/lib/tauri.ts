@@ -65,6 +65,18 @@ export function fetchStatus(): Promise<StatusSnapshot> {
   return invokeCommand<StatusSnapshot>("launcher_status");
 }
 
+export interface AboutInfo {
+  launcher_version: string;
+  dsh_version: string | null;
+  node_version: string | null;
+  data_directory: string;
+}
+
+/** 调 `get_about_info`：返回启动器和托管运行时信息。 */
+export function getAboutInfo(): Promise<AboutInfo> {
+  return invokeCommand<AboutInfo>("get_about_info");
+}
+
 /** 调 `start_host`，返回 origin URL。 */
 export function startHost(): Promise<string> {
   return invokeCommand<string>("start_host");
@@ -172,9 +184,20 @@ export interface LatestDshVersion {
   latest_version: string;
 }
 
+/** 启动后的轻量检查结果。`null` 表示没有新版本或该版本已经提示过。 */
+export interface DshUpdateInfo {
+  current_version: string;
+  latest_version: string;
+}
+
 /** 查询当前可更新到的 dsh 版本。 */
 export function getLatestDshVersion(): Promise<LatestDshVersion> {
   return invokeCommand<LatestDshVersion>("get_latest_dsh_version_command");
+}
+
+/** 轻量检查一次 dsh 更新，并记录已提示的版本。 */
+export function checkDshUpdate(): Promise<DshUpdateInfo | null> {
+  return invokeCommand<DshUpdateInfo | null>("check_dsh_update_command");
 }
 
 /** 冻结当前 `latest` 对应的 dsh 与 Node 安装计划。 */
@@ -211,12 +234,15 @@ export function cancelNodeInstall(operationId: string): Promise<boolean> {
   });
 }
 
-/** 安装冻结版本或 registry 当前的 `latest`，并立即设为当前版本。 */
-export function installDsh(operationId?: string): Promise<string> {
-  return invokeCommand<string>(
-    "install_dsh_command",
-    operationId ? { operationId } : undefined,
-  );
+/** 安装首启冻结版本，或用户已经确认的精确更新版本。 */
+export function installDsh(options?: {
+  operationId?: string;
+  expectedVersion?: string;
+}): Promise<string> {
+  return invokeCommand<string>("install_dsh_command", {
+    operationId: options?.operationId ?? null,
+    expectedVersion: options?.expectedVersion ?? null,
+  });
 }
 
 /** 取消当前 dsh 安装任务。 */

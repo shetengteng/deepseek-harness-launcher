@@ -1,39 +1,101 @@
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Terminal } from "lucide-vue-next";
+import { getAboutInfo, type AboutInfo } from "@/lib/tauri";
 
-defineProps<{ open: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    hostOrigin?: string | null;
+  }>(),
+  { hostOrigin: null },
+);
 
 const emit = defineEmits<{
   (e: "close"): void;
 }>();
+
+const aboutInfo = ref<AboutInfo | null>(null);
+const error = ref<string | null>(null);
+
+const endpoint = computed(() => {
+  if (!props.hostOrigin) return "未运行";
+  try {
+    return new URL(props.hostOrigin).host;
+  } catch {
+    return props.hostOrigin;
+  }
+});
+
+async function loadAboutInfo(): Promise<void> {
+  error.value = null;
+  try {
+    aboutInfo.value = await getAboutInfo();
+  } catch {
+    aboutInfo.value = null;
+    error.value = "无法读取运行时信息。";
+  }
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) void loadAboutInfo();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <Dialog :open="open" @update:open="(value) => !value && emit('close')">
-    <DialogContent class="sm:max-w-[420px]">
-      <DialogHeader>
-        <DialogTitle>DeepSeek Harness Launcher</DialogTitle>
-        <DialogDescription>
-          管理 DeepSeek Harness 的 Node 运行时与版本切换。
-        </DialogDescription>
-      </DialogHeader>
-      <dl class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt class="text-muted-foreground">壳子版本</dt>
-        <dd>v0.1.0</dd>
-        <dt class="text-muted-foreground">技术栈</dt>
-        <dd>Tauri · Vue · Rust</dd>
+    <DialogContent
+      class="h-[640px] w-[640px] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] content-start gap-6 overflow-y-auto"
+    >
+      <section class="space-y-2 text-center">
+        <div
+          class="mx-auto flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+        >
+          <Terminal aria-hidden="true" class="size-6" />
+        </div>
+        <DialogTitle class="text-base">deepseek-harness-launcher</DialogTitle>
+        <p class="font-mono text-xs text-muted-foreground">
+          v{{ aboutInfo?.launcher_version ?? "…" }}
+        </p>
+      </section>
+
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <dl
+        v-else
+        class="overflow-hidden rounded-md border text-sm divide-y divide-border"
+      >
+        <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
+          <dt class="text-muted-foreground">启动器版本</dt>
+          <dd class="font-mono">{{ aboutInfo?.launcher_version ?? "读取中…" }}</dd>
+        </div>
+        <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
+          <dt class="text-muted-foreground">DeepSeek Harness 版本</dt>
+          <dd class="font-mono">{{ aboutInfo?.dsh_version ?? "尚未安装" }}</dd>
+        </div>
+        <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
+          <dt class="text-muted-foreground">Node.js 版本</dt>
+          <dd class="font-mono">{{ aboutInfo?.node_version ?? "尚未安装" }}</dd>
+        </div>
+        <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
+          <dt class="text-muted-foreground">数据目录</dt>
+          <dd class="min-w-0 break-all font-mono text-xs">
+            {{ aboutInfo?.data_directory ?? "读取中…" }}
+          </dd>
+        </div>
+        <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
+          <dt class="text-muted-foreground">DeepSeek Harness 端点</dt>
+          <dd class="font-mono">{{ endpoint }}</dd>
+        </div>
       </dl>
-      <DialogFooter>
-        <Button @click="emit('close')">关闭</Button>
-      </DialogFooter>
     </DialogContent>
   </Dialog>
 </template>

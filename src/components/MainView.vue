@@ -2,8 +2,16 @@
 // 主视图。对应设计 §M1.5 + §M2.5（PR-011）+ §M3.5（PR-016）+ §5.5（PR-017 崩溃恢复）。
 // 按 phase 渲染：booting → Loading；first_run → FirstRun 向导；idle → 启动/安装按钮；ready → iframe。设置以弹框覆盖当前视图。
 
-import { nextTick, computed, onMounted, ref } from "vue";
-import { Download, Play } from "lucide-vue-next";
+import {
+  computed,
+  defineComponent,
+  h,
+  nextTick,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+import { Download, Play, RefreshCw } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,7 +27,13 @@ import FirstRun from "@/components/FirstRun.vue";
 import HostStarting from "@/components/HostStarting.vue";
 import SettingsView from "@/components/Settings.vue";
 import AboutDialog from "@/components/AboutDialog.vue";
+import { ToastAction, toast } from "@/components/ui/toast";
 import { useTrayEvents } from "@/composables/useTrayEvents";
+import {
+  checkDshUpdate,
+  installDsh,
+  restartHostAfterDshUpdate,
+} from "@/lib/tauri";
 import { useLauncherStore } from "@/stores/launcher";
 
 const store = useLauncherStore();
@@ -27,6 +41,9 @@ const store = useLauncherStore();
 const showSettings = ref(false);
 const showAbout = ref(false);
 const exportDiagnosticsRequest = ref(0);
+const dshUpdateChecked = ref(false);
+const updatingFromNotice = ref(false);
+const updateNotice = ref<ReturnType<typeof toast> | null>(null);
 
 function handleUpgradeReady(origin: string): void {
   store.setHostReady(origin);
@@ -63,6 +80,97 @@ onMounted(async () => {
 
 /** 是否需要先装 dsh 才能启动 Host。 */
 const needInstallDsh = computed(() => store.dshVersion === null);
+
+function messageOf(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    if ("user_message" in error && error.user_message)
+      return String(error.user_message);
+    if ("message" in error) return String(error.message);
+  }
+  return String(error);
+}
+
+async function installLatestFromNotice(expectedVersion: string): Promise<void> {
+  if (updatingFromNotice.value) return;
+
+  updatingFromNotice.value = true;
+  updateNotice.value?.update({
+    title: "正在更新",
+    description: "正在安装新版 DeepSeek Harness，完成后会自动重启服务。",
+  });
+
+  try {
+    const version = await installDsh({ expectedVersion });
+    const restart = await restartHostAfterDshUpdate();
+    store.dshVersion = restart.active_version;
+    store.setHostReady(restart.origin);
+    if (restart.rolled_back) {
+      updateNotice.value?.update({
+        title: "更新未完成",
+        description: `版本 ${version} 无法启动，已恢复 ${restart.active_version}。`,
+      });
+      return;
+    }
+    updateNotice.value?.dismiss();
+  } catch (error) {
+    updateNotice.value?.update({
+      title: "更新失败",
+      description: messageOf(error),
+    });
+  } finally {
+    updatingFromNotice.value = false;
+  }
+}
+
+function createUpdateToastAction(expectedVersion: string) {
+  return defineComponent({
+    name: "UpdateToastAction",
+    setup() {
+      return () =>
+        h(
+          ToastAction,
+          {
+            altText: "立即更新 DeepSeek Harness",
+            disabled: updatingFromNotice.value,
+            onClick: () => void installLatestFromNotice(expectedVersion),
+          },
+          () => [
+            h(RefreshCw, {
+              class: ["size-3.5", updatingFromNotice.value && "animate-spin"],
+            }),
+            updatingFromNotice.value ? "更新中…" : "立即更新",
+          ],
+        );
+    },
+  });
+}
+
+async function checkDshUpdateAfterStart(): Promise<void> {
+  if (dshUpdateChecked.value) return;
+  dshUpdateChecked.value = true;
+  try {
+    const update = await checkDshUpdate();
+    if (!update) return;
+
+    updateNotice.value = toast({
+      type: "background",
+      duration: Number.POSITIVE_INFINITY,
+      title: "发现新版本",
+      description: `当前 ${update.current_version}，可更新至 ${update.latest_version}。更新会在你确认后开始，并自动重启服务。`,
+      action: createUpdateToastAction(update.latest_version),
+    });
+  } catch {
+    // 更新检查失败不能影响当前 dsh 会话。
+  }
+}
+
+watch(
+  () => store.displayPhase,
+  (phase) => {
+    if (phase === "ready") void checkDshUpdateAfterStart();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -170,12 +278,18 @@ const needInstallDsh = computed(() => store.dshVersion === null);
         <SettingsView
           class="min-h-0 flex-1"
           :node-version="store.nodeVersion"
+          :host-origin="store.origin"
           :export-diagnostics-request="exportDiagnosticsRequest"
           @upgrade-ready="handleUpgradeReady"
         />
       </DialogContent>
     </Dialog>
 
-    <AboutDialog :open="showAbout" @close="showAbout = false" />
+    <AboutDialog
+      :open="showAbout"
+      :host-origin="store.origin"
+      @close="showAbout = false"
+    />
+
   </main>
 </template>

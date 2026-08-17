@@ -20,7 +20,7 @@
 产品原则：
 
 - 主窗口只承载 dsh Web UI，不增加壳子页面和操作负担
-- 新版本提示使用右侧非阻塞提示框；用户可以关闭，不强制更新或重启
+- 新版本提示使用右侧非阻塞提示框；用户可以关闭。只有用户点击“更新”后才下载、切换并重启 dsh
 - 设置页只保留版本、检查更新、更新源和诊断信息等必要操作
 - 持久化只使用 `state.json` 和版本目录，不引入数据库、历史版本管理或复杂任务队列
 
@@ -159,7 +159,6 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
   "dsh": {
     "current": "0.1.0-rc.6",
     "known_good": "0.1.0-rc.5",
-    "pending": null,
     "registry": "https://registry.npmjs.org",
     "last_notified": null,
     "installed": [
@@ -255,12 +254,10 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 5. 创建 dsh/<target>/，执行 npm install --prod，并校验入口与完整性
 6. 安装失败 → 清理目标目录，保留 current 和 known_good；提示“更新失败，当前版本未受影响”
    - 用户可以“重试”或“更换源重试”
-7. 安装成功 → 设置 pending = target，显示“更新已准备好”
-   - 用户点击“立即重启”才重启 dsh
-   - 用户点击“稍后”则继续使用当前版本
-8. 重启 dsh 时：
-   - pending 启动成功 → current = pending，known_good = 旧 current，清除 pending
-   - pending 启动失败 → 清除 pending，回到 known_good，当前版本继续可用
+7. 安装成功 → 立即将 target 提升为 current，并将旧 current 记为 known_good
+8. 自动重启 dsh：
+   - target 启动成功 → 使用新的 current 继续当前会话
+   - target 启动失败 → 回滚到 known_good，并提示“新版本无法启动，已恢复旧版本”
 ```
 
 #### 可行性与边界
@@ -268,8 +265,8 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 - **数据来源已具备**：`dsh/registry.rs` 已能读取 `dist-tags.latest` 和精确 manifest。更新提示只需要保存当前内存中的 latest，不需要历史版本列表或数据库。
 - `last_notified` 只记录最近一次提示的版本，不是历史版本列表；用户关闭提示后仍可在设置页手动检查。
 - **安装一致性不变**：提示只用于告知；用户点击更新后才冻结精确版本。网络重试继续使用同一目标版本，不因 registry 变化而漂移。
-- **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；安装失败不改动当前版本，启动失败清除 pending 并恢复 known-good。
-- **范围**：本期不提供历史版本选择、版本范围输入、自动下载、自动重启、复杂源管理或用户可调重试参数。
+- **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；安装失败不改动当前版本。用户确认更新后，若新版本启动失败则恢复 known-good。
+- **范围**：本期不提供历史版本选择、版本范围输入、后台自动下载、未经用户点击的自动重启、复杂源管理或用户可调重试参数。
 
 ### 5.4 Node 升级流程
 
@@ -337,7 +334,7 @@ src/
 │   ├── MainView.vue           # dsh Web UI 容器与启动状态
 │   ├── FirstRun.vue           # 原型 03 的双任务 bootstrap 界面
 │   ├── Settings.vue           # 设置页
-│   ├── UpdateNotice.vue       # 右侧更新提示、更新进度和重启确认
+│   ├── UpdateNotice.vue       # 右侧更新提示、更新进度和重启结果
 │   ├── MirrorSelector.vue     # 仅失败恢复或设置页使用
 │   └── ui/                    # 自管 shadcn-vue 组件源码
 ├── stores/

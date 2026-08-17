@@ -1,7 +1,6 @@
 use serde::Serialize;
 use tauri::{Emitter, State};
 
-use crate::commands::bootstrap::latest_dsh_version;
 use crate::error::{LauncherError, Result};
 use crate::state::{AppState, StateStatus};
 
@@ -26,6 +25,7 @@ pub async fn install_dsh_command(
     app: tauri::AppHandle,
     operations: State<'_, crate::dsh::DshInstallOperations>,
     operation_id: Option<String>,
+    expected_version: Option<String>,
 ) -> Result<String> {
     use crate::dsh::{
         default_client, fetch_package_metadata, install_dsh_cancellable, options_from_manifest,
@@ -75,10 +75,7 @@ pub async fn install_dsh_command(
     if let Some(cancellation) = cancellation.as_ref() {
         cancellation.check()?;
     }
-    let version = match bootstrap_plan.as_ref() {
-        Some(plan) => plan.dsh_version.clone(),
-        None => latest_dsh_version(&metadata)?,
-    };
+    let version = selected_install_version(bootstrap_plan.as_ref(), expected_version.as_deref())?;
     let manifest = metadata.manifest_for(&version)?;
     if let Some(plan) = bootstrap_plan.as_ref() {
         let manifest_engines =
@@ -132,6 +129,30 @@ pub async fn install_dsh_command(
     Ok(version)
 }
 
+fn selected_install_version(
+    bootstrap_plan: Option<&crate::state::BootstrapPlan>,
+    expected_version: Option<&str>,
+) -> Result<String> {
+    match bootstrap_plan {
+        Some(plan) => {
+            if let Some(expected_version) = expected_version {
+                if expected_version != plan.dsh_version {
+                    return Err(LauncherError::DshRegistry(format!(
+                        "expected dsh {expected_version} does not match frozen bootstrap version {}",
+                        plan.dsh_version
+                    )));
+                }
+            }
+            Ok(plan.dsh_version.clone())
+        }
+        None => expected_version.map(str::to_owned).ok_or_else(|| {
+            LauncherError::DshRegistry(
+                "select a displayed dsh version before starting an update".to_string(),
+            )
+        }),
+    }
+}
+
 #[tauri::command]
 pub fn cancel_dsh_install_command(
     operations: State<'_, crate::dsh::DshInstallOperations>,
@@ -154,5 +175,34 @@ mod tests {
             Some("installing")
         );
         assert_eq!(dsh_install_stage_from_npm_log("npm ok"), None);
+    }
+
+    #[test]
+    fn update_requires_the_displayed_version() {
+        let error = selected_install_version(None, None).unwrap_err();
+        assert!(error.to_string().contains("select a displayed"));
+        assert_eq!(
+            selected_install_version(None, Some("0.2.0")).unwrap(),
+            "0.2.0"
+        );
+    }
+
+    #[test]
+    fn bootstrap_reuses_its_frozen_version() {
+        let plan = crate::state::BootstrapPlan {
+            dsh_version: "0.2.0".to_string(),
+            registry: "https://registry.npmjs.org".to_string(),
+            engines_node: None,
+            node_version: "22.0.0".to_string(),
+            requirement_source: "launcher-verified-fallback".to_string(),
+            resolved_at: chrono::Utc::now(),
+            phase: "resolved".to_string(),
+        };
+
+        assert_eq!(
+            selected_install_version(Some(&plan), None).unwrap(),
+            "0.2.0"
+        );
+        assert!(selected_install_version(Some(&plan), Some("0.3.0")).is_err());
     }
 }

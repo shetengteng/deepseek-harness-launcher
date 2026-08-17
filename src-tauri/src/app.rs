@@ -71,6 +71,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::about::get_about_info,
             commands::host::launcher_status,
             commands::host::start_host,
             commands::host::restart_host,
@@ -81,6 +82,7 @@ pub fn run() {
             commands::bootstrap::validate_custom_mirror_command,
             commands::bootstrap::resolve_bootstrap_plan_command,
             commands::bootstrap::get_latest_dsh_version_command,
+            commands::bootstrap::check_dsh_update_command,
             commands::node_install::install_node_command,
             commands::node_install::cancel_node_install_command,
             commands::dsh_install::install_dsh_command,

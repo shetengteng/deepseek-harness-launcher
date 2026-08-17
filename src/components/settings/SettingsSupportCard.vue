@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FileArchive } from "lucide-vue-next";
+import { FileArchive, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -62,7 +62,7 @@ defineEmits<{
           variant="destructive"
           size="xs"
           @click="$emit('confirmUninstall')"
-          >卸载</Button
+          ><Trash2 class="mr-2 h-4 w-4" />卸载</Button
         >
       </div>
       <div
@@ -85,7 +85,9 @@ defineEmits<{
             size="xs"
             :disabled="uninstalling"
             @click="$emit('uninstall')"
-            >{{ uninstalling ? "正在卸载…" : "卸载并退出" }}</Button
+            ><Trash2 class="mr-2 h-4 w-4" />{{
+              uninstalling ? "正在卸载…" : "卸载并退出"
+            }}</Button
           >
         </div>
         <p v-if="uninstallError" class="text-sm text-destructive">

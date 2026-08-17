@@ -23,10 +23,12 @@ const emit = defineEmits<{ upgradeReady: [origin: string] }>();
 const props = withDefaults(
   defineProps<{
     nodeVersion?: string | null;
+    hostOrigin?: string | null;
     exportDiagnosticsRequest?: number;
   }>(),
   {
     nodeVersion: null,
+    hostOrigin: null,
     exportDiagnosticsRequest: 0,
   },
 );
@@ -85,11 +87,12 @@ async function refreshLatestDshVersion(): Promise<void> {
 }
 
 async function installLatestDsh(): Promise<void> {
-  if (upgrading.value) return;
+  const expectedVersion = latestDshVersion.value?.latest_version;
+  if (upgrading.value || !expectedVersion) return;
   upgrading.value = true;
   upgradeError.value = null;
   try {
-    await installDsh();
+    await installDsh({ expectedVersion });
     const restart = await restartHostAfterDshUpdate();
     await loadDshState();
     if (restart.rolled_back) {
@@ -197,6 +200,7 @@ watch(
         <SettingsEnvironmentCard
           :dsh-state="dshState"
           :node-version="props.nodeVersion"
+          :host-origin="props.hostOrigin"
           :latest-version="latestDshVersion"
           :refreshing="versionsLoading"
           :upgrading="upgrading"

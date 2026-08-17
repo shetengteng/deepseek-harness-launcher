@@ -35,11 +35,17 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         true,
         Some("CmdOrCtrl+1"),
     )?;
-    let restart = MenuItem::with_id(app, TRAY_RESTART_HOST_ID, "重启 dsh", true, None::<&str>)?;
+    let restart = MenuItem::with_id(
+        app,
+        TRAY_RESTART_HOST_ID,
+        "重启 DeepSeek Harness",
+        true,
+        None::<&str>,
+    )?;
     let check_updates = MenuItem::with_id(
         app,
         TRAY_CHECK_UPDATES_ID,
-        "检查最新 dsh 版本",
+        "检查 DeepSeek Harness 更新",
         true,
         None::<&str>,
     )?;
@@ -114,8 +120,8 @@ fn status_label() -> String {
         Ok(state::StateStatus::Loaded(state)) => state
             .dsh
             .current
-            .map(|version| format!("dsh 已就绪 · {version}"))
-            .unwrap_or_else(|| "dsh 尚未安装".to_string()),
+            .map(|version| format!("DeepSeek Harness 已就绪 · {version}"))
+            .unwrap_or_else(|| "DeepSeek Harness 尚未安装".to_string()),
         _ => "等待首次配置".to_string(),
     }
 }
@@ -124,9 +130,9 @@ fn running_status_label() -> String {
         Ok(state::StateStatus::Loaded(state)) => state
             .dsh
             .current
-            .map(|version| format!("dsh 运行中 · {version}"))
-            .unwrap_or_else(|| "dsh 运行中".to_string()),
-        _ => "dsh 运行中".to_string(),
+            .map(|version| format!("DeepSeek Harness 运行中 · {version}"))
+            .unwrap_or_else(|| "DeepSeek Harness 运行中".to_string()),
+        _ => "DeepSeek Harness 运行中".to_string(),
     }
 }
 fn show_main_window(app: &AppHandle) {
@@ -151,7 +157,7 @@ fn emit_event(app: &AppHandle, event: &str) {
     show_main_window(app);
 }
 fn restart_host_from_tray(app: AppHandle, status: MenuItem<tauri::Wry>) {
-    if let Err(error) = status.set_text("dsh 正在重启…") {
+    if let Err(error) = status.set_text("DeepSeek Harness 正在重启…") {
         tracing::warn!(%error, "failed to update tray status");
     }
     tauri::async_runtime::spawn(async move {
@@ -166,10 +172,10 @@ fn restart_host_from_tray(app: AppHandle, status: MenuItem<tauri::Wry>) {
                 }
             }
             Err(error) => {
-                if let Err(menu_error) = status.set_text("dsh 重启失败") {
+                if let Err(menu_error) = status.set_text("DeepSeek Harness 重启失败") {
                     tracing::warn!(%menu_error, "failed to update tray status");
                 }
-                tracing::error!(%error, "failed to restart dsh from tray");
+                tracing::error!(%error, "failed to restart DeepSeek Harness from tray");
                 let _ = app.emit("tray-host-restart-failed", error.to_string());
             }
         }

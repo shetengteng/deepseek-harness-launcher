@@ -198,7 +198,7 @@ export function createBootstrapActions({
       state.dshInstallOperationId.value = crypto.randomUUID();
       try {
         state.bootstrapPlan.value ??= await resolveBootstrapPlan();
-        await installDsh(state.dshInstallOperationId.value);
+        await installDsh({ operationId: state.dshInstallOperationId.value });
         state.dshInstallStage.value = "verifying";
         await refreshStatus();
         state.lastFailedAction.value = null;

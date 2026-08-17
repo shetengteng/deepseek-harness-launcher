@@ -3,6 +3,7 @@
 //! Command implementations are grouped by user-facing domain. Re-exports keep
 //! the established command names and `lib.rs` registrations stable.
 
+pub(crate) mod about;
 pub(crate) mod bootstrap;
 pub(crate) mod diagnostics;
 pub(crate) mod dsh_install;
@@ -12,10 +13,11 @@ pub(crate) mod node_install;
 pub(crate) mod recovery;
 pub(crate) mod settings;
 
+pub use about::{get_about_info, AboutInfo};
 pub use bootstrap::{
-    get_latest_dsh_version_command, list_mirrors, probe_mirrors_command,
+    check_dsh_update_command, get_latest_dsh_version_command, list_mirrors, probe_mirrors_command,
     resolve_bootstrap_plan_command, validate_custom_mirror_command, BootstrapPlanInfo,
-    LatestDshVersion, MirrorInfo,
+    DshUpdateInfo, LatestDshVersion, MirrorInfo,
 };
 pub use diagnostics::{export_diagnostics, export_diagnostics_to};
 pub use dsh_install::{cancel_dsh_install_command, install_dsh_command, DshInstallProgressPayload};

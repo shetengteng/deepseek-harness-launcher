@@ -91,6 +91,13 @@ pub struct LatestDshVersion {
     pub latest_version: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct DshUpdateInfo {
+    pub current_version: String,
+    pub latest_version: String,
+}
+
 pub(super) fn latest_dsh_version(metadata: &crate::dsh::PackageMetadata) -> Result<String> {
     let version = metadata.dist_tags.latest.clone();
     metadata.manifest_for(&version)?;
@@ -109,6 +116,47 @@ pub async fn get_latest_dsh_version_command() -> Result<LatestDshVersion> {
         fetch_package_metadata(&state.dsh.registry, &RegistryCache::new(), &client).await?;
     Ok(LatestDshVersion {
         latest_version: latest_dsh_version(&metadata)?,
+    })
+}
+
+#[tauri::command]
+pub async fn check_dsh_update_command() -> Result<Option<DshUpdateInfo>> {
+    use crate::dsh::{default_client, fetch_package_metadata, RegistryCache};
+
+    let mut state = match AppState::load()? {
+        StateStatus::FirstRun => return Ok(None),
+        StateStatus::Loaded(state) => *state,
+    };
+    let Some(current_version) = state.dsh.current.clone() else {
+        return Ok(None);
+    };
+    let client = default_client();
+    let metadata =
+        fetch_package_metadata(&state.dsh.registry, &RegistryCache::new(), &client).await?;
+    let latest_version = latest_dsh_version(&metadata)?;
+    let Some(update) = update_to_notify(
+        &current_version,
+        state.dsh.last_notified.as_deref(),
+        &latest_version,
+    ) else {
+        return Ok(None);
+    };
+
+    state.dsh.last_notified = Some(update.latest_version.clone());
+    state.save()?;
+    Ok(Some(update))
+}
+
+fn update_to_notify(
+    current_version: &str,
+    last_notified: Option<&str>,
+    latest_version: &str,
+) -> Option<DshUpdateInfo> {
+    (current_version != latest_version && last_notified != Some(latest_version)).then(|| {
+        DshUpdateInfo {
+            current_version: current_version.to_string(),
+            latest_version: latest_version.to_string(),
+        }
     })
 }
 
@@ -164,5 +212,18 @@ mod tests {
     fn latest_version_must_have_manifest() {
         let metadata: crate::dsh::PackageMetadata = serde_json::from_value(serde_json::json!({"name":"@deepseek-ai/dsh","dist-tags":{"latest":"0.2.0"},"versions":{}})).expect("metadata");
         assert!(latest_dsh_version(&metadata).is_err());
+    }
+
+    #[test]
+    fn update_check_only_returns_unnotified_new_versions() {
+        assert_eq!(update_to_notify("0.1.0", None, "0.1.0"), None);
+        assert_eq!(update_to_notify("0.1.0", Some("0.2.0"), "0.2.0"), None);
+        assert_eq!(
+            update_to_notify("0.1.0", Some("0.2.0"), "0.3.0"),
+            Some(DshUpdateInfo {
+                current_version: "0.1.0".to_string(),
+                latest_version: "0.3.0".to_string(),
+            })
+        );
     }
 }

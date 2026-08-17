@@ -70,7 +70,7 @@ test("updates only to the registry latest version after explicit confirmation", 
   await button(wrapper, "安装新版本").trigger("click");
   await flushPromises();
 
-  expect(api.installDsh).toHaveBeenCalledWith();
+  expect(api.installDsh).toHaveBeenCalledWith({ expectedVersion: "0.1.0" });
   expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
   expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([
     "http://127.0.0.1:1337/",
@@ -88,7 +88,7 @@ test("keeps the update status height fixed when the current version is latest", 
   expect(wrapper.text()).not.toContain("当前启动的 DeepSeek Harness");
   expect(wrapper.text()).toContain("已是最新版本");
   expect(wrapper.find('[data-testid="dsh-update-status"]').classes()).toContain(
-    "min-h-7",
+    "text-xs",
   );
   expect(api.installDsh).not.toHaveBeenCalled();
 
@@ -96,6 +96,16 @@ test("keeps the update status height fixed when the current version is latest", 
   await flushPromises();
 
   expect(api.getLatestDshVersion).toHaveBeenCalledTimes(2);
+});
+
+test("shows the current DeepSeek Harness IP address and port", async () => {
+  const wrapper = mount(Settings, {
+    props: { hostOrigin: "http://127.0.0.1:51842/" },
+  });
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("运行 IP 与端口");
+  expect(wrapper.text()).toContain("127.0.0.1:51842");
 });
 
 test("does not expose the automatic recovery version in settings", async () => {
