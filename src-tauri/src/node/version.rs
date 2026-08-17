@@ -4,6 +4,7 @@
 //! 测试用例覆盖：`parse_node_version` 接受/拒绝、`satisfies_engines` 匹配。
 
 use semver::{Version, VersionReq};
+use serde::Deserialize;
 
 use crate::error::{LauncherError, Result};
 
@@ -55,6 +56,90 @@ pub fn current_node_satisfies(
             satisfies_engines(&parsed, engines_node)
         }
         None => Ok(false),
+    }
+}
+
+/// 从 dsh `engines.node` 解析首启应下载的 Node 版本。
+///
+/// 默认版本满足约束时直接复用；否则从 Node 官方发布索引中选择最新、可用于当前
+/// 平台与架构的正式版本。缺失 `engines.node` 不是官方约束，回退到已验证默认版本。
+pub async fn resolve_bootstrap_node_target(
+    engines_node: Option<&str>,
+    platform: &str,
+    arch: &str,
+    client: &reqwest::Client,
+) -> Result<(String, String)> {
+    let Some(engines_node) = engines_node.filter(|value| !value.trim().is_empty()) else {
+        return Ok((
+            DEFAULT_NODE_VERSION.to_string(),
+            "launcher-verified-fallback".to_string(),
+        ));
+    };
+
+    let default = parse_node_version(DEFAULT_NODE_VERSION)?;
+    if satisfies_engines(&default, engines_node)? {
+        return Ok((DEFAULT_NODE_VERSION.to_string(), "dsh-engines".to_string()));
+    }
+
+    let requirement = VersionReq::parse(engines_node).map_err(|error| {
+        LauncherError::NodeVersion(format!("invalid engines.node '{engines_node}': {error}"))
+    })?;
+    let releases = client
+        .get("https://nodejs.org/dist/index.json")
+        .send()
+        .await
+        .map_err(|error| {
+            LauncherError::NodeDownload(format!("fetch Node release index failed: {error}"))
+        })?
+        .error_for_status()
+        .map_err(|error| {
+            LauncherError::NodeDownload(format!("Node release index returned an error: {error}"))
+        })?
+        .json::<Vec<NodeRelease>>()
+        .await
+        .map_err(|error| {
+            LauncherError::NodeDownload(format!("parse Node release index failed: {error}"))
+        })?;
+
+    let artifact = node_archive_artifact(platform, arch)?;
+    let target = releases
+        .into_iter()
+        .filter_map(|release| {
+            let version = parse_node_version(&release.version).ok()?;
+            if !version.pre.is_empty()
+                || !requirement.matches(&version)
+                || !release.files.iter().any(|file| file == artifact)
+            {
+                return None;
+            }
+            Some(version)
+        })
+        .max()
+        .ok_or_else(|| {
+            LauncherError::NodeVersion(format!(
+                "no published Node release for {platform}/{arch} satisfies '{engines_node}'"
+            ))
+        })?;
+
+    Ok((target.to_string(), "dsh-engines".to_string()))
+}
+
+#[derive(Debug, Deserialize)]
+struct NodeRelease {
+    version: String,
+    files: Vec<String>,
+}
+
+fn node_archive_artifact(platform: &str, arch: &str) -> Result<&'static str> {
+    match (platform, arch) {
+        ("darwin", "arm64") => Ok("osx-arm64-tar"),
+        ("darwin", "x64") => Ok("osx-x64-tar"),
+        ("linux", "arm64") => Ok("linux-arm64-tar"),
+        ("linux", "x64") => Ok("linux-x64-tar"),
+        ("win", "x64") => Ok("win-x64-zip"),
+        _ => Err(LauncherError::NodeVersion(format!(
+            "unsupported Node platform/architecture: {platform}/{arch}"
+        ))),
     }
 }
 

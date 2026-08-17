@@ -31,7 +31,7 @@ pub fn record_crash(state: &mut AppState, now: DateTime<Utc>) -> CrashDecision {
     // 距上次崩溃超过窗口 → 新一轮崩溃，counter 归 1；否则累加
     let within_window = state
         .last_crash_at
-        .map_or(true, |last| (now - last).num_seconds() < CRASH_WINDOW_SECS);
+        .is_none_or(|last| (now - last).num_seconds() < CRASH_WINDOW_SECS);
     state.crash_counter = if within_window {
         state.crash_counter.saturating_add(1)
     } else {

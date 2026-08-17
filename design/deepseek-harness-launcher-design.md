@@ -7,9 +7,9 @@
 核心目标：
 
 - **壳子常驻不变**：Tauri 二进制本身极少更新，体积小（~15 MB）
-- **dsh 独立升级**：dsh 新版本发布后，壳子自动拉取并切换，无需重装整个应用
+- **dsh 独立版本管理**：显示并按需安装 registry 的最新 dsh 版本，无需重装整个应用
 - **Node 运行时托管**：首次启动时自动下载 Node 到用户目录，不污染系统、不依赖用户预装
-- **失败可回滚**：dsh 升级后启动失败自动回退到上个已知好版本
+- **失败可回滚**：dsh 切换后启动失败自动回退到上个已知好版本
 
 非目标：
 
@@ -48,9 +48,9 @@ dsh web: http://127.0.0.1:<port>/
 
 dsh 处于开发者预览期，可能破坏性变更。壳子通过以下机制对冲：
 
-- **版本范围锁**：默认 `~0.1.0`（只接受 patch），用户可在设置页改成 `^0.1` 或手动指定
-- **启动失败回滚**：新版启动失败自动降级到 `known_good` 版本
-- **engines 校验**：升级前读取 dsh 的 `package.json.engines.node`，不满足当前 Node 版本则拒绝升级
+- **显式更新**：首启与设置页显示当前 `latest` 的精确版本；只有用户点击安装或更新后才下载，并在安装前冻结该版本
+- **启动失败回滚**：用户切换后的新版本启动失败自动降级到 `known_good` 版本
+- **engines 校验**：安装或切换前读取目标 dsh 的 `package.json.engines.node`，不满足当前 Node 版本时要求用户先确认升级 Node
 
 ## 3. 架构
 
@@ -142,7 +142,8 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 3,
+  "bootstrap_plan": null,
   "node": {
     "version": "v22.19.0",
     "installed_at": "2026-08-15T10:00:00Z",
@@ -151,11 +152,8 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
   "dsh": {
     "current": "0.1.0-rc.6",
     "known_good": "0.1.0-rc.5",
-    "pinned_range": "~0.1.0",
     "pending": null,
-    "last_check": "2026-08-15T10:00:00Z",
-    "check_interval_hours": 24,
-    "registry": "https://registry.npmmirror.com",
+    "registry": "https://registry.npmjs.org",
     "installed": [
       {
         "version": "0.1.0-rc.5",
@@ -167,38 +165,55 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
         "installed_at": "2026-08-15T10:00:00Z",
         "status": "pending"
       }
-    ],
-    "ignored_versions": []
+    ]
   },
-  "auto_upgrade": true,
   "crash_counter": 0
 }
 ```
 
+`bootstrap_plan` 在首启安装中保存冻结的精确 dsh 版本、Node 版本、registry、`engines.node`、解析时间与阶段；成功启动前不得用新的 `latest` 覆盖该计划。
+
 ## 5. 核心流程
 
-### 5.1 首次启动
+### 5.1 首次启动：原型 03 的双任务安装窗口
+
+首启使用专用 bootstrap 界面，占据主窗口但不创建第二个 Tauri WebviewWindow。视觉和信息架构以 [原型 03](./deepseek-harness-launcher-prototype.html) 为准：标题栏、产品标识、简短说明，以及并列展示 Node 与 dsh 的两个任务卡。
+
+首启先查询官方 npm registry 的 `dist-tags.latest`，在 dsh 任务卡上显示其当前解析值，例如 `最新版本 0.1.0-rc.6`。用户确认安装后，将该值冻结为精确版本；`latest` 仅用于查询，绝不写入安装目录或 `state.json.current`。
+
+首启的运行时版本由用户选定 dsh 的已发布元数据决定，前端不得把 `DEFAULT_NODE_VERSION` 当成安装决策来源。`DEFAULT_NODE_VERSION` 仅是 dsh 没有声明 Node 约束时的已验证回退版本。
+
+**当前官方发布核验（2026-08-16）**：npm 官方 registry 的 `@deepseek-ai/dsh` `dist-tags.latest` 为 `0.1.0-rc.6`。该发布包未声明 `package.json.engines.node`；`_nodeVersion` 是发布构建信息，不能作为运行时兼容性契约。因此首次安装选择经过本壳子验证的 Node `22.19.0`，界面必须显示“dsh 未声明 Node 要求，使用已验证版本”，不得伪称这是官方要求。
 
 ```
-1. 读 state.json → 不存在
-2. 显示首启向导：
-   "正在准备运行环境"
-   ├─ 下载 Node.js v22.19.0  [██████] 25 MB
-   └─ 下载 dsh 0.1.0-rc.6    [██████] 30 MB
-3. Node 安装：
-   - 选镜像源（默认按地区或用户选择）
-   - 下载 tarball
-   - 校验 SHA-256
-   - 解压到 node-runtime/
-   - 写 VERSION
-4. dsh 安装：
-   - 写 package.json: {"dependencies":{"@deepseek-ai/dsh":"0.1.0-rc.6"}}
-   - spawn node npm install --prod --registry=<mirror>
-   - 完整性校验 lib/bin.js 存在
-   - 标记 status: "verified"
-5. 标记 current = known_good = 0.1.0-rc.6
-6. spawn dsh web → 拿到 URL → 开 webview
+1. 读 state.json：
+   - 无 state → 显示 bootstrap 窗口，查询 registry 的 latest 并显示精确版本
+   - 有未完成 bootstrap_plan → 复用该计划，不能重新读取 latest
+2. 用户确认安装：
+   - 将本次请求的 dist-tags.latest 解析为精确版本
+   - 取得目标精确版本的 manifest，读取 engines.node 与 dist.integrity
+   - 解析 Node 目标：
+     - engines.node 存在且默认 Node 满足 → 选已验证的 DEFAULT_NODE_VERSION
+     - engines.node 存在且默认 Node 不满足 → 从受信任 Node 发布索引选择满足范围、且当前平台有正式安装包的具体版本
+     - engines.node 缺失 → 选 DEFAULT_NODE_VERSION，并标记 requirement_source = "launcher-verified-fallback"
+   - 写入 state.bootstrap_plan：用户选择、精确 dsh 版本、registry、engines.node（可空）、Node 目标、解析时间与阶段
+3. 渲染双任务卡：
+   - Node.js v<resolved_node_version>：解析中 → 下载中 → SHA-256 校验 → 已完成
+   - @deepseek-ai/dsh <resolved_dsh_version>：等待 Node → npm install → 完整性校验 → 已完成
+   - 卡片显示冻结后的精确版本，不提供历史版本选择
+   - 大小、百分比和剩余时间仅在数据可信时显示
+4. 自动串行安装：
+   - 自动选择可信 Node 镜像；仅在失败时展开“重试 / 更换镜像源”
+   - 下载、校验、解压 Node，写 VERSION，将 bootstrap_plan 标记为 node_installed
+   - 自动安装 bootstrap_plan.dsh_version；重试继续安装同一精确版本
+5. 成功后自动启动：
+   - 标记 current = known_good = <resolved_dsh_version>，清除 bootstrap_plan
+   - 直接进入原型 04 的启动遮罩，spawn dsh web，收到就绪行后打开 dsh Web UI
 ```
+
+镜像设置是恢复选项，不是首启门槛：默认自动选择可用可信源；解析 registry、下载 Node 或安装 dsh 失败时，在对应任务卡上提供可操作错误、重试和更换镜像源。首启不支持“使用已有系统 Node”或手动 Node 路径，保持运行时自包含、可验证和可回滚。
+
+实现边界：Node 版本范围的求解不能依赖“提取字符串下界”的启发式逻辑。应先用 semver 校验候选版本，再由受信任的 Node 发布索引确认该版本、平台与架构的正式安装包存在。`engines.node` 缺失时不可从 npm 的 `_nodeVersion` 推导需求。
 
 ### 5.2 日常启动
 
@@ -208,38 +223,43 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
    - 不存在 → 进入首启修复流程
 3. 检查 dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js 是否存在
    - 不存在 → 切到 known_good；known_good 也不存在 → 进入首启修复
-4. 后台异步：检查 dsh 新版本（如果距 last_check > 24h）
-5. spawn dsh web
-6. 90 秒内解析到就绪行 → 开 webview
+4. spawn dsh web
+5. 90 秒内解析到就绪行 → 开 webview
    90 秒超时 → 杀进程，切 known_good 重试一次
    仍失败 → 弹错误对话框，附日志路径
 ```
 
-### 5.3 dsh 升级流程
+### 5.3 dsh 最新版本安装与切换
+
+首启、设置页打开或用户点击“刷新”时才请求 registry；日常启动不查询 dsh 更新，不在后台下载或切换 dsh。界面只显示 `dist-tags.latest` 解析得到的精确版本，不提供历史版本下拉，也不接受版本范围输入。
 
 ```
-触发：后台定时检查 / 设置页手动检查 / 启动时检查 pending
+触发：首启确认安装 / 设置页点击“更新到最新版本”
 
-1. GET https://registry.npmjs.org/@deepseek-ai/dsh
-2. 读取 dist-tags.latest
-3. semver 检查：latest 是否满足 pinned_range？
-   - 不满足 → 跳过（用户范围锁住了）
-   - 满足 → 继续
-4. latest == current？→ 跳过
-5. latest 在 ignored_versions？→ 跳过
-6. 读取 latest 的 package.json.engines.node
-   - 当前 Node 不满足 → 提示用户升级 Node，不自动升 dsh
-7. 创建 dsh/<latest>/ 目录
-8. 写 package.json，spawn npm install --prod
-9. 完整性校验
-10. 写 state.json：pending = latest
-11. 提示用户："新版本已就绪，重启后生效"
-    或配置了 auto_upgrade → 立即重启
-12. 下次启动时：
+1. GET <registry>/@deepseek-ai/dsh，读取 dist-tags.latest
+2. 校验 latest 对应的精确 manifest 存在，向用户显示该精确版本
+3. 用户点击安装时，将本次 latest 冻结为目标版本：
+   - 首启写入 bootstrap_plan.dsh_version
+   - 已运行环境在当前安装请求内使用该精确版本，重试不重新解析 latest
+4. 目标 == current → 不安装，显示“已是最新版本”
+5. 读取目标 package.json.engines.node：
+   - 当前 Node 不满足 → 阻止安装并明确提示需要的 Node 版本；不修改 current 或 pending
+6. 目标已经完整安装 → 写 pending = 目标，等待用户重启
+7. 否则创建 dsh/<target>/，写 package.json，spawn npm install --prod，并做完整性校验
+8. 安装或校验失败 → 清理目标目录，保留 current、known_good 与 pending
+9. 成功后写 pending = <target>，显示“版本已就绪，重启后生效”；不自动重启
+10. 下次启动时：
     - 尝试用 pending 版本启动
     - 成功 → current = pending，known_good = 旧 current，清除 pending
-    - 失败 → 回滚到 known_good，记录 ignored_versions
+    - 失败 → 回滚到 known_good，并把失败版本标记为 broken
 ```
+
+#### 可行性与边界
+
+- **数据来源已具备**：`dsh/registry.rs` 已能读取 `dist-tags.latest` 和精确 manifest。最新版本流程不需要向前端返回、排序或存储完整历史版本列表。
+- **安装一致性不变**：首次查询只用于显示；用户确认后将 `latest` 解析为精确版本并冻结到 `bootstrap_plan` 或当前安装请求，网络重试和重启都不会漂移目标。
+- **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；新版本仅在下一次启动验证成功后提升为 `current`。安装失败不改动当前版本，启动失败沿用 `known_good` 回滚。
+- **范围**：本期不提供 semver 范围输入、历史版本选择、后台轮询、自动下载或自动重启。未来若加入提醒，也只能提示当前 `latest`，仍须由用户明确点击更新。
 
 ### 5.4 Node 升级流程
 
@@ -301,33 +321,35 @@ src-tauri/src/
 ### 6.2 前端模块
 
 ```
-src/                          # React 或 Svelte
-├── App.tsx
-├── pages/
-│   ├── Main.tsx              # 主界面：iframe 或 webview 加载 dsh web
-│   ├── Settings.tsx          # 设置页
-│   ├── FirstRun.tsx          # 首启向导
-│   └── UpgradeDialog.tsx     # 升级提示
+src/
+├── App.vue                    # 按 phase 切换 bootstrap、启动遮罩和 dsh Web UI
 ├── components/
-│   ├── ProgressBar.tsx
-│   ├── VersionBadge.tsx
-│   └── MirrorSelector.tsx
-└── hooks/
-    ├── useDshStatus.ts
-    └── useUpgrade.ts
+│   ├── MainView.vue           # dsh Web UI 容器与启动状态
+│   ├── FirstRun.vue           # 原型 03 的双任务 bootstrap 界面
+│   ├── Settings.vue           # 设置页
+│   ├── UpgradeDialog.vue      # 升级提示
+│   ├── MirrorSelector.vue     # 仅失败恢复或设置页使用
+│   └── ui/                    # 自管 shadcn-vue 组件源码
+├── stores/
+│   └── launcher.ts            # phase、bootstrap_plan 投影、任务状态和 Host 生命周期
+├── composables/
+│   └── useTauriEvent.ts       # 下载、解压、dsh 安装进度事件
+└── lib/
+    ├── tauri.ts               # invoke 封装与 Tauri DTO
+    └── format.ts
 ```
 
 ## 7. 关键技术决策
 
 ### 7.1 为什么用 Tauri 而非 Electron
 
-| | Tauri | Electron（原版 dsh-desktop） |
-|---|---|---|
-| 包体积 | ~15 MB | ~100 MB |
-| 内存 | ~80 MB | ~200 MB |
-| Node 运行时 | 不自带 | 自带（可借用作 Node） |
-| 后端语言 | Rust | Node.js |
-| 自动更新 | 需自己实现 | electron-updater 现成 |
+|             | Tauri      | Electron（原版 dsh-desktop） |
+| ----------- | ---------- | ---------------------------- |
+| 包体积      | ~15 MB     | ~100 MB                      |
+| 内存        | ~80 MB     | ~200 MB                      |
+| Node 运行时 | 不自带     | 自带（可借用作 Node）        |
+| 后端语言    | Rust       | Node.js                      |
+| 自动更新    | 需自己实现 | electron-updater 现成        |
 
 选 Tauri 的代价是放弃 Electron 自带 Node，但这正是本项目的核心取舍——**用首启下载换小包体积**。
 
@@ -345,7 +367,7 @@ src/                          # React 或 Svelte
 dsh 依赖 Node 内部模块（[vendor/loader/src/internal.ts](./deepseek-harness-desktop/vendor/loader/src/internal.ts#L103-L129)）：
 
 ```ts
-require('internal/modules/esm/loader')  // 需要 --expose-internals
+require("internal/modules/esm/loader"); // 需要 --expose-internals
 ```
 
 Bun/Deno 不支持此特性。详见 [vendor/hmr/src/index.ts:121](./deepseek-harness-desktop/vendor/hmr/src/index.ts#L121)。
@@ -399,13 +421,14 @@ dsh 有 160 多个 workspace 依赖（见 [apps/desktop/runtime/package.json](./
 
 ## 9. 跨平台差异
 
-| 平台 | Node 路径 | 符号链接 | 签名 |
-|---|---|---|---|
-| macOS | `node-runtime/bin/node` | `symlink(2)` | Developer ID + 公证 |
+| 平台    | Node 路径               | 符号链接     | 签名                 |
+| ------- | ----------------------- | ------------ | -------------------- |
+| macOS   | `node-runtime/bin/node` | `symlink(2)` | Developer ID + 公证  |
 | Windows | `node-runtime\node.exe` | 用 JSON 指针 | Authenticode（待做） |
-| Linux | `node-runtime/bin/node` | `symlink(2)` | 无 |
+| Linux   | `node-runtime/bin/node` | `symlink(2)` | 无                   |
 
 macOS 额外处理：
+
 - 下载的 node 去除 `com.apple.quarantine` 扩展属性
 - Hardened Runtime 下要给 node 二进制单独签名
 - App Sandbox 要允许执行用户目录下的二进制（entitlements）
@@ -414,16 +437,13 @@ macOS 额外处理：
 
 设置页暴露：
 
-| 配置 | 默认值 | 说明 |
-|---|---|---|
-| `auto_upgrade` | `true` | dsh 新版本是否自动升级 |
-| `check_interval_hours` | `24` | 检查 dsh 更新间隔 |
-| `pinned_range` | `~0.1.0` | dsh 版本 semver 范围 |
-| `node_registry` | 按地区选 | Node 下载镜像 |
-| `npm_registry` | 按地区选 | npm 安装镜像 |
-| `crash_retry_limit` | `3` | 崩溃自动重试次数 |
-| `keep_versions` | `2` | 保留几个 dsh 版本（current + known_good + N） |
-| `working_directory` | 用户文档目录 | dsh 默认工作目录 |
+| 配置                | 默认值       | 说明                                          |
+| ------------------- | ------------ | --------------------------------------------- |
+| `node_registry`     | 按地区选     | Node 下载镜像                                 |
+| `npm_registry`      | 按地区选     | npm 安装镜像                                  |
+| `crash_retry_limit` | `3`          | 崩溃自动重试次数                              |
+| `keep_versions`     | `2`          | 保留几个 dsh 版本（current + known_good + N） |
+| `working_directory` | 用户文档目录 | dsh 默认工作目录                              |
 
 ## 11. 错误处理
 
@@ -431,15 +451,15 @@ macOS 额外处理：
 
 所有错误都给可操作的提示：
 
-| 场景 | 提示 |
-|---|---|
-| 无网络 | "无法连接网络，首次启动需要下载运行环境" |
-| 镜像源全失败 | "所有镜像源不可达，请检查网络或更换镜像源" |
-| Node 下载损坏 | "Node 下载文件校验失败，请重试" |
-| dsh 安装失败 | "dsh 安装失败（npm 错误信息），已清理" |
-| dsh 启动超时 | "dsh 90 秒内未启动完成，已回滚到旧版本" |
-| dsh 启动崩溃 | "dsh 启动后崩溃，已回滚。日志：<path>" |
-| 磁盘空间不足 | "磁盘空间不足，需要约 200 MB" |
+| 场景          | 提示                                       |
+| ------------- | ------------------------------------------ |
+| 无网络        | "无法连接网络，首次启动需要下载运行环境"   |
+| 镜像源全失败  | "所有镜像源不可达，请检查网络或更换镜像源" |
+| Node 下载损坏 | "Node 下载文件校验失败，请重试"            |
+| dsh 安装失败  | "dsh 安装失败（npm 错误信息），已清理"     |
+| dsh 启动超时  | "dsh 90 秒内未启动完成，已回滚到旧版本"    |
+| dsh 启动崩溃  | "dsh 启动后崩溃，已回滚。日志：<path>"     |
+| 磁盘空间不足  | "磁盘空间不足，需要约 200 MB"              |
 
 ### 11.2 日志
 
@@ -455,9 +475,9 @@ macOS 额外处理：
 strategy:
   matrix:
     include:
-      - os: macos-14          # arm64
+      - os: macos-14 # arm64
         target: aarch64-apple-darwin
-      - os: macos-13          # x64
+      - os: macos-13 # x64
         target: x86_64-apple-darwin
       - os: windows-latest
         target: x86_64-pc-windows-msvc
@@ -467,11 +487,11 @@ strategy:
 
 ### 12.2 产物
 
-| 平台 | 格式 | 签名 |
-|---|---|---|
-| macOS | `.dmg` + `.app` | Developer ID + notarize |
-| Windows | `.msi` 或 `.exe`（NSIS） | Authenticode（待做） |
-| Linux | `.AppImage` + `.deb` | 无 |
+| 平台    | 格式                     | 签名                    |
+| ------- | ------------------------ | ----------------------- |
+| macOS   | `.dmg` + `.app`          | Developer ID + notarize |
+| Windows | `.msi` 或 `.exe`（NSIS） | Authenticode（待做）    |
+| Linux   | `.AppImage` + `.deb`     | 无                      |
 
 ### 12.3 壳子自身升级
 
@@ -486,7 +506,7 @@ strategy:
 ## 13. 已知限制
 
 1. **首次启动必须联网**——下载 Node 和 dsh。后续离线可用。
-2. **dsh 的破坏性变更**——dsh 处于预览期，可能改 CLI 接口。靠版本范围锁 + 回滚兜底，但极端情况下仍需手动干预。
+2. **dsh 的破坏性变更**——dsh 处于预览期，可能改 CLI 接口。显式安装最新版本、`engines.node` 校验与回滚能降低风险，但极端情况下仍需手动干预。
 3. **Windows 符号链接**——普通用户权限下不能创建符号链接，用 JSON 指针替代，切换版本不是原子操作。
 4. **macOS 沙盒**——如果上架 App Store，沙盒限制可能阻止执行用户目录下的 node。非 App Store 分发用 Developer ID 签名可绕过。
 5. **dsh 依赖体积**——160+ 个 workspace 包，首次 `npm install` 较慢（30 秒–2 分钟），靠镜像源和进度条缓解。
@@ -505,10 +525,10 @@ strategy:
 
 ## 15. 里程碑
 
-| 阶段 | 内容 | 产出 |
-|---|---|---|
-| M1: 最小可用 | Tauri 壳子 + 系统 Node + 手动装 dsh | 能跑起来 |
-| M2: Node 托管 | 首启下载 Node + 版本管理 | 不依赖系统 Node |
-| M3: dsh 托管 | 自动拉取 dsh + 版本切换 | 核心目标达成 |
-| M4: 健壮性 | 回滚、崩溃恢复、日志、错误提示 | 可分发 |
-| M5: 发布 | 签名、公证、CI、镜像源 | 对外可用 |
+| 阶段          | 内容                                | 产出            |
+| ------------- | ----------------------------------- | --------------- |
+| M1: 最小可用  | Tauri 壳子 + 系统 Node + 手动装 dsh | 能跑起来        |
+| M2: Node 托管 | 首启下载 Node + 版本管理            | 不依赖系统 Node |
+| M3: dsh 托管  | 显式选择、安装 dsh + 版本切换       | 核心目标达成    |
+| M4: 健壮性    | 回滚、崩溃恢复、日志、错误提示      | 可分发          |
+| M5: 发布      | 签名、公证、CI、镜像源              | 对外可用        |

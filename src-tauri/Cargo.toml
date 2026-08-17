@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 
@@ -44,7 +44,6 @@ fs2 = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
-wiremock = "0.6"
 tokio = { version = "1", features = ["full", "test-util"] }
 futures = "0.3"
 

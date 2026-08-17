@@ -14,7 +14,7 @@ pub mod version;
 
 pub use download::{
     download_archive, download_with_retry, fetch_shasums, find_sha_in_shasums, parse_shasums_line,
-    verify_sha256, ProgressEvent, PROGRESS_CHUNK_BYTES,
+    verify_sha256, NodeDownloadOperations, ProgressEvent, PROGRESS_CHUNK_BYTES,
 };
 pub use install::{
     archive_kind_for_current_platform, current_node_dir, current_node_dir_in, current_node_version,
@@ -26,5 +26,6 @@ pub use mirror::{
     MirrorId, BUILTIN_MIRRORS, DEFAULT_NODE_INDEX_PATH,
 };
 pub use version::{
-    current_node_satisfies, parse_node_version, satisfies_engines, DEFAULT_NODE_VERSION,
+    current_node_satisfies, parse_node_version, resolve_bootstrap_node_target, satisfies_engines,
+    DEFAULT_NODE_VERSION,
 };

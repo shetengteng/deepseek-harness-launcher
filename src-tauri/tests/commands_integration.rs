@@ -1,9 +1,8 @@
 //! PR-004 推迟到 PR-005 的集成测试。对应测试设计 §PR-004。
 //!
-//! 策略：不引入 Tauri mock_app（依赖图复杂），直接调 `HostSupervisor` API 验证幂等性、
+//! 策略：直接调 `HostSupervisor` API 验证幂等性、
 //! `AlreadyShutdown` 错误路径、`HostSupervisorConfig` 默认值合理性。
-//! 完整的 `start_host` → 真实子进程链路需要 mock `spawn_dsh_web`，超出本集成测试范围，
-//! 由 supervisor.rs 的单元测试覆盖（append_output 截断、char boundary 等）。
+//! 完整的 `start_host` → 子进程链路在端到端测试中覆盖。
 //!
 //! 设计 §PR-004 已注明"集成测试推迟到 PR-005 前端骨架落地后"，这里覆盖的是 supervisor
 //! 在 commands 层暴露后仍可见的幂等性契约。

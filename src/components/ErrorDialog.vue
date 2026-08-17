@@ -14,7 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import type { LauncherErrorPayload } from "@/lib/tauri";
 
-type LastAction = "installNode" | "installDsh" | "startHost" | "shutdownHost" | null;
+type LastAction =
+  | "bootstrap"
+  | "installNode"
+  | "installDsh"
+  | "startHost"
+  | "shutdownHost"
+  | null;
 
 const props = defineProps<{
   /** 错误详情。非空时对话框打开。 */
@@ -42,12 +48,17 @@ const displayMessage = computed(() => {
 /** 是否显示技术详情折叠区（user_message 存在且与 message 不同时展示原始信息）。 */
 const hasTechnicalDetail = computed(() => {
   if (!props.error) return false;
-  return Boolean(props.error.user_message) && props.error.user_message !== props.error.message;
+  return (
+    Boolean(props.error.user_message) &&
+    props.error.user_message !== props.error.message
+  );
 });
 
 /** 重试按钮文案，根据失败的操作类型决定。 */
 const retryLabel = computed(() => {
   switch (props.lastFailedAction) {
+    case "bootstrap":
+      return "重新准备运行环境";
     case "installNode":
       return "重试安装 Node";
     case "installDsh":
@@ -89,13 +100,17 @@ function onDismiss() {
         v-if="hasTechnicalDetail"
         class="rounded border bg-muted/30 p-2 text-xs font-mono max-h-[120px] overflow-auto"
       >
-        <pre class="whitespace-pre-wrap break-words">{{ props.error?.message }}</pre>
+        <pre class="whitespace-pre-wrap break-words">{{
+          props.error?.message
+        }}</pre>
       </div>
       <div
         v-if="props.error?.data"
         class="rounded border bg-muted/30 p-2 text-xs font-mono max-h-[200px] overflow-auto"
       >
-        <pre class="whitespace-pre-wrap break-words">{{ JSON.stringify(props.error.data, null, 2) }}</pre>
+        <pre class="whitespace-pre-wrap break-words">{{
+          JSON.stringify(props.error.data, null, 2)
+        }}</pre>
       </div>
       <DialogFooter>
         <Button variant="outline" @click="onDismiss">关闭</Button>

@@ -122,6 +122,11 @@ export interface ProgressEvent {
   total: number | null;
 }
 
+/** dsh 安装阶段事件。对应 Rust `DshInstallProgressPayload`。 */
+export interface DshInstallProgressEvent {
+  stage: "resolving" | "downloading" | "installing" | "verifying";
+}
+
 /** 调 `list_mirrors`：返回内置镜像源。 */
 export function listMirrors(): Promise<MirrorInfo[]> {
   return invokeCommand<MirrorInfo[]>("list_mirrors");
@@ -137,6 +142,32 @@ export function probeMirrors(customUrls?: string[]): Promise<MirrorInfo> {
 /** 调 `validate_custom_mirror_command`：校验自定义源 URL。 */
 export function validateCustomMirror(url: string): Promise<MirrorInfo> {
   return invokeCommand<MirrorInfo>("validate_custom_mirror_command", { url });
+}
+
+/** 首启时冻结的 dsh 与 Node 安装计划。 */
+export interface BootstrapPlan {
+  dsh_version: string;
+  registry: string;
+  engines_node: string | null;
+  node_version: string;
+  requirement_source: "dsh-engines" | "launcher-verified-fallback";
+  resolved_at: string;
+  phase: string;
+}
+
+/** 当前 registry 中的 dsh `latest` 版本。 */
+export interface LatestDshVersion {
+  latest_version: string;
+}
+
+/** 查询当前可更新到的 dsh 版本。 */
+export function getLatestDshVersion(): Promise<LatestDshVersion> {
+  return invokeCommand<LatestDshVersion>("get_latest_dsh_version_command");
+}
+
+/** 冻结当前 `latest` 对应的 dsh 与 Node 安装计划。 */
+export function resolveBootstrapPlan(): Promise<BootstrapPlan> {
+  return invokeCommand<BootstrapPlan>("resolve_bootstrap_plan_command");
 }
 
 /** `install_node_command` 参数。 */
@@ -160,25 +191,22 @@ export function installNode(args: InstallNodeArgs): Promise<string> {
   });
 }
 
-/** 调 `install_dsh_command`：拉 registry → npm install → 校验 → promote_to_current。
- *  返回安装的 dsh 版本号。无参数：从 state 读 registry，从 dist-tags 拿 latest。 */
-export function installDsh(): Promise<string> {
-  return invokeCommand<string>("install_dsh_command");
+/** 安装冻结版本或 registry 当前的 `latest`。
+ * `deferActivation` 为 true 时只设为 pending，等待用户重启后试运行。 */
+export function installDsh(deferActivation = false): Promise<string> {
+  return invokeCommand<string>("install_dsh_command", { deferActivation });
 }
 
-// ─── PR-015/PR-016: 升级编排 + 设置页 ───
+// ─── 设置页状态与来源配置 ───
 
 /** dsh 状态详情，供设置页展示。对应 Rust `DshStateSnapshot`。 */
 export interface DshStateSnapshot {
   current: string | null;
   known_good: string | null;
   pending: string | null;
-  pinned_range: string;
-  auto_upgrade: boolean;
-  check_interval_hours: number;
+  node_mirror: string;
   registry: string;
   installed: InstalledDshInfo[];
-  ignored_versions: string[];
 }
 
 export interface InstalledDshInfo {
@@ -187,64 +215,19 @@ export interface InstalledDshInfo {
   status: string;
 }
 
-/** 升级检查结果。对应 Rust `UpgradeCheckResult`。 */
-export interface UpgradeCheckResult {
-  available: boolean;
-  version: string | null;
-  engines_node: string | null;
-  /** 有新版 dsh 但当前 Node 不满足 engines.node（PR-018）。前端先走 Node 升级流程。 */
-  node_block: NodeBlockInfo | null;
-}
-
-/** Node 版本阻塞详情（PR-018）。对应 Rust `NodeBlockInfo`。 */
-export interface NodeBlockInfo {
-  dsh_version: string;
-  engines_node: string;
-  current_node: string | null;
-  node_target: string;
-  mirror_base_url: string;
-}
-
 /** 调 `get_dsh_state`：返回 dsh 状态详情。 */
 export function getDshState(): Promise<DshStateSnapshot> {
   return invokeCommand<DshStateSnapshot>("get_dsh_state");
 }
 
-/** 调 `check_for_upgrade_command`：检查 registry 是否有可升级版本。 */
-export function checkForUpgrade(): Promise<UpgradeCheckResult> {
-  return invokeCommand<UpgradeCheckResult>("check_for_upgrade_command");
+/** 更新后续 Node.js 下载使用的来源。 */
+export function setNodeMirror(mirror: string): Promise<void> {
+  return invokeCommand<void>("set_node_mirror_command", { mirror });
 }
 
-/** 调 `prepare_upgrade_command`：下载安装新版本，设 pending。 */
-export function prepareUpgrade(): Promise<string> {
-  return invokeCommand<string>("prepare_upgrade_command");
-}
-
-// ─── PR-016: 设置管理命令 ───
-
-/** 更新 pinned_range。 */
-export function setPinnedRange(range: string): Promise<void> {
-  return invokeCommand<void>("set_pinned_range_command", { range });
-}
-
-/** 切换 auto_upgrade。 */
-export function setAutoUpgrade(enabled: boolean): Promise<void> {
-  return invokeCommand<void>("set_auto_upgrade_command", { enabled });
-}
-
-/** 更新检查间隔。 */
-export function setCheckInterval(hours: number): Promise<void> {
-  return invokeCommand<void>("set_check_interval_command", { hours });
-}
-
-/** 忽略指定版本。 */
-export function ignoreVersion(version: string): Promise<void> {
-  return invokeCommand<void>("ignore_version_command", { version });
-}
-
-/** 取消忽略指定版本。 */
-export function unignoreVersion(version: string): Promise<void> {
-  return invokeCommand<void>("unignore_version_command", { version });
+/** 更新后续 dsh 安装和更新使用的 npm 下载源。 */
+export function setRegistry(registry: string): Promise<void> {
+  return invokeCommand<void>("set_registry_command", { registry });
 }
 
 // ─── PR-019: 诊断导出 ───
@@ -252,4 +235,9 @@ export function unignoreVersion(version: string): Promise<void> {
 /** 调 `export_diagnostics`：打包 state.json + 日志为 zip。返回写入字节数。 */
 export function exportDiagnostics(dest: string): Promise<number> {
   return invokeCommand<number>("export_diagnostics", { dest });
+}
+
+/** 调 `uninstall_managed_runtime`：移除应用托管的 dsh、Node 和设置后退出应用。 */
+export function uninstallManagedRuntime(): Promise<void> {
+  return invokeCommand<void>("uninstall_managed_runtime");
 }

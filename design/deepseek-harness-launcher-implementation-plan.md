@@ -1,6 +1,6 @@
 # deepseek-harness-launcher 实施计划
 
-> 基于 [deepseek-harness-launcher 设计文档](./deepseek-harness-launcher-design.md) 与 [原型 v3](./deepseek-harness-launcher-prototype.html)，遵循 Rust + Tauri 最佳实践落地。
+> 基于 [deepseek-harness-launcher 设计文档](./deepseek-harness-launcher-design.md) 与 [原型 v4](./deepseek-harness-launcher-prototype.html)，遵循 Rust + Tauri 最佳实践落地。
 >
 > 目标读者：项目实施者（含 AI 编码代理）。本计划拆分到可独立验收的任务粒度，按里程碑串联。
 
@@ -23,23 +23,23 @@
 
 ## 1. 技术选型与版本基线
 
-| 组件 | 版本 | 备注 |
-|---|---|---|
-| Rust | 1.80+ stable | edition 2021 |
-| Tauri | 2.x | 使用 `tauri` + `tauri-cli` 2.0 正式版 |
-| 前端框架 | Vue 3 + TypeScript 5 | `<script setup>` 单文件组件 |
-| UI 组件 | shadcn-vue | 基于 Radix Vue + Tailwind，组件源码落到 `src/components/ui/` 自管 |
-| CSS | Tailwind CSS 3 | shadcn-vue 依赖；暗色 token 通过 CSS 变量切换 |
-| 构建 | Vite 5 | Tauri 默认前端管线 |
-| 状态管理 | Pinia | 替代 React 的 hooks 自管状态 |
-| 包管理 | pnpm | 与 dsh 仓一致 |
-| State 序列化 | `serde` + `serde_json` | `state.json` 结构见设计 §4.3 |
-| 子进程 | `tokio::process` + `tauri::async_runtime` | 异步监管 |
-| HTTP | `reqwest` (rustls) | 跨平台、避开 OpenSSL 依赖 |
-| Semver | `semver` crate | 处理 dsh `pinned_range` |
-| 解压 | `flate2` + `tar`（Unix）；`zip`（Windows） | Node tarball |
-| 日志 | `tracing` + `tracing-subscriber` + `tracing-appender` | 滚动文件 |
-| 错误 | `thiserror`（库内）+ `anyhow`（bin 内） | 见 §7 |
+| 组件         | 版本                                                  | 备注                                                              |
+| ------------ | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| Rust         | 1.80+ stable                                          | edition 2021                                                      |
+| Tauri        | 2.x                                                   | 使用 `tauri` + `tauri-cli` 2.0 正式版                             |
+| 前端框架     | Vue 3 + TypeScript 5                                  | `<script setup>` 单文件组件                                       |
+| UI 组件      | shadcn-vue                                            | 基于 Radix Vue + Tailwind，组件源码落到 `src/components/ui/` 自管 |
+| CSS          | Tailwind CSS 3                                        | shadcn-vue 依赖；暗色 token 通过 CSS 变量切换                     |
+| 构建         | Vite 5                                                | Tauri 默认前端管线                                                |
+| 状态管理     | Pinia                                                 | 替代 React 的 hooks 自管状态                                      |
+| 包管理       | pnpm                                                  | 与 dsh 仓一致                                                     |
+| State 序列化 | `serde` + `serde_json`                                | `state.json` 结构见设计 §4.3                                      |
+| 子进程       | `tokio::process` + `tauri::async_runtime`             | 异步监管                                                          |
+| HTTP         | `reqwest` (rustls)                                    | 跨平台、避开 OpenSSL 依赖                                         |
+| Semver       | `semver` crate                                        | Node `engines` 校验与 dsh 已发布版本排序                          |
+| 解压         | `flate2` + `tar`（Unix）；`zip`（Windows）            | Node tarball                                                      |
+| 日志         | `tracing` + `tracing-subscriber` + `tracing-appender` | 滚动文件                                                          |
+| 错误         | `thiserror`（库内）+ `anyhow`（bin 内）               | 见 §7                                                             |
 
 Tauri 插件：
 
@@ -90,13 +90,13 @@ deepseek-harness-launcher/
 │   │   ├── ProgressBar.vue     # 业务封装，基于 ui/progress
 │   │   ├── VersionBadge.vue    # 业务封装，基于 ui/badge
 │   │   ├── MirrorSelector.vue  # 业务封装，基于 ui/select
-│   │   └── TrayMenu.vue
-│   ├── stores/                 # Pinia
+│   │   ├── stores/                 # Pinia
 │   │   ├── launcher.ts
 │   │   └── upgrade.ts
 │   ├── composables/            # Vue 组合式函数
 │   │   ├── useTauriEvent.ts
-│   │   └── useDshStatus.ts
+│   │   ├── useDshStatus.ts
+│   │   └── useTrayEvents.ts    # 托盘事件，切换主窗口 / 设置视图
 │   └── lib/
 │       ├── tauri.ts            # invoke 封装与类型
 │       ├── utils.ts            # cn() = clsx + tailwind-merge
@@ -147,13 +147,13 @@ deepseek-harness-launcher/
 
 ## 3. 里程碑总览
 
-| 阶段 | 目标 | 验收 |
-|---|---|---|
-| M1 | 最小可用：Tauri 壳子 + 系统 Node + 手动装 dsh | 能在本机跑起 dsh web |
-| M2 | Node 托管 | 首启下载 Node 到用户目录，不依赖系统 Node |
-| M3 | dsh 托管 | 自动拉取、版本切换、`known_good` 回滚 |
-| M4 | 健壮性 | 崩溃恢复、错误提示、日志、镜像源切换 |
-| M5 | 发布 | 跨平台 CI、签名、公证、自动更新 |
+| 阶段 | 目标                                          | 验收                                      |
+| ---- | --------------------------------------------- | ----------------------------------------- |
+| M1   | 最小可用：Tauri 壳子 + 系统 Node + 手动装 dsh | 能在本机跑起 dsh web                      |
+| M2   | Node 托管                                     | 首启下载 Node 到用户目录，不依赖系统 Node |
+| M3   | dsh 托管                                      | 自动拉取、版本切换、`known_good` 回滚     |
+| M4   | 健壮性                                        | 崩溃恢复、错误提示、日志、镜像源切换      |
+| M5   | 发布                                          | 跨平台 CI、签名、公证、自动更新           |
 
 每个里程碑结束后：跑 `cargo test`、`pnpm test`、`pnpm build`，并更新 `CHANGELOG.md`。
 
@@ -260,9 +260,10 @@ deepseek-harness-launcher/
 - [x] 补齐 PR-004 推迟的 commands 集成测试（`tests/commands_integration.rs`，4 个用例：shutdown 幂等 / AlreadyShutdown / 错误 message / 默认超时合理性）
 
 **未实现（推迟到后续 PR）**：
+
 - macOS 风格 titlebar（推迟到 M3 前端设置页一起做）
 - `composables/useTauriEvent.ts`（M2 接入首启向导时按需写）
-- Tray 菜单（M4 崩溃恢复时一起做）
+- 系统托盘与窗口生命周期（M4.5；原型中的托盘视觉作为菜单信息架构参考，实际呈现遵循各平台原生菜单）
 - `tauri::RunEvent::ExitRequested` → shutdown 联动（M4 崩溃恢复一起做）
 
 **验收**：`cargo test` 59/59（commands 8 + host 27 + state 18 + 其他 2 + 集成 4）；`pnpm test` 24/24；`cargo clippy -- -D warnings` + `pnpm lint` + `pnpm build` 全绿。手动集成验证推迟到 M2 首启向导落地后。
@@ -304,9 +305,10 @@ deepseek-harness-launcher/
   - 覆盖：200+SHA 通过、404 错误、5xx 重试 3 次后 Err、SHA 不匹配 + 文件删除、进度事件触发（200KB 大文件）、重试一次后成功、SHASUMS 缺失 404、真实 archive 校验
 
 **验收**：`cargo test` 115/115（lib 93 + commands_integration 4 + mirror 9 + download 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿。
-  - `GET {mirror}/v{version}/node-v{version}-{platform}-{arch}.tar.gz`
-  - 流式下载，`reqwest::Response::bytes_stream()` → 写临时文件
-  - 通过 `tauri::Emitter::emit` 推 `download-progress` 事件（`{ stage, bytes, total }`）
+
+- `GET {mirror}/v{version}/node-v{version}-{platform}-{arch}.tar.gz`
+- 流式下载，`reqwest::Response::bytes_stream()` → 写临时文件
+- 通过 `tauri::Emitter::emit` 推 `download-progress` 事件（`{ stage, bytes, total }`）
 - [ ] SHA-256 校验：`GET {mirror}/v{version}/SHASUMS256.txt`，匹配同名条目
 - [ ] 失败重试：单镜像最多 2 次，全镜像失败抛 `NodeDownloadExhausted`
 - [ ] macOS 下载完成后调用 `xattr -d com.apple.quarantine`（Rust 用 `std::process::Command` 或 `xattr` crate）
@@ -327,7 +329,11 @@ deepseek-harness-launcher/
 - [ ] `satisfies_engines(node_version, engines_node_range) -> bool`：解析 dsh `package.json.engines.node`，用 `semver::VersionReq`
 - [ ] 默认目标版本：硬编码常量 `DEFAULT_NODE_VERSION = "v22.19.0"`（与 dsh engines 对齐，每发布前确认）
 
-### M2.5 首启向导（`FirstRun.vue`） ✅ PR-011 已完成
+### M2.5 首启向导（`FirstRun.vue`） ⚠️ PR-011 已完成，交互由 PR-020b 替换
+
+PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其“先选镜像 → 下载安装 Node → 手动安装 dsh → 手动启动”的交互不再是目标流程。保留其后端下载、校验、解压、镜像和事件能力；首启 UI、状态机及自动编排以 PR-020b 为准。
+
+#### 已完成基础设施
 
 - [x] 后端 Tauri 命令：
   - `list_mirrors`：返回内置镜像源 `MirrorInfo[]`
@@ -359,8 +365,8 @@ deepseek-harness-launcher/
 - [x] 组件测试 8 个（`FirstRun.test.ts`）：挂载显示选择器+下载按钮、downloading UI、extracting UI、done UI、failed UI + 重试、禁用按钮、dev 假安装触发
 - [x] MainView 测试更新：first_run 渲染向导（替换 DSH_CLI_ENTRY 占位）
 
-**验收**：
-- `cargo test` 136/136（lib 107 + commands_integration 4 + mirror 9 + download 9 + install 7）
+**历史验收（PR-011 基础设施）**：
+
 - `pnpm test` 56/56（launcher store 37 + ErrorDialog 5 + MainView 6 + FirstRun 8）
 - `cargo clippy -- -D warnings` + `cargo fmt --check` + `pnpm lint` 全绿
 - 手动验证：删除 `~/Library/Application Support/deepseek-harness-launcher/state.json` 后启动应用，进入首启向导，点"[dev] 假安装"按钮，state.json 写入 Node v22.19.0，phase 切到 idle，可启动 Host
@@ -380,7 +386,7 @@ deepseek-harness-launcher/
   - `PackageManifest { version, engines, dist }`：单版本完整 manifest
   - `PackageMetadata { name, dist_tags, versions }`：完整包元数据 + `manifest_for(version)` + `all_versions()`
 - [x] URL 拼接：`metadata_url(registry)` → `{registry}/@deepseek-ai/dsh`；`manifest_url(registry, version)` → 单版本端点
-- [x] 内置 registry 常量：`DEFAULT_REGISTRY_NPMJS = "https://registry.npmjs.org"`、`DEFAULT_REGISTRY_NPMMIRROR = "https://registry.npmmirror.com"`（state.json 默认值）
+- [x] 内置 registry 常量：`DEFAULT_REGISTRY_NPMJS = "https://registry.npmjs.org"`、`DEFAULT_REGISTRY_NPMMIRROR = "https://registry.npmmirror.com"`（新安装默认 npmjs，不覆盖用户既有 registry 设置）
 - [x] 包名常量：`DSH_PACKAGE_NAME = "@deepseek-ai/dsh"`（scope 写死）
 - [x] `fetch_package_metadata(registry, cache, client) -> Result<PackageMetadata>`：
   - 先查 `RegistryCache`（5min TTL），命中直接返回
@@ -421,7 +427,7 @@ deepseek-harness-launcher/
   - stdout/stderr 分别 tokio::spawn 按行读取 → log callback
   - 超时控制：`tokio::time::timeout`，超时 kill 子进程
   - Windows 加 `CREATE_NO_WINDOW`
-  - env_clear + 透传 PATH/HOME/USERPROFILE（剥离 DSH_*、TAURI_*、npm_*）
+  - env_clear + 透传 PATH/HOME/USERPROFILE（剥离 DSH__、TAURI__、npm_*）
   - 退出码非 0 → `Err(DshInstall("npm install failed: exit code N"))`
 - [x] `verify_install(opts)`：调用 `integrity::verify_entry_exists` 校验 `node_modules/@deepseek-ai/dsh/lib/bin.js`
 - [x] `install_dsh(opts)` 完整流程：write_package_json → run_npm_install → verify_install
@@ -522,7 +528,7 @@ deepseek-harness-launcher/
 
 **验收**：`cargo test` 249/249（lib 175 + commands 4 + mirror 9 + download 7 + install_dsh 12 + registry 14 + version_dsh 19 + 其他 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿；`cargo run --example version_dsh_demo` 输出完整升级回滚流程。
 
-### M3.3a 启动流程闭环修复（冒烟测试前置） ✅ PR-014a 已完成
+### M3.3a 启动流程闭环修复（历史记录，首启交互由 PR-020b 替换） ✅ PR-014a 已完成
 
 **背景**：在把 deepseek-harness-launcher 推到本机冒烟测试阶段时暴露 4 个阻塞性问题：
 
@@ -558,46 +564,65 @@ deepseek-harness-launcher/
 - `pnpm exec vue-tsc --noEmit` 通过（无类型错误）
 - 启动应用 → 首启向导 → 选镜像源 → 下载 Node → 显示"安装 dsh"按钮 → 点击安装 → 完成后显示"启动 Host" → 启动成功进入 dsh web
 
-**未完成项**（属于 PR-015/016 范畴，已完成）：
+**后续策略**：这段历史实现中的后台检查、自动下载与升级提示已由 PR-020c 收敛为仅更新当前 `latest`；`Settings.vue` 的通用设置布局继续复用。
 
-- ✅ `check_for_upgrade` 定时检查
-- ✅ 升级对话框 + 重启提示
-- ✅ `Settings.vue` 设置页
+### M3.3b 首启体验与原型 03 对齐 ✅ PR-020b
 
-### M3.4 升级流程编排 ✅ PR-015 已完成
+**目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，用户点击后才安装；不提供历史版本选择、范围规则或后台自动 dsh 升级。
 
-实现设计 §5.3 的状态机：
+- [x] 后端首启编排：
+  - `get_latest_dsh_version_command` 查询 registry 元数据，验证 `dist-tags.latest` 对应 manifest 后返回精确版本
+  - `resolve_bootstrap_plan_command()` 无入参，只把用户确认时的 `latest` 解析为精确 manifest、Node 目标并持久化 `bootstrap_plan`
+  - `install_node_command` 完成后将计划标记为 `node_installed`；`install_dsh_command` 只消费冻结的版本和 registry，不得在重试时重新读取 `latest`
+  - dsh 完整性校验成功后清除计划并自动调用 `start_host`；Host 就绪后进入 dsh Web UI
+  - `state.json` schema 迁移到 `3`：保留 Node、current、known_good、pending 和已安装版本；移除范围、轮询、自动升级和忽略版本字段
+- [x] 前端双任务 bootstrap 界面：
+  - 采用原型 03 的标题栏、标识、说明与两个任务卡，不展示通用 Card 向导和“步骤 N/M”计数
+  - dsh 任务卡显示 `latest` 解析出的精确版本和“开始安装”按钮；加载失败时显示可操作错误和重试
+  - 点击后冻结目标版本；Node 卡展示实际解析版本及状态：解析、下载、SHA-256 校验、解压、完成
+  - dsh 卡展示冻结的精确版本及状态：等待 Node、npm install、完整性校验、完成；仅在 npm 可报告可靠总量时展示百分比或剩余时间
+  - 下载源自动选择可信镜像；仅在对应任务失败时提供“重试 / 更换镜像源”恢复操作，`MirrorSelector` 不再占据首屏
+  - 删除“我已有 Node，手动指定路径”原型选项，不新增系统 Node 探测或路径配置
+- [x] 错误与恢复：
+  - registry 解析、Node 下载/校验、dsh 安装错误均定位到对应任务卡，并复用冻结计划重试
+  - Node 成功、dsh 失败时保留 Node 成功状态；重试只继续 dsh，不重复下载 Node
+  - 关闭并重开应用时读取 `bootstrap_plan`，恢复同一精确版本的未完成任务
+- [x] 测试与验收：
+  - Rust：`latest` manifest 校验、计划冻结/复用、Node engines 选择与 schema 迁移
+  - Vue：显示当前 `latest`、开始安装、双任务状态展示、任务级错误重试
+  - 手动：清除 `state.json` 后启动，确认显示最新精确版本；断网/安装失败后重试不改变已冻结版本
 
-- [x] `check_for_upgrade(state) -> Option<UpgradeCandidate>`：
-  - 距 `last_check` 超过 `check_interval_hours` 才查
-  - semver `pinned_range` 满足、不在 `ignored_versions`、不等于 current
-  - engines.node 满足当前 Node
-- [x] `prepare_upgrade(candidate) -> Result<()>`：下载安装新版本到 `dsh/<version>/`，写 `state.dsh.pending = version`
-- [ ] 下次启动时 `lifecycle::start_host`：
-  - 若 `pending` 存在，先尝试用 pending 版本启动
-  - 成功 → `promote_to_current(pending)`，旧 current 变 known_good
-  - 失败 → `rollback_to_known_good()`
-- [ ] `auto_upgrade` 为真：prepare 完成立即触发应用内重启；否则前端显示"重启生效"按钮
+### M3.4 显式安装最新 dsh ✅ PR-020c
 
-### M3.5 前端升级 UI ✅ PR-016 已完成
+**目标**：以用户明确点击“更新到最新版本”替代后台更新策略。应用只显示 registry 当前 `latest` 的精确版本，不提供历史版本列表或选择器。
 
-- [x] `Settings.vue`：
-  - 用 shadcn `Card` + `CardHeader` + `CardContent` 分区（运行时 / 升级策略 / 镜像源）
-  - 当前版本 + known_good + pending 三行 `Badge` 展示（default / secondary / outline 变体区分状态）
-  - `pinned_range` 用 shadcn `Input` + `Label`，blur 时校验合法 semver range
-  - "立即检查更新" 按钮（`Button` default）、"忽略此版本" 按钮（`Button` ghost）
-  - `auto_upgrade` 用 `Switch` + `Label`；`check_interval_hours` 用 `Input` type=number
-- [x] `UpgradeDialog.vue`：基于 shadcn `Dialog`，含"重启生效"（`Button` default）、"稍后"（`Button` outline）
-- [x] 后端设置管理命令：`set_pinned_range_command`、`set_auto_upgrade_command`、`set_check_interval_command`、`ignore_version_command`、`unignore_version_command`
-- [x] `stores/upgrade.ts`：升级状态管理（检查、安装、对话框控制）
-- [ ] 后台检查事件 `upgrade-available` 通过 `useTauriEvent` 推到 Pinia `upgrade` store（推迟到 M4 定时任务）
-- [ ] 升级就绪时用 shadcn `Toast` 提示（非阻塞）（推迟到 M4）
-- [ ] 新增 shadcn-vue 组件：`Tabs`（设置页分区）、`Tooltip`（版本徽章 hover 解释）、`Separator`（推迟到 UI 细化）
+- [x] 后端：
+  - `install_dsh_command` 在首启复用冻结计划，其他场景仅解析当前 `latest`，并复用 `engines.node` 校验、`install_dsh`、完整性校验和 `set_pending`
+  - 当前版本就是 `latest` 时前端禁用更新；安装完成且版本已存在时仍只设 `pending`
+  - 删除定时检查、候选计算、自动安装、自动重启、忽略版本以及相关 state、Tauri 命令和测试；日常启动不请求 registry
+  - Node 不兼容时不写 `pending` 或 `current`，并返回可操作错误
+- [x] 前端：
+  - 设置页保留当前、已验证和待切换版本徽章，展示当前 `latest`、刷新按钮和“更新到最新版本”按钮
+  - 用户未点击时不下载；安装失败保留显示的当前版本，并提示用户检查网络或 npm 下载源
+  - registry 请求失败时保留当前运行版本，并提供刷新；不阻塞 dsh 启动
+- [x] 可行性验证：
+  - `dsh/registry.rs` 已有 `dist-tags.latest`、精确 manifest、缓存和错误处理，无需排序或返回完整版本列表
+  - `dsh/install.rs` 已按精确版本创建隔离目录，`dsh/version.rs` 已支持 `pending`、`current`、`known_good` 和回滚；无需变更安装目录协议
+  - `semver` crate 仅用于 Node `engines` 校验，不再解释或排序用户提供的 dsh 版本
+- [x] 测试与验收：
+  - Rust：`latest` 精确 manifest 校验、Node 不兼容时不写 pending、安装失败不提升 current、回滚
+  - Vue：展示/刷新最新版本、同版本禁用更新、显式安装、网络错误时保留当前版本
+  - 手动：registry 发布新版本后，应用不主动下载；用户刷新、确认更新并重启后才切换
+
+### M3.5 既有升级功能的收敛
+
+PR-015 与 PR-016 的版本范围输入、轮询检查、自动下载、自动重启和“发现更新”对话框不再是产品功能。PR-020c 已删除相应的状态字段、Tauri 命令、Pinia action、事件监听和 UI 控件；保留 registry 查询、安装进度、版本指针与回滚实现。历史 PR 记录仅用于追溯，不代表当前需求。
 
 **验收**：
 
-- 手动构造 `state.dsh.current = "0.1.0-rc.5"`、`known_good = "0.1.0-rc.4"`，让 rc.6 启动失败，观察自动回滚到 rc.4 且 rc.6 进 `ignored_versions`
-- 模拟 registry 推 rc.7，观察 24h 后自动下载并提示重启
+- 设置页默认显示 `latest（<当前解析版本>）`，并允许选择任何可安装的精确版本
+- 没有用户操作时，启动应用或等待 24 小时均不发起 dsh registry 请求、下载或重启
+- 选择和安装新版本后，仍可在失败时回滚到 `known_good`
 
 ---
 
@@ -636,11 +661,27 @@ deepseek-harness-launcher/
 - [ ] 无网络识别：`reqwest::Error::is_connect`、`is_timeout` → 提示"无法连接网络"
 - [ ] 镜像源全失败：聚合每个源的错误信息，统一提示
 
+### M4.5 系统托盘与窗口生命周期
+
+原型中的托盘菜单定义信息架构：dsh 状态、显示主窗口、重启 dsh、检查更新、设置、关于、导出诊断日志和退出。实际实现使用 Tauri 2 的系统原生托盘菜单，不以 `TrayMenu.vue` 复刻 HTML/CSS 视觉，保证 macOS、Windows、Linux 的平台一致性与可访问性。
+
+- [ ] `Cargo.toml` 启用 Tauri tray 所需 API；`lib.rs` 用 `TrayIconBuilder` 创建应用图标和原生菜单
+- [ ] 菜单项与稳定 ID：禁用的状态行、`show-main-window`、`restart-dsh`、`check-dsh-update`、`open-settings`、`about`、`export-diagnostics`、分隔线、`quit`
+- [ ] `on_menu_event` 按菜单 ID 分发：显示并聚焦主窗口；发出 `tray-open-settings` / `tray-check-dsh-update` / `tray-about` 前端事件；复用现有 host 生命周期执行重启；复用诊断导出命令；退出前 `shutdown_host()`
+- [ ] `on_tray_icon_event`：左键点击显示并聚焦主窗口；右键及其他平台默认手势由原生菜单处理；不依赖仅 macOS 有效的手势
+- [ ] 前端新增 `useTrayEvents.ts`，在 `App.vue` 订阅托盘事件，打开既有设置、升级或关于视图；组件不得直接调用 tray API
+- [ ] Host 生命周期通过事件更新托盘状态行：启动中、运行中（携带当前 dsh 版本）和已停止/异常；状态行仅展示信息，不提供可点击操作
+- [ ] 拦截 `tauri::RunEvent::ExitRequested` 与主窗口关闭：默认隐藏主窗口并保留托盘和 dsh；用户从 `quit` 明确退出时执行 host shutdown 后再退出进程
+- [ ] 平台资源：补齐 `src-tauri/icons/` 的 tray 图标变体，macOS 模板图标保持单色，Windows/Linux 使用适配系统托盘的 16/32 px 图标
+
 **验收**：
 
-- 杀掉 dsh 子进程 3 次，观察弹窗
+- 杀掉 dsh 子进程 3 次，观察崩溃弹窗
 - 模拟 Node 下载文件被篡改（改 1 字节），SHA 校验失败
 - 磁盘满时显示对应提示
+- 启动后托盘显示“运行中”及当前 dsh 版本；重启 dsh 后状态依次变化为“启动中”与“运行中”
+- 从托盘显示主窗口、打开设置、检查更新和导出诊断日志，确认分别触发对应既有流程
+- 关闭主窗口后 dsh 持续运行；从托盘退出后 dsh 被关闭且应用进程退出
 
 ---
 
@@ -679,7 +720,7 @@ deepseek-harness-launcher/
 
 - [ ] 发布前 checklist 文件 `docs/release-checklist.md`：
   - 确认 `DEFAULT_NODE_VERSION` 与 dsh `engines.node` 对齐
-  - 确认默认 `pinned_range` 与最新 dsh 兼容
+  - 确认 registry 中的 `latest` 可解析为完整 manifest
   - 确认所有镜像源可达
   - 确认 macOS 公证通过
 - [ ] README 写明"首次启动必须联网"限制
@@ -693,7 +734,7 @@ deepseek-harness-launcher/
 ### 9.1 单元测试（Rust）
 
 - `host/readiness.rs`：复刻 `host-supervisor.ts` 的边界用例（无 URL、冲突 URL、非 loopback、无端口、超长输出截断）
-- `dsh/version.rs`：semver range 匹配、回滚状态机
+- `dsh/version.rs`：已发布版本排序、精确版本切换与回滚状态机
 - `node/install.rs`：用 fixture tarball 验证解压、SHA 失败
 - `state.rs`：并发写、损坏文件
 - `mirror.rs`：URL 拼接、自定义源校验
@@ -710,12 +751,12 @@ deepseek-harness-launcher/
 - Vitest + `@vue/test-utils` + `@testing-library/vue`：状态机切换、错误展示
 - Pinia store 用 `setActivePinia(createPinia())` 隔离测试
 - shadcn-vue 组件交互测试：`Dialog` 打开/关闭、`Select` 选项触发、`Switch` 切换回写 store
-- 关键交互（升级对话框、设置页）配快照测试
+- 关键交互（最新版本展示、安装确认、设置页）配快照测试
 
 ### 9.4 E2E
 
 - `tauri-driver` + WebdriverIO
-- 关键路径：首启 → 下载 → 主界面 → 设置 → 触发升级
+- 关键路径：首启 → 显示 `latest` 精确版本 → 下载 → 主界面 → 设置 → 确认更新最新版本
 - 放行到 CI 的 nightly job
 
 ---
@@ -726,6 +767,7 @@ deepseek-harness-launcher/
 > 标记说明：✅ 已完成 / 🚧 进行中 / ⬜ 未开始
 
 ### M1
+
 - ✅ PR-001 [M1] 初始化 Tauri + Vue 工程、CI 骨架（详见 §M1.1）
 - ✅ PR-002 [M1] `paths` + `state` + `error` + `logging`（详见 §M1.2）
 - ✅ PR-003 [M1] `host/readiness` + `host/supervisor` + `host/lifecycle` + 单元测试（原计划的 PR-004 已并入本 PR，详见 §M1.3）
@@ -733,6 +775,7 @@ deepseek-harness-launcher/
 - ✅ PR-005 [M1] 前端骨架：Pinia store + 状态机 + MainView + ErrorDialog + vitest（原 PR-006，详见 §M1.5）
 
 ### M2
+
 - ✅ PR-007 [M2] `mirror` 模块 + 探活（详见 §M2.1）
 - ✅ PR-008 [M2] `node/download` + SHA 校验 + 进度事件（详见 §M2.2 + §M2.4）
 - ✅ PR-009 [M2] `node/install` 跨平台解压 + 原子切换（详见 §M2.3）
@@ -740,20 +783,26 @@ deepseek-harness-launcher/
 - ✅ PR-011 [M2] 前端首启向导 + 镜像源选择器（详见 §M2.5）
 
 ### M3
+
 - ✅ PR-012 [M3] `dsh/registry` + 缓存（详见 §M3.1）
 - ✅ PR-013 [M3] `dsh/install` + npm 封装 + `dsh/integrity`（详见 §M3.2）
 - ✅ PR-014 [M3] `dsh/version`：指针切换 + 回滚 + 清理（详见 §M3.3）
 - ✅ PR-014a [M3] 启动流程闭环修复（冒烟测试前置）（详见 §M3.3a）
-- ✅ PR-015 [M3] 升级编排：`check_for_upgrade` + `prepare_upgrade` + 启动试运行
-- ✅ PR-016 [M3] 前端设置页 + 升级对话框 + 事件流
+- ⚠️ PR-015 [M3] 历史升级编排实现；由 PR-020c 删除并替换为显式版本安装
+- ⚠️ PR-016 [M3] 历史升级设置与对话框；由 PR-020c 收敛为最新版本更新 UI
+- ✅ PR-020b [M3] 首启 latest 展示 + 冻结安装计划（详见 §M3.3b）
+- ⬜ PR-020c [M3] 显式版本安装与切换，移除后台升级策略（详见 §M3.4）
 
 ### M4
+
 - ✅ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（`host/crash.rs` 计数窗口策略 + supervisor 自动重启 + `host-crash-limit`/`host-restarted` 事件 + 前端 `CrashDialog.vue` + store 恢复 actions）
-- ✅ PR-018 [M4] Node 升级流程（`check_for_upgrade` 返回 `node_block` + `resolve_node_target` 版本解析 + 设置页"升级 Node 并安装"流程）
+- ✅ PR-018 [M4] Node 升级基础设施；最新 dsh 更新的 Node 不兼容会阻止安装并保留当前版本
 - ✅ PR-019 [M4] 错误文案 + 诊断导出（`LauncherError::user_message` 中文文案 + `export_diagnostics` zip 打包 state.json/壳子日志/dsh 日志 + 设置页导出按钮）
 - ✅ PR-020 [M4] 磁盘/网络错误识别（`node/disk.rs` 200MB 下载前检查 + 下载错误文案区分网络/磁盘不足）
+- ⬜ PR-020a [M4] 系统托盘与窗口生命周期（原生 tray 菜单 + 状态同步 + 前端事件桥接 + 退出时 host shutdown，详见 §M4.5）
 
 ### M5
+
 - ⬜ PR-021 [M5] CI matrix + 缓存
 - ⬜ PR-022 [M5] macOS 签名 + 公证
 - ⬜ PR-023 [M5] Windows NSIS 打包
@@ -765,14 +814,14 @@ deepseek-harness-launcher/
 
 ## 11. 风险与对策
 
-| 风险 | 触发 | 对策 |
-|---|---|---|
-| dsh 破坏性 CLI 变更 | dsh 改了就绪行格式 | `readiness.rs` 严格校验 + 失败回滚 + 写 Agent Note 记录契约 |
-| Node 下载源全失败 | 区域性网络问题 | 多镜像源 + 用户自定义源 + 离线安装包作为后续开放问题 |
-| macOS 沙盒限制执行 node | App Store 分发 | M5 走 Developer ID 非 App Store 路线 |
-| Windows 符号链接无权限 | 普通用户账户 | 已在设计中决定用 `current.json` 指针，PR-014 验证 |
-| npm install 慢 | 160+ 依赖 | 进度条 + 日志 + 镜像源 + 后台预下载 |
-| 壳子升级与 dsh 升级冲突 | 同时触发 | 升级窗口互斥；壳子升级先完成再允许 dsh 升级 |
+| 风险                    | 触发               | 对策                                                        |
+| ----------------------- | ------------------ | ----------------------------------------------------------- |
+| dsh 破坏性 CLI 变更     | dsh 改了就绪行格式 | `readiness.rs` 严格校验 + 失败回滚 + 写 Agent Note 记录契约 |
+| Node 下载源全失败       | 区域性网络问题     | 多镜像源 + 用户自定义源 + 离线安装包作为后续开放问题        |
+| macOS 沙盒限制执行 node | App Store 分发     | M5 走 Developer ID 非 App Store 路线                        |
+| Windows 符号链接无权限  | 普通用户账户       | 已在设计中决定用 `current.json` 指针，PR-014 验证           |
+| npm install 慢          | 160+ 依赖          | 进度条 + 日志 + 镜像源 + 后台预下载                         |
+| 壳子升级与 dsh 升级冲突 | 同时触发           | 升级窗口互斥；壳子升级先完成再允许 dsh 升级                 |
 
 ---
 
