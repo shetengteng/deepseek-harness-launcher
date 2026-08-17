@@ -28,49 +28,51 @@ const updateAvailable = computed(
   <Card>
     <CardHeader><CardTitle class="text-base">运行环境</CardTitle></CardHeader>
     <CardContent class="space-y-3">
-      <div class="flex min-h-7 items-center justify-between gap-4">
-        <div class="text-sm">正在使用的 DeepSeek Harness 版本</div>
-        <div class="flex shrink-0 items-center gap-2">
-          <Badge v-if="dshState.current" variant="default">{{
-            dshState.current
-          }}</Badge
-          ><span v-else class="text-sm text-muted-foreground">尚未安装</span>
-          <Button
-            :variant="updateAvailable ? 'default' : 'outline'"
-            size="xs"
-            :disabled="refreshing || upgrading"
-            @click="updateAvailable ? $emit('install') : $emit('refresh')"
-            ><Download
-              v-if="updateAvailable"
-              class="mr-2 h-4 w-4"
-            /><RefreshCw
-              v-else
-              :class="['mr-2 h-4 w-4', refreshing && 'animate-spin']"
-            />{{
-              updateAvailable
-                ? upgrading
-                  ? "安装中…"
-                  : "安装新版本"
-                : refreshing
-                  ? "刷新中…"
-                  : "刷新"
-            }}</Button
-          >
+      <div class="space-y-1">
+        <div class="flex min-h-7 items-center justify-between gap-4">
+          <div class="text-sm">正在使用的 DeepSeek Harness 版本</div>
+          <div class="flex shrink-0 items-center gap-2">
+            <Badge v-if="dshState.current" variant="default">{{
+              dshState.current
+            }}</Badge
+            ><span v-else class="text-sm text-muted-foreground">尚未安装</span>
+            <Button
+              :variant="updateAvailable ? 'default' : 'outline'"
+              size="xs"
+              :disabled="refreshing || upgrading"
+              @click="updateAvailable ? $emit('install') : $emit('refresh')"
+              ><Download
+                v-if="updateAvailable"
+                class="mr-2 h-4 w-4"
+              /><RefreshCw
+                v-else
+                :class="['mr-2 h-4 w-4', refreshing && 'animate-spin']"
+              />{{
+                updateAvailable
+                  ? upgrading
+                    ? "安装中…"
+                    : "安装新版本"
+                  : refreshing
+                    ? "刷新中…"
+                    : "刷新"
+              }}</Button
+            >
+          </div>
         </div>
-      </div>
-      <div
-        class="flex min-h-7 items-center"
-        data-testid="dsh-update-status"
-      >
-        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <p v-else-if="updateAvailable" class="text-sm text-muted-foreground">
-          可更新版本：<span class="font-mono">{{
-            latestVersion?.latest_version
-          }}</span>
-        </p>
-        <p v-else class="text-sm text-muted-foreground" role="status">
-          已是最新版本
-        </p>
+        <div
+          class="flex min-h-7 items-center"
+          data-testid="dsh-update-status"
+        >
+          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+          <p v-else-if="updateAvailable" class="text-sm text-muted-foreground">
+            可更新版本：<span class="font-mono">{{
+              latestVersion?.latest_version
+            }}</span>
+          </p>
+          <p v-else class="text-sm text-muted-foreground" role="status">
+            已是最新版本
+          </p>
+        </div>
       </div>
       <div class="flex items-center justify-between gap-4">
         <div>
