@@ -45,7 +45,7 @@
 | 前端框架     | Vue 3 + TypeScript 5                                  | `<script setup>` 单文件组件                                       |
 | UI 组件      | shadcn-vue                                            | 基于 Radix Vue + Tailwind，组件源码落到 `src/components/ui/` 自管 |
 | CSS          | Tailwind CSS 3                                        | shadcn-vue 依赖；暗色 token 通过 CSS 变量切换                     |
-| 构建         | Vite 5                                                | Tauri 默认前端管线                                                |
+| 构建         | Vite 6                                                | Tauri 默认前端管线                                                |
 | 状态管理     | Pinia                                                 | 替代 React 的 hooks 自管状态                                      |
 | 包管理       | pnpm                                                  | 与 dsh 仓一致                                                     |
 | State 序列化 | `serde` + `serde_json`                                | `state.json` 结构见设计 §4.3                                      |
@@ -703,7 +703,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
   - 确认 registry 中的 `latest` 可解析为完整 manifest
   - 确认所有镜像源可达
   - 确认 macOS 公证通过
-- [ ] README 写明"首次启动必须联网"限制
+- [x] README 写明“首次启动必须联网”限制与当前发布状态
 
 **验收**：在干净 macOS / Windows / Linux 机器上安装冷启动，全流程跑通；CI 跑 matrix 全绿。
 
@@ -778,7 +778,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 - ⬜ PR-023 [M5] Windows NSIS 打包
 - ⬜ PR-024 [M5] Linux AppImage + deb
 - ⬜ PR-025 [M5] 壳子自动更新 + `latest.json` 发布
-- ⬜ PR-026 [M5] 发布检查清单 + README
+- 🚧 PR-026 [M5] 发布检查清单 + README（README 已补齐，发布检查清单待创建）
 
 ---
 
