@@ -5,8 +5,8 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Terminal } from "lucide-vue-next";
 import { getAboutInfo, type AboutInfo } from "@/lib/tauri";
+import LauncherIcon from "@/components/LauncherIcon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -57,10 +57,8 @@ watch(
       class="h-[640px] w-[640px] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] content-start gap-6 overflow-y-auto"
     >
       <section class="space-y-2 text-center">
-        <div
-          class="mx-auto flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"
-        >
-          <Terminal aria-hidden="true" class="size-6" />
+        <div class="mx-auto flex size-16 items-center justify-center">
+          <LauncherIcon class="size-16" />
         </div>
         <DialogTitle class="text-base">deepseek-harness-launcher</DialogTitle>
         <p class="font-mono text-xs text-muted-foreground">

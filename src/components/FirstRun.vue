@@ -5,7 +5,6 @@ import {
   Loader2,
   Package,
   RotateCcw,
-  Terminal,
 } from "lucide-vue-next";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import MirrorSelector from "@/components/MirrorSelector.vue";
+import LauncherIcon from "@/components/LauncherIcon.vue";
 import { useFirstRunWizard } from "@/composables/useFirstRunWizard";
 
 const {
@@ -43,10 +43,8 @@ const {
       class="w-[460px] max-w-full overflow-hidden rounded-lg bg-card shadow-2xl"
     >
       <div class="flex flex-col gap-[18px] p-[30px]">
-        <div
-          class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
-        >
-          <Terminal class="h-6 w-6" />
+        <div class="flex size-16 shrink-0 items-center justify-center">
+          <LauncherIcon class="size-16" />
         </div>
         <div>
           <h1 class="text-lg font-semibold tracking-tight">正在准备运行环境</h1>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import { RefreshCw } from "lucide-vue-next";
+import LauncherIcon from "@/components/LauncherIcon.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
@@ -182,18 +182,24 @@ watch(
 
 <template>
   <div
-    class="settings-panel flex min-h-0 flex-1 flex-col overflow-y-auto px-7 py-6"
+    class="settings-panel relative flex min-h-0 flex-1 flex-col overflow-y-auto px-7 py-6"
   >
-    <div class="space-y-4">
-      <div
-        v-if="loading"
-        class="flex min-h-48 items-center justify-center text-muted-foreground"
-        role="status"
-      >
-        <RefreshCw aria-hidden="true" class="h-5 w-5 animate-spin" />
+    <div
+      v-if="loading"
+      class="absolute inset-0 flex items-center justify-center"
+      role="status"
+    >
+      <section class="flex flex-col items-center gap-[18px]">
+        <LauncherIcon aria-hidden="true" class="size-16 shrink-0 animate-none" />
+        <span
+          aria-hidden="true"
+          class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary"
+        />
         <span class="sr-only">正在加载设置</span>
-      </div>
-      <div v-else-if="!dshState" class="text-muted-foreground text-sm">
+      </section>
+    </div>
+    <div v-else class="space-y-4">
+      <div v-if="!dshState" class="text-muted-foreground text-sm">
         无法加载设置
       </div>
       <template v-else>

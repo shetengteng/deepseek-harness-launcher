@@ -92,12 +92,10 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         ],
     )?;
     let status_for_events = status.clone();
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| std::io::Error::other("default application icon is missing"))?;
+    let icon = tauri::include_image!("./icons/tray-icon.png");
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
+        .icon_as_template(false)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
