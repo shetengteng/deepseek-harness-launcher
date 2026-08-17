@@ -37,6 +37,10 @@ function handleUpgradeReady(origin: string): void {
   store.setHostReady(origin);
 }
 
+function handleNodeUpdated(version: string): void {
+  store.nodeVersion = version;
+}
+
 useTrayEvents({
   openSettings: () => {
     showSettings.value = true;
@@ -186,6 +190,7 @@ onMounted(async () => {
           :host-origin="store.origin"
           :export-diagnostics-request="exportDiagnosticsRequest"
           @upgrade-ready="handleUpgradeReady"
+          @node-updated="handleNodeUpdated"
         />
       </DialogContent>
     </Dialog>

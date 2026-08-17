@@ -6,6 +6,7 @@ const api = vi.hoisted(() =>
     [
       "getDshState",
       "getLatestDshVersion",
+      "getNodeUpdateTarget",
       "installDshCli",
       "installDsh",
       "upgradeNode",
@@ -111,6 +112,60 @@ test("shows the current DeepSeek Harness IP address and port", async () => {
 
   expect(wrapper.text()).toContain("运行 IP 与端口");
   expect(wrapper.text()).toContain("127.0.0.1:51842");
+});
+
+test("updates only Node after the manual confirmation", async () => {
+  api.getNodeUpdateTarget.mockResolvedValue({
+    current_version: "22.19.0",
+    target_version: "24.4.0",
+    engines_node: ">=22.0.0",
+    update_available: true,
+  });
+  api.upgradeNode.mockResolvedValue("24.4.0");
+  const wrapper = mount(Settings, {
+    attachTo: document.body,
+    props: { nodeVersion: "22.19.0" },
+  });
+  await flushPromises();
+
+  await button(wrapper, "更新 Node").trigger("click");
+  await flushPromises();
+
+  expect(api.getNodeUpdateTarget).toHaveBeenCalledOnce();
+  expect(document.body.textContent).toContain("更新 Node.js");
+  expect(document.body.textContent).toContain("24.4.0");
+  expect(api.upgradeNode).not.toHaveBeenCalled();
+
+  [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.trim() === "仅更新 Node")
+    ?.click();
+  await flushPromises();
+
+  expect(api.upgradeNode).toHaveBeenCalledWith({
+    version: "24.4.0",
+    operationId: expect.any(String),
+  });
+  expect(api.installDsh).not.toHaveBeenCalled();
+  expect(api.restartHostAfterDshUpdate).not.toHaveBeenCalled();
+  expect(wrapper.emitted("nodeUpdated")?.[0]).toEqual(["24.4.0"]);
+  wrapper.unmount();
+});
+
+test("does not offer a manual Node install when the compatible target is current", async () => {
+  api.getNodeUpdateTarget.mockResolvedValue({
+    current_version: "24.4.0",
+    target_version: "24.4.0",
+    engines_node: ">=22.0.0",
+    update_available: false,
+  });
+  const wrapper = mount(Settings, { props: { nodeVersion: "24.4.0" } });
+  await flushPromises();
+
+  await button(wrapper, "更新 Node").trigger("click");
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("已是 dsh 兼容范围内的最新版本");
+  expect(api.upgradeNode).not.toHaveBeenCalled();
 });
 
 test("installs the dsh command and shows the PATH instructions", async () => {

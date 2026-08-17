@@ -81,10 +81,26 @@ pub async fn resolve_bootstrap_node_target(
         return Ok((DEFAULT_NODE_VERSION.to_string(), "dsh-engines".to_string()));
     }
 
+    let target = resolve_latest_node_target(engines_node, platform, arch, client).await?;
+    Ok((target, "dsh-engines".to_string()))
+}
+
+/// 解析满足 dsh `engines.node` 的最新稳定 Node 版本。
+pub async fn resolve_latest_node_target(
+    engines_node: &str,
+    platform: &str,
+    arch: &str,
+    client: &reqwest::Client,
+) -> Result<String> {
     let requirement = VersionReq::parse(engines_node).map_err(|error| {
         LauncherError::NodeVersion(format!("invalid engines.node '{engines_node}': {error}"))
     })?;
-    let releases = client
+    let releases = fetch_node_releases(client).await?;
+    select_latest_node_release(releases, &requirement, platform, arch)
+}
+
+async fn fetch_node_releases(client: &reqwest::Client) -> Result<Vec<NodeRelease>> {
+    client
         .get("https://nodejs.org/dist/index.json")
         .send()
         .await
@@ -99,10 +115,17 @@ pub async fn resolve_bootstrap_node_target(
         .await
         .map_err(|error| {
             LauncherError::NodeDownload(format!("parse Node release index failed: {error}"))
-        })?;
+        })
+}
 
+fn select_latest_node_release(
+    releases: Vec<NodeRelease>,
+    requirement: &VersionReq,
+    platform: &str,
+    arch: &str,
+) -> Result<String> {
     let artifact = node_archive_artifact(platform, arch)?;
-    let target = releases
+    releases
         .into_iter()
         .filter_map(|release| {
             let version = parse_node_version(&release.version).ok()?;
@@ -115,13 +138,12 @@ pub async fn resolve_bootstrap_node_target(
             Some(version)
         })
         .max()
+        .map(|version| version.to_string())
         .ok_or_else(|| {
             LauncherError::NodeVersion(format!(
-                "no published Node release for {platform}/{arch} satisfies '{engines_node}'"
+                "no published Node release for {platform}/{arch} satisfies '{requirement}'"
             ))
-        })?;
-
-    Ok((target.to_string(), "dsh-engines".to_string()))
+        })
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,6 +242,38 @@ mod tests {
         assert!(satisfies_engines(&v, "22.x").unwrap());
         let v_other = parse_node_version("23.0.0").unwrap();
         assert!(!satisfies_engines(&v_other, "22.x").unwrap());
+    }
+
+    #[test]
+    fn picks_the_latest_stable_release_with_the_requested_artifact() {
+        let releases = vec![
+            NodeRelease {
+                version: "v24.1.0".to_string(),
+                files: vec!["osx-arm64-tar".to_string()],
+            },
+            NodeRelease {
+                version: "v24.2.0-rc.1".to_string(),
+                files: vec!["osx-arm64-tar".to_string()],
+            },
+            NodeRelease {
+                version: "v24.2.0".to_string(),
+                files: vec!["osx-x64-tar".to_string()],
+            },
+            NodeRelease {
+                version: "v24.0.0".to_string(),
+                files: vec!["osx-arm64-tar".to_string()],
+            },
+        ];
+
+        let version = select_latest_node_release(
+            releases,
+            &VersionReq::parse(">=24.0.0").unwrap(),
+            "darwin",
+            "arm64",
+        )
+        .unwrap();
+
+        assert_eq!(version, "24.1.0");
     }
 
     #[test]

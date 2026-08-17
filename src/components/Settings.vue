@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { listen } from "@tauri-apps/api/event";
 import LauncherIcon from "@/components/LauncherIcon.vue";
 import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -15,9 +17,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  cancelNodeInstall,
   exportDiagnostics,
   getDshState,
   getLatestDshVersion,
+  getNodeUpdateTarget,
   installDshCli,
   installDsh,
   listMirrors,
@@ -31,10 +35,15 @@ import {
   type DshCliInstallResult,
   type LatestDshVersion,
   type MirrorInfo,
+  type NodeUpdateTarget,
   type NodeUpgradeRequired,
+  type ProgressEvent,
 } from "@/lib/tauri";
 
-const emit = defineEmits<{ upgradeReady: [origin: string] }>();
+const emit = defineEmits<{
+  upgradeReady: [origin: string];
+  nodeUpdated: [version: string];
+}>();
 const props = withDefaults(
   defineProps<{
     nodeVersion?: string | null;
@@ -64,6 +73,16 @@ const confirmingUninstall = ref(false);
 const uninstalling = ref(false);
 const uninstallError = ref<string | null>(null);
 const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
+const manualNodeTarget = ref<NodeUpdateTarget | null>(null);
+const preparingNodeUpdate = ref(false);
+const updatingNode = ref(false);
+const manualNodeUpdateError = ref<string | null>(null);
+const nodeUpdateStage = ref<"downloading" | "extracting" | "complete">("downloading");
+const nodeDownloadProgress = ref<{ bytes: number; total: number | null }>({
+  bytes: 0,
+  total: null,
+});
+const nodeUpdateOperationId = ref<string | null>(null);
 const installingDshCli = ref(false);
 const dshCliInstall = ref<DshCliInstallResult | null>(null);
 const dshCliError = ref<string | null>(null);
@@ -72,6 +91,23 @@ const messageOf = (error: unknown) =>
   typeof error === "object" && error !== null && "message" in error
     ? String((error as { message: unknown }).message)
     : String(error);
+
+const nodeUpdateProgress = computed(() => {
+  if (nodeUpdateStage.value === "complete") return 100;
+  if (nodeUpdateStage.value === "extracting") return 92;
+  const { bytes, total } = nodeDownloadProgress.value;
+  return total && total > 0 ? Math.min(90, Math.round((bytes / total) * 90)) : 8;
+});
+
+const nodeUpdateMessage = computed(() => {
+  if (nodeUpdateStage.value === "complete") return "已完成原子切换";
+  if (nodeUpdateStage.value === "extracting") return "正在解压、校验并切换 Node.js…";
+  return "正在下载并校验 Node.js 运行时…";
+});
+
+const nodeUpdateActionLabel = computed(() =>
+  manualNodeTarget.value?.update_available ? "仅更新 Node" : "重新安装 Node",
+);
 
 async function loadDshState(): Promise<void> {
   loading.value = true;
@@ -148,6 +184,51 @@ async function confirmNodeUpgrade(): Promise<void> {
 
 function cancelNodeUpgrade(): void {
   nodeUpgrade.value = null;
+}
+
+async function prepareNodeUpdate(): Promise<void> {
+  if (preparingNodeUpdate.value || updatingNode.value || upgrading.value) return;
+  preparingNodeUpdate.value = true;
+  manualNodeUpdateError.value = null;
+  try {
+    const target = await getNodeUpdateTarget();
+    manualNodeTarget.value = target;
+  } catch (error) {
+    manualNodeUpdateError.value = messageOf(error);
+  } finally {
+    preparingNodeUpdate.value = false;
+  }
+}
+
+function cancelManualNodeUpdate(): void {
+  if (updatingNode.value) return;
+  manualNodeTarget.value = null;
+  manualNodeUpdateError.value = null;
+}
+
+async function confirmManualNodeUpdate(): Promise<void> {
+  const target = manualNodeTarget.value;
+  if (!target || updatingNode.value || upgrading.value) return;
+  updatingNode.value = true;
+  manualNodeUpdateError.value = null;
+  nodeUpdateStage.value = "downloading";
+  nodeDownloadProgress.value = { bytes: 0, total: null };
+  const operationId = crypto.randomUUID();
+  nodeUpdateOperationId.value = operationId;
+  try {
+    const version = await upgradeNode({
+      version: target.target_version,
+      operationId,
+    });
+    nodeUpdateStage.value = "complete";
+    manualNodeTarget.value = null;
+    emit("nodeUpdated", version);
+  } catch (error) {
+    manualNodeUpdateError.value = messageOf(error);
+  } finally {
+    nodeUpdateOperationId.value = null;
+    updatingNode.value = false;
+  }
 }
 
 async function finishLatestInstall(): Promise<void> {
@@ -277,8 +358,11 @@ watch(
           :refreshing="versionsLoading"
           :upgrading="upgrading"
           :error="upgradeError"
+          :node-update-loading="preparingNodeUpdate || updatingNode || upgrading"
+          :node-update-error="manualNodeUpdateError"
           @refresh="refreshLatestDshVersion"
           @install="installLatestDsh"
+          @update-node="prepareNodeUpdate"
         />
         <SettingsCommandCard
           :installing="installingDshCli"
@@ -329,6 +413,38 @@ watch(
           </Button>
           <Button :disabled="upgrading" @click="confirmNodeUpgrade">
             {{ upgrading ? "升级中…" : "确认升级并继续" }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="manualNodeTarget !== null">
+      <DialogContent
+        class="sm:max-w-[420px]"
+        @escape-key-down.prevent
+        @pointer-down-outside.prevent
+      >
+        <DialogHeader>
+          <DialogTitle>更新 Node.js</DialogTitle>
+          <DialogDescription v-if="manualNodeTarget">
+            将从 {{ manualNodeTarget.current_version }} 更新至
+            {{ manualNodeTarget.target_version }}。该操作只更新 Node.js，不安装或切换 dsh，
+            运行中的 dsh 会继续使用当前进程。
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          v-if="manualNodeTarget"
+          class="rounded-md border bg-muted/30 px-3 py-2 text-sm"
+        >
+          <span class="text-muted-foreground">兼容要求：</span>
+          <span class="font-mono text-xs">{{ manualNodeTarget.engines_node }}</span>
+        </div>
+        <DialogFooter class="gap-2 sm:gap-2">
+          <Button variant="outline" :disabled="updatingNode" @click="cancelManualNodeUpdate">
+            取消
+          </Button>
+          <Button :disabled="updatingNode" @click="confirmManualNodeUpdate">
+            {{ updatingNode ? "更新中…" : "仅更新 Node" }}
           </Button>
         </DialogFooter>
       </DialogContent>

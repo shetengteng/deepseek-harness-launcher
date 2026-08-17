@@ -28,6 +28,6 @@ pub use mirror::{
     MirrorId, BUILTIN_MIRRORS, DEFAULT_NODE_INDEX_PATH,
 };
 pub use version::{
-    current_node_satisfies, parse_node_version, resolve_bootstrap_node_target, satisfies_engines,
-    DEFAULT_NODE_VERSION,
+    current_node_satisfies, parse_node_version, resolve_bootstrap_node_target,
+    resolve_latest_node_target, satisfies_engines, DEFAULT_NODE_VERSION,
 };

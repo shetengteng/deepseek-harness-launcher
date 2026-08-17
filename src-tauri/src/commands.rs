@@ -30,7 +30,8 @@ pub use host::{
 };
 pub use maintenance::{rollback_dsh_command, uninstall_managed_runtime};
 pub use node_install::{
-    cancel_node_install_command, install_node_command, upgrade_node_command, InstallNodeArgs,
+    cancel_node_install_command, get_node_update_target_command, install_node_command,
+    upgrade_node_command, InstallNodeArgs, NodeUpdateTarget,
 };
 pub use recovery::{
     decide_after_crash, spawn_crash_recovery, CrashAction, CrashLimitPayload, HostRestartedPayload,

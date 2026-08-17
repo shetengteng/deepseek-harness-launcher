@@ -29,6 +29,8 @@ shim 不记录具体版本：每次运行时读取启动器数据目录的 Node 
 
 使用当前指针使 dsh 回滚和升级自动生效。启动器和 shim 都继承 `DSH_HOME`；未设置时 dsh 默认使用 `$HOME/.dsh`，所以 profile 与插件目录保持一致。
 
+`dsh plugin` 会在 profile 目录直接调用 `pnpm`。启动器在数据目录的 `bin/` 下同时生成一个 `pnpm` wrapper；它通过托管 Node 自带的 Corepack 执行 `pnpm`。dsh shim 和 GUI Host 启动时均会把该目录置于 `PATH` 首位，因此不要求用户单独全局安装 pnpm。
+
 ## 安全与错误处理
 
 - 如果 dsh 或 Node 尚未安装，拒绝创建 shim 并提示完成首次启动向导。
@@ -39,7 +41,7 @@ shim 不记录具体版本：每次运行时读取启动器数据目录的 Node 
 
 ## 测试
 
-- 覆盖 Unix shim 的版本解析、参数透传、路径转义与缺失运行时错误。
+- 覆盖 Unix shim 的版本解析、参数透传、Corepack/pnpm 调用、路径转义与缺失运行时错误。
 - 覆盖拒绝覆盖非启动器文件、允许更新已有 shim 和可执行权限。
 - 覆盖 Tauri 命令返回的路径与 PATH 提示。
 - 前端组件测试按钮状态、成功提示和错误展示。

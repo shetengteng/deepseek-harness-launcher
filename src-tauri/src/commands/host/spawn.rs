@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{LauncherError, Result};
@@ -60,7 +61,13 @@ async fn build_spawn_options_in(
             ),
         });
     }
+    let data_dir = dsh_dir.parent().ok_or_else(|| LauncherError::PathResolve {
+        what: "data_dir",
+        cause: format!("dsh directory has no parent: {}", dsh_dir.display()),
+    })?;
+    let managed_bin = crate::cli_shim::prepare_runtime_support(data_dir)?;
     let mut env = crate::host::filtered_env();
+    prepend_path(&mut env, &managed_bin)?;
     env.insert(
         "DSH_CLI_ENTRY".to_string(),
         cli_entry.to_string_lossy().into_owned(),
@@ -72,6 +79,19 @@ async fn build_spawn_options_in(
         env,
         electron_run_as_node: false,
     })
+}
+
+fn prepend_path(env: &mut HashMap<String, String>, directory: &Path) -> Result<()> {
+    let mut entries = vec![directory.to_path_buf()];
+    if let Some(path) = env.get("PATH") {
+        entries.extend(std::env::split_paths(path));
+    }
+    let path = std::env::join_paths(entries).map_err(|error| LauncherError::PathResolve {
+        what: "PATH",
+        cause: error.to_string(),
+    })?;
+    env.insert("PATH".to_string(), path.to_string_lossy().into_owned());
+    Ok(())
 }
 
 #[cfg(test)]
@@ -114,5 +134,10 @@ mod tests {
         assert!(options
             .cli_entry
             .ends_with("node_modules/@deepseek-ai/dsh/lib/bin.js"));
+        assert!(options
+            .env
+            .get("PATH")
+            .is_some_and(|path| path.starts_with(&temp.path().join("bin").display().to_string())));
+        assert!(temp.path().join("bin/pnpm").is_file());
     }
 }

@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 
 use crate::commands::host::host_platform_arch;
@@ -14,6 +14,15 @@ pub struct InstallNodeArgs {
     pub mirror_base_url: String,
     pub platform: String,
     pub arch: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NodeUpdateTarget {
+    pub current_version: String,
+    pub target_version: String,
+    pub engines_node: Option<String>,
+    pub target_source: String,
+    pub update_available: bool,
 }
 
 #[tauri::command]
@@ -185,6 +194,64 @@ pub async fn upgrade_node_command(
         },
     )
     .await
+}
+
+#[tauri::command]
+pub async fn get_node_update_target_command() -> Result<NodeUpdateTarget> {
+    use crate::dsh::{default_client, fetch_package_metadata, RegistryCache};
+
+    let state = match AppState::load()? {
+        StateStatus::FirstRun => {
+            return Err(LauncherError::NodeNotInstalled {
+                reason: "cannot update Node before the first-run runtime exists".to_string(),
+            })
+        }
+        StateStatus::Loaded(state) => *state,
+    };
+    let node = state
+        .node
+        .as_ref()
+        .ok_or_else(|| LauncherError::NodeNotInstalled {
+            reason: "cannot update Node before a managed runtime exists".to_string(),
+        })?;
+    let dsh_version =
+        state
+            .dsh
+            .current
+            .as_deref()
+            .ok_or_else(|| LauncherError::DshNotInstalled {
+                reason: "cannot select a compatible Node version without an installed dsh"
+                    .to_string(),
+            })?;
+    let client = default_client();
+    let metadata =
+        fetch_package_metadata(&state.dsh.registry, &RegistryCache::new(), &client).await?;
+    let manifest = metadata.manifest_for(dsh_version)?;
+    let (platform, arch) = host_platform_arch();
+    let engines_node = manifest.engines.node.trim();
+    let (target_version, target_source, engines_node) = if engines_node.is_empty() {
+        (
+            node::DEFAULT_NODE_VERSION.to_string(),
+            "launcher-verified-fallback".to_string(),
+            None,
+        )
+    } else {
+        (
+            node::resolve_latest_node_target(engines_node, platform, arch, &client).await?,
+            "dsh-engines".to_string(),
+            Some(engines_node.to_string()),
+        )
+    };
+    let update_available =
+        node::parse_node_version(&target_version)? > node::parse_node_version(&node.version)?;
+
+    Ok(NodeUpdateTarget {
+        current_version: node.version.clone(),
+        target_version,
+        engines_node,
+        target_source,
+        update_available,
+    })
 }
 
 async fn remove_cancelled_artifacts(

@@ -9,6 +9,9 @@ pub fn write_node_runtime(runtime_dir: &Path, version: &str) {
         use std::os::unix::fs::PermissionsExt;
         std::fs::write(&node_path, format!("#!/bin/sh\necho v{version}\n")).unwrap();
         std::fs::set_permissions(&node_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let corepack_path = node_path.parent().unwrap().join("corepack");
+        std::fs::write(&corepack_path, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&corepack_path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
     #[cfg(not(unix))]
     std::fs::write(&node_path, "node").unwrap();

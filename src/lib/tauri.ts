@@ -267,6 +267,19 @@ export function upgradeNode(options: {
   });
 }
 
+export interface NodeUpdateTarget {
+  current_version: string;
+  target_version: string;
+  engines_node: string | null;
+  target_source: "dsh-engines" | "launcher-verified-fallback";
+  update_available: boolean;
+}
+
+/** 查询当前 dsh 支持的最新 Node.js 版本，供手动更新前确认。 */
+export function getNodeUpdateTarget(): Promise<NodeUpdateTarget> {
+  return invokeCommand<NodeUpdateTarget>("get_node_update_target_command");
+}
+
 /** 取消当前 Node.js 安装任务。 */
 export function cancelNodeInstall(operationId: string): Promise<boolean> {
   return invokeCommand<boolean>("cancel_node_install_command", {

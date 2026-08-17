@@ -14,9 +14,11 @@ const props = defineProps<{
   refreshing: boolean;
   upgrading: boolean;
   error: string | null;
+  nodeUpdateLoading: boolean;
+  nodeUpdateError: string | null;
 }>();
 
-defineEmits<{ refresh: []; install: [] }>();
+defineEmits<{ refresh: []; install: []; updateNode: [] }>();
 
 const updateAvailable = computed(
   () =>
@@ -80,13 +82,25 @@ const hostAddress = computed(() => {
         </div>
       </div>
       <div class="flex items-center justify-between gap-4">
-        <div>
+        <div class="min-w-0">
           <div class="text-sm">Node.js 版本</div>
-          <div class="text-xs text-muted-foreground">
-            由应用自动管理，无需手动安装
+          <div class="text-xs text-muted-foreground" data-testid="node-update-status">
+            <span v-if="nodeUpdateError" class="text-destructive">{{ nodeUpdateError }}</span>
+            <span v-else>仅更新 Node.js；运行中的 dsh 不会重启</span>
           </div>
         </div>
-        <span class="font-mono text-sm">{{ nodeVersion ?? "尚未安装" }}</span>
+        <div class="flex shrink-0 items-center gap-2">
+          <span class="font-mono text-sm">{{ nodeVersion ?? "尚未安装" }}</span>
+          <Button
+            variant="outline"
+            size="xs"
+            :disabled="nodeVersion === null || nodeUpdateLoading"
+            @click="$emit('updateNode')"
+          >
+            <Download class="mr-2 h-4 w-4" />
+            {{ nodeUpdateLoading ? "准备中…" : "更新 Node" }}
+          </Button>
+        </div>
       </div>
       <div class="flex items-center justify-between gap-4">
         <div>

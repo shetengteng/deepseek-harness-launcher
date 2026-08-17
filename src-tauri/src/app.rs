@@ -86,6 +86,7 @@ pub fn run() {
             commands::bootstrap::check_dsh_update_command,
             commands::node_install::install_node_command,
             commands::node_install::upgrade_node_command,
+            commands::node_install::get_node_update_target_command,
             commands::node_install::cancel_node_install_command,
             commands::dsh_install::install_dsh_command,
             commands::dsh_install::cancel_dsh_install_command,

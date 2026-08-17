@@ -10,6 +10,7 @@
 - **dsh 独立版本管理**：首启自动安装 registry 当前的最新 dsh；后续发现新版时提示用户，只有用户确认更新后才安装
 - **Node 运行时托管**：首次启动时自动下载 Node 到用户目录，不污染系统、不依赖用户预装
 - **失败可回滚**：dsh 切换后启动失败自动回退到上个已知好版本
+- **可选 CLI 入口**：用户可安装稳定的 `dsh` shim，在终端中管理与 GUI 共用的 profile
 
 非目标：
 
@@ -33,7 +34,7 @@ deepseek-harness-launcher 是 dsh 的"运行环境管家"，二者通过稳定�
 壳子 spawn dsh CLI 子进程：
 
 ```
-<node> --expose-internals <dsh-entry>/lib/bin.js web --host 127.0.0.1 --port 0
+PATH=<data_dir>/bin:$PATH <node> --expose-internals <dsh-entry>/lib/bin.js web --host 127.0.0.1 --port 0
 ```
 
 ### 2.2 就绪协议
@@ -141,6 +142,9 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
     │   └── 0.1.0-rc.6/
     │       ├── package.json
     │       └── node_modules/@deepseek-ai/dsh/lib/bin.js
+    ├── bin/
+    │   └── pnpm                    # 由 Corepack 驱动的内部 pnpm wrapper
+    ├── dsh-cli-shim.cjs            # 终端 dsh shim 的稳定运行时入口
     └── logs/
         └── dsh-<timestamp>.log     # dsh 子进程输出
 ```
@@ -236,6 +240,8 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
    仍失败 → 弹错误对话框，附日志路径
 ```
 
+启动 Host 前创建或刷新 `<data_dir>/bin/pnpm`，并将该目录置于子进程 `PATH` 首位。wrapper 使用托管 Node 自带的 Corepack 执行 `pnpm`，因此 dsh Web 与 profile 插件操作不依赖系统安装 Node 或 pnpm。
+
 ### 5.3 dsh 更新提示、安装与切换
 
 应用启动后可以在后台轻量请求一次 registry 元数据，只读取 `dist-tags.latest`，不下载、不阻塞 dsh 启动。发现 `latest` 不同于当前版本时，从主窗口右侧划入非阻塞提示框。用户可以关闭提示，也可以点击按钮开始更新。设置页提供同一套“检查更新 / 更新到最新版本”入口。
@@ -296,6 +302,14 @@ dsh 启动后异常退出（不是启动失败，是跑了一段时间挂了）�
 4. 用户主动重启 app → crash_counter 清零
 ```
 
+### 5.6 终端 CLI 与 profile 插件
+
+设置页提供显式的“安装 `dsh` 命令”操作。在 macOS/Linux 写入 `~/.local/bin/dsh`，在 Windows 写入 `%USERPROFILE%\\.local\\bin\\dsh.cmd`；只创建或更新带启动器标识的 shim，绝不覆盖其他来源的同名命令。界面展示一次性 PATH 配置提示，用户需重新打开终端。
+
+shim 每次调用时读取托管 Node 的 `VERSION` 与 `dsh/current` 指针，继而运行当前 dsh 入口；Node 和 dsh 升级或回滚后无需重新安装 shim。它与 GUI 共用 `DSH_HOME`：未设置时 dsh 默认使用 `~/.dsh`。
+
+`dsh plugin --profile <name> …` 会在 profile 目录调用 `pnpm`。shim 在运行时将 `<data_dir>/bin` 置于 `PATH` 首位，使 dsh 找到内部 pnpm wrapper；wrapper 再通过托管 Node 的 Corepack 执行 pnpm。首次使用可能下载 Corepack 所需的 pnpm 版本，属于插件安装的正常网络步骤。
+
 ## 6. 模块设计
 
 ### 6.1 Rust 后端模块
@@ -304,6 +318,7 @@ dsh 启动后异常退出（不是启动失败，是跑了一段时间挂了）�
 src-tauri/src/
 ├── main.rs                  # Tauri 入口
 ├── commands.rs              # Tauri command 暴露给前端
+├── cli_shim.rs               # dsh/pnpm wrapper 生成与运行时解析
 ├── state.rs                 # AppState、state.json 读写
 ├── node/
 │   ├── mod.rs
@@ -459,6 +474,7 @@ macOS 额外处理：
 | ------------------- | ------------ | --------------------------------------------- |
 | `node_registry`     | 自动选择     | 仅在首启失败或用户主动更换时使用              |
 | `npm_registry`      | 默认 registry | 仅在 dsh 更新失败时提供更换源重试              |
+| `dsh_cli_command`   | 未安装        | 可选操作；安装稳定 shim 并显示 PATH 配置提示   |
 
 `crash_retry_limit`、版本保留数量、完整性校验和回滚策略由壳子内部固定，不出现在设置页。
 
@@ -476,6 +492,8 @@ macOS 额外处理：
 | dsh 更新失败  | "更新失败，当前版本未受影响。你可以重试或更换源" |
 | dsh 启动超时  | "dsh 90 秒内未启动完成，已回滚到旧版本"    |
 | dsh 启动崩溃  | "dsh 启动后崩溃，已回滚。日志：<path>"     |
+| CLI wrapper 冲突 | "目标位置已有其他 dsh 命令，未做修改"      |
+| Corepack 不可用 | "托管 Corepack 不可用，请在启动器中重装 Node" |
 | 磁盘空间不足  | "磁盘空间不足，需要约 200 MB"              |
 
 ### 11.2 日志
