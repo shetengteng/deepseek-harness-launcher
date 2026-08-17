@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use crate::error::{LauncherError, Result};
 use crate::node::mirror::Mirror;
 
+use super::DownloadCancellation;
+
 /// SHASUMS256.txt 中的一行：`<hash>  <filename>`。
 pub fn parse_shasums_line(line: &str) -> Option<(String, String)> {
     let mut parts = line.trim().split_whitespace();
@@ -31,9 +33,39 @@ pub fn find_sha_in_shasums(shasums: &str, archive_filename: &str) -> Result<Stri
 
 /// 从镜像源拉取 SHASUMS256.txt 全文。
 pub async fn fetch_shasums(client: &Client, mirror: &Mirror, version: &str) -> Result<String> {
+    fetch_shasums_inner(client, mirror, version, None).await
+}
+
+pub(crate) async fn fetch_shasums_cancellable(
+    client: &Client,
+    mirror: &Mirror,
+    version: &str,
+    cancellation: &DownloadCancellation,
+) -> Result<String> {
+    fetch_shasums_inner(client, mirror, version, Some(cancellation)).await
+}
+
+async fn fetch_shasums_inner(
+    client: &Client,
+    mirror: &Mirror,
+    version: &str,
+    cancellation: Option<&DownloadCancellation>,
+) -> Result<String> {
+    check_cancelled(cancellation)?;
     let url = mirror.shasums_url(version);
     tracing::debug!(%url, "fetching SHASUMS256.txt");
-    let response = client.get(&url).send().await.map_err(|error| {
+    let request = client.get(&url).send();
+    let response = match cancellation {
+        Some(cancellation) => {
+            let mut receiver = cancellation.receiver();
+            tokio::select! {
+                _ = receiver.changed() => return Err(cancellation.error()),
+                response = request => response,
+            }
+        }
+        None => request.await,
+    }
+    .map_err(|error| {
         LauncherError::NodeDownload(format!("fetch SHASUMS256.txt failed: {error}"))
     })?;
     if !response.status().is_success() {
@@ -42,22 +74,52 @@ pub async fn fetch_shasums(client: &Client, mirror: &Mirror, version: &str) -> R
             response.status()
         )));
     }
-    response.text().await.map_err(|error| {
-        LauncherError::NodeDownload(format!("read SHASUMS256.txt body failed: {error}"))
-    })
+
+    let body = response.text();
+    match cancellation {
+        Some(cancellation) => {
+            let mut receiver = cancellation.receiver();
+            tokio::select! {
+                _ = receiver.changed() => Err(cancellation.error()),
+                body = body => body.map_err(|error| LauncherError::NodeDownload(format!("read SHASUMS256.txt body failed: {error}"))),
+            }
+        }
+        None => body.await.map_err(|error| {
+            LauncherError::NodeDownload(format!("read SHASUMS256.txt body failed: {error}"))
+        }),
+    }
 }
 
 /// 校验文件 SHA-256 与期望值一致。
 pub async fn verify_sha256(path: &Path, expected_sha: &str) -> Result<()> {
+    verify_sha256_inner(path, expected_sha, None).await
+}
+
+pub(crate) async fn verify_sha256_cancellable(
+    path: &Path,
+    expected_sha: &str,
+    cancellation: &DownloadCancellation,
+) -> Result<()> {
+    verify_sha256_inner(path, expected_sha, Some(cancellation)).await
+}
+
+async fn verify_sha256_inner(
+    path: &Path,
+    expected_sha: &str,
+    cancellation: Option<&DownloadCancellation>,
+) -> Result<()> {
     use tokio::io::AsyncReadExt;
 
+    check_cancelled(cancellation)?;
     let mut file = tokio::fs::File::open(path)
         .await
         .map_err(LauncherError::Io)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
+        check_cancelled(cancellation)?;
         let count = file.read(&mut buffer).await.map_err(LauncherError::Io)?;
+        check_cancelled(cancellation)?;
         if count == 0 {
             break;
         }
@@ -75,9 +137,14 @@ pub async fn verify_sha256(path: &Path, expected_sha: &str) -> Result<()> {
     Ok(())
 }
 
+fn check_cancelled(cancellation: Option<&DownloadCancellation>) -> Result<()> {
+    cancellation.map_or(Ok(()), DownloadCancellation::check)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node::download::NodeDownloadOperations;
 
     #[test]
     fn parses_valid_shasums_lines() {
@@ -123,5 +190,21 @@ mod tests {
         tokio::fs::write(file.path(), b"hello world").await.unwrap();
         assert!(verify_sha256(file.path(), &"0".repeat(64)).await.is_err());
         assert!(!file.path().exists());
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_checksum_verification() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        tokio::fs::write(file.path(), b"archive").await.unwrap();
+        let operations = NodeDownloadOperations::default();
+        let active = operations.register("operation-1").unwrap();
+        let cancellation = active.cancellation();
+        assert!(operations.cancel("operation-1"));
+
+        let error = verify_sha256_cancellable(file.path(), &"0".repeat(64), &cancellation)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, LauncherError::NodeInstallCancelled { .. }));
+        assert!(file.path().exists());
     }
 }

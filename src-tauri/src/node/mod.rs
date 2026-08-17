@@ -16,11 +16,13 @@ pub use download::{
     download_archive, download_with_retry, fetch_shasums, find_sha_in_shasums, parse_shasums_line,
     verify_sha256, NodeDownloadOperations, ProgressEvent, PROGRESS_CHUNK_BYTES,
 };
+pub(crate) use download::{download_with_retry_cancellable, remove_archive};
 pub use install::{
     archive_kind_for_current_platform, current_node_dir, current_node_dir_in, current_node_version,
     current_node_version_in, install_node, install_node_to, node_bin_path, node_npm_path,
     NodeArchiveKind,
 };
+pub(crate) use install::{cleanup_cancelled_install, install_node_to_cancellable};
 pub use mirror::{
     pick_default_mirror, probe_mirror, probe_mirrors, validate_custom_mirror, Mirror, MirrorError,
     MirrorId, BUILTIN_MIRRORS, DEFAULT_NODE_INDEX_PATH,

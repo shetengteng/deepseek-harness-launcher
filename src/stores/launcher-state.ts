@@ -37,6 +37,7 @@ export function createLauncherState() {
   const downloadPercentHighWater = ref(0);
   const extractProgress = ref(0);
   const installing = ref(false);
+  const nodeInstallOperationId = ref<string | null>(null);
   const bootstrapping = ref(false);
 
   const selectedMirror = computed<MirrorInfo | null>(() => {
@@ -115,6 +116,7 @@ export function createLauncherState() {
     downloadPercentHighWater,
     extractProgress,
     installing,
+    nodeInstallOperationId,
     bootstrapping,
     selectedMirror,
     downloadPercent,

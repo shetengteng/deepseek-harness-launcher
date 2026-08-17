@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
-import { CheckCircle2, Loader2, Package, Terminal } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import {
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Package,
+  RotateCcw,
+  Terminal,
+} from "lucide-vue-next";
 import { listen } from "@tauri-apps/api/event";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import MirrorSelector from "@/components/MirrorSelector.vue";
 import { useLauncherStore } from "@/stores/launcher";
 import type { DshInstallProgressEvent, ProgressEvent } from "@/lib/tauri";
 
@@ -44,6 +53,20 @@ const nodeStatus = computed(() =>
 const dshStatus = computed(() =>
   dshDone.value ? "✓ 已完成" : dshMessage.value,
 );
+const restartingDownload = ref(false);
+const canRestartDownload = computed(
+  () => store.installing && store.nodeInstallOperationId !== null,
+);
+
+async function restartNodeDownload(): Promise<void> {
+  if (!canRestartDownload.value) return;
+  restartingDownload.value = true;
+  try {
+    await store.restartNodeDownload();
+  } finally {
+    restartingDownload.value = false;
+  }
+}
 
 onMounted(async () => {
   try {
@@ -70,13 +93,13 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <main class="min-h-screen flex items-center justify-center bg-background p-6">
+  <main class="min-h-screen flex items-center justify-center bg-muted/50 p-6">
     <section
-      class="flex h-[540px] w-[460px] max-h-[calc(100vh-3rem)] max-w-full flex-col overflow-hidden rounded-lg bg-card shadow-2xl"
+      class="w-[460px] max-w-full overflow-hidden rounded-lg bg-card shadow-2xl"
     >
-      <div class="flex flex-1 flex-col gap-[18px] overflow-y-auto p-[30px]">
+      <div class="flex flex-col gap-[18px] p-[30px]">
         <div
-          class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+          class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
         >
           <Terminal class="h-6 w-6" />
         </div>
@@ -180,6 +203,33 @@ onUnmounted(() => {
             <span v-if="dshDone">{{ dshMessage }}</span>
           </div>
         </article>
+
+        <details v-if="!nodeDone" class="text-sm">
+          <summary
+            class="flex cursor-pointer list-none items-center gap-1 py-1 font-medium text-muted-foreground [&::-webkit-details-marker]:hidden"
+          >
+            切换下载来源
+            <ChevronDown class="h-4 w-4" />
+          </summary>
+          <div class="mt-3 space-y-4 border-t pt-4">
+            <p class="text-xs leading-5 text-muted-foreground">
+              下载缓慢时可切换 Node.js
+              来源。重新开始会停止当前下载，并使用所选来源从头下载。
+            </p>
+            <MirrorSelector />
+            <Button
+              class="w-full"
+              variant="outline"
+              :disabled="!canRestartDownload || restartingDownload"
+              @click="restartNodeDownload"
+            >
+              <RotateCcw
+                :class="['mr-2 h-4 w-4', restartingDownload && 'animate-spin']"
+              />
+              {{ restartingDownload ? "正在重新开始…" : "重新使用此来源下载" }}
+            </Button>
+          </div>
+        </details>
       </div>
     </section>
   </main>

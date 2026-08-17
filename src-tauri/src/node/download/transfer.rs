@@ -17,15 +17,16 @@ pub async fn download_archive(
     url: &str,
     dest_path: &Path,
     progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
-    mut cancellation: Option<DownloadCancellation<'_>>,
+    cancellation: Option<DownloadCancellation>,
 ) -> Result<u64> {
     tracing::debug!(%url, dest = %dest_path.display(), "downloading archive");
     let part_path = archive_part_path(dest_path);
     let request = client.get(url).send();
-    let response = match cancellation.as_mut() {
+    let response = match cancellation.as_ref() {
         Some(cancel) => {
+            let mut receiver = cancel.receiver();
             tokio::select! {
-                _ = cancel.receiver.changed() => {
+                _ = receiver.changed() => {
                     let error = cancel.error();
                     cleanup_archive_artifacts(&part_path, dest_path).await;
                     return Err(error);
@@ -59,10 +60,11 @@ pub async fn download_archive(
     let mut last_progress_at = 0;
 
     loop {
-        let chunk = match cancellation.as_mut() {
+        let chunk = match cancellation.as_ref() {
             Some(cancel) => {
+                let mut receiver = cancel.receiver();
                 tokio::select! {
-                    _ = cancel.receiver.changed() => {
+                    _ = receiver.changed() => {
                         let error = cancel.error();
                         drop(file);
                         cleanup_archive_artifacts(&part_path, dest_path).await;
@@ -164,7 +166,7 @@ mod tests {
             .timeout(Duration::from_secs(10))
             .build()
             .unwrap();
-        let mut active = operations.register("operation-1").unwrap();
+        let active = operations.register("operation-1").unwrap();
 
         let error = download_archive(
             &client,

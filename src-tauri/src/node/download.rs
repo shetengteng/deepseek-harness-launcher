@@ -46,6 +46,31 @@ pub async fn download_with_retry(
     operations: &NodeDownloadOperations,
     operation_id: &str,
 ) -> Result<PathBuf> {
+    let active = operations.register(operation_id)?;
+    let cancellation = active.cancellation();
+    download_with_retry_cancellable(
+        client,
+        mirror,
+        version,
+        archive_filename,
+        dest_dir,
+        progress_tx,
+        max_retries,
+        &cancellation,
+    )
+    .await
+}
+
+pub(crate) async fn download_with_retry_cancellable(
+    client: &Client,
+    mirror: &Mirror,
+    version: &str,
+    archive_filename: &str,
+    dest_dir: &Path,
+    progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
+    max_retries: u32,
+    cancellation: &DownloadCancellation,
+) -> Result<PathBuf> {
     let archive_url = format!(
         "{}/v{version}/{archive_filename}",
         mirror.base_url.trim_end_matches('/')
@@ -54,6 +79,7 @@ pub async fn download_with_retry(
     let mut last_err: Option<LauncherError> = None;
 
     for attempt in 1..=max_retries {
+        cancellation.check()?;
         tracing::info!(
             attempt,
             max_retries,
@@ -61,45 +87,44 @@ pub async fn download_with_retry(
             url = %archive_url,
             "downloading node archive"
         );
-        let mut active_download = operations.register(operation_id)?;
-        let download_result = download_archive(
+        let download_result = transfer::download_archive(
             client,
             &archive_url,
             &dest_path,
             progress_tx,
-            Some(active_download.cancellation()),
+            Some(cancellation.clone()),
         )
         .await;
-        drop(active_download);
 
         match download_result {
-            Ok(_) => match fetch_shasums(client, mirror, version).await {
-                Ok(shasums) => match find_sha_in_shasums(&shasums, archive_filename) {
-                    Ok(expected_sha) => match verify_sha256(&dest_path, &expected_sha).await {
-                        Ok(()) => return Ok(dest_path),
-                        Err(error) => {
-                            tracing::warn!(attempt, %error, "SHA verify failed");
-                            let _ = tokio::fs::remove_file(&dest_path).await;
-                            last_err = Some(error);
-                        }
-                    },
+            Ok(_) => {
+                let verification = async {
+                    let shasums =
+                        checksum::fetch_shasums_cancellable(client, mirror, version, cancellation)
+                            .await?;
+                    let expected_sha = checksum::find_sha_in_shasums(&shasums, archive_filename)?;
+                    checksum::verify_sha256_cancellable(&dest_path, &expected_sha, cancellation)
+                        .await
+                }
+                .await;
+                match verification {
+                    Ok(()) => return Ok(dest_path),
+                    Err(error @ LauncherError::NodeInstallCancelled { .. }) => {
+                        remove_archive(&dest_path).await;
+                        return Err(error);
+                    }
                     Err(error) => {
-                        tracing::warn!(attempt, %error, archive_filename, "SHA entry not found");
-                        let _ = tokio::fs::remove_file(&dest_path).await;
+                        tracing::warn!(attempt, %error, "SHA verify failed");
+                        remove_archive(&dest_path).await;
                         last_err = Some(error);
                     }
-                },
-                Err(error) => {
-                    tracing::warn!(attempt, %error, "fetch SHASUMS failed");
-                    let _ = tokio::fs::remove_file(&dest_path).await;
-                    last_err = Some(error);
                 }
-            },
+            }
             Err(error @ LauncherError::NodeInstallCancelled { .. }) => return Err(error),
             Err(error) => {
                 if matches!(error, LauncherError::Io(_)) {
                     tracing::error!(attempt, %error, "local io error, aborting retries");
-                    let _ = tokio::fs::remove_file(&dest_path).await;
+                    remove_archive(&dest_path).await;
                     return Err(error);
                 }
                 tracing::warn!(attempt, %error, "download failed");
@@ -108,7 +133,7 @@ pub async fn download_with_retry(
         }
     }
 
-    let _ = tokio::fs::remove_file(&dest_path).await;
+    remove_archive(&dest_path).await;
     Err(last_err
         .map(|error| {
             LauncherError::NodeDownload(format!(
@@ -121,6 +146,11 @@ pub async fn download_with_retry(
                 "download exhausted retries for {archive_filename}"
             ))
         }))
+}
+
+pub(crate) async fn remove_archive(dest_path: &Path) {
+    let _ = tokio::fs::remove_file(dest_path).await;
+    let _ = tokio::fs::remove_file(format!("{}.part", dest_path.display())).await;
 }
 
 #[cfg(test)]

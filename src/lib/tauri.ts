@@ -173,6 +173,7 @@ export function resolveBootstrapPlan(): Promise<BootstrapPlan> {
 /** `install_node_command` 参数。 */
 export interface InstallNodeArgs {
   version: string;
+  operationId: string;
   mirrorBaseUrl: string;
   platform: string;
   arch: string;
@@ -180,14 +181,21 @@ export interface InstallNodeArgs {
 
 /** 调 `install_node_command`：下载 + 校验 + 解压 + 写 state。 */
 export function installNode(args: InstallNodeArgs): Promise<string> {
-  // Rust 端用 snake_case，前端转一下
   return invokeCommand<string>("install_node_command", {
     args: {
       version: args.version,
+      operation_id: args.operationId,
       mirror_base_url: args.mirrorBaseUrl,
       platform: args.platform,
       arch: args.arch,
     },
+  });
+}
+
+/** 取消当前 Node.js 安装任务。 */
+export function cancelNodeInstall(operationId: string): Promise<boolean> {
+  return invokeCommand<boolean>("cancel_node_install_command", {
+    operationId,
   });
 }
 

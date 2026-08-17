@@ -1,4 +1,5 @@
 import {
+  cancelNodeInstall,
   getLatestDshVersion,
   installDsh,
   installNode,
@@ -29,6 +30,9 @@ export function createBootstrapActions({
   refreshStatus,
   startHost,
 }: BootstrapDependencies) {
+  let activeBootstrap: Promise<void> | null = null;
+  let activeNodeInstall: Promise<boolean> | null = null;
+
   async function loadLatestDshVersionAction(): Promise<void> {
     try {
       state.latestDshVersion.value = await getLatestDshVersion();
@@ -88,34 +92,67 @@ export function createBootstrapActions({
     state.selectedMirrorId.value = id;
   }
 
-  async function installNodeAction(options?: {
-    version?: string;
-  }): Promise<void> {
-    if (state.installing.value) return;
-    state.installing.value = true;
-    state.wizardStep.value = "resolving";
-    resetProgress();
-    try {
-      const mirror = state.selectedMirror.value;
-      if (!mirror) throw new Error("未选择镜像源");
-      const plan = state.bootstrapPlan.value ?? (await resolveBootstrapPlan());
-      state.bootstrapPlan.value = plan;
-      state.wizardStep.value = "downloading";
-      const { platform, arch } = detectPlatformArch();
-      await installNode({
-        version: options?.version ?? plan.node_version,
-        mirrorBaseUrl: mirror.base_url,
-        platform,
-        arch,
-      });
-      state.wizardStep.value = "done";
-      await refreshStatus();
-    } catch (error) {
+  function installNodeAction(options?: { version?: string }): Promise<boolean> {
+    if (activeNodeInstall) return activeNodeInstall;
+
+    const task = (async (): Promise<boolean> => {
+      state.installing.value = true;
+      state.wizardStep.value = "resolving";
+      state.nodeInstallOperationId.value = crypto.randomUUID();
       resetProgress();
-      fail(error, "installNode");
-    } finally {
-      state.installing.value = false;
-    }
+      try {
+        const mirror = state.selectedMirror.value;
+        if (!mirror) throw new Error("未选择镜像源");
+        const plan = state.bootstrapPlan.value ?? (await resolveBootstrapPlan());
+        state.bootstrapPlan.value = plan;
+        state.wizardStep.value = "downloading";
+        const { platform, arch } = detectPlatformArch();
+        await installNode({
+          version: options?.version ?? plan.node_version,
+          operationId: state.nodeInstallOperationId.value,
+          mirrorBaseUrl: mirror.base_url,
+          platform,
+          arch,
+        });
+        state.wizardStep.value = "done";
+        await refreshStatus();
+        return true;
+      } catch (error) {
+        resetProgress();
+        if (isNodeInstallCancelled(error)) {
+          state.error.value = null;
+          state.phase.value = "first_run";
+          state.wizardStep.value = "mirror_select";
+          return false;
+        }
+        fail(error, "installNode");
+        return false;
+      } finally {
+        state.installing.value = false;
+        state.nodeInstallOperationId.value = null;
+      }
+    })();
+
+    activeNodeInstall = task;
+    void task.then(() => {
+      if (activeNodeInstall === task) activeNodeInstall = null;
+    });
+    return task;
+  }
+
+  async function restartNodeDownloadAction(): Promise<void> {
+    const operationId = state.nodeInstallOperationId.value;
+    if (!operationId) return;
+
+    const bootstrap = activeBootstrap;
+    const nodeInstall = activeNodeInstall;
+    const cancelled = await cancelNodeInstall(operationId);
+    if (!cancelled) return;
+
+    await (bootstrap ?? nodeInstall);
+    state.error.value = null;
+    state.lastFailedAction.value = null;
+    await startBootstrapAction({ keepSelectedMirror: true });
   }
 
   async function installDshAction(): Promise<void> {
@@ -136,36 +173,51 @@ export function createBootstrapActions({
     }
   }
 
-  async function startBootstrapAction(): Promise<void> {
-    if (state.bootstrapping.value || state.phase.value === "ready") return;
-    state.bootstrapping.value = true;
-    try {
-      if (!state.nodeVersion.value) {
-        state.wizardStep.value = "resolving";
-        state.bootstrapPlan.value ??= await resolveBootstrapPlan();
-        await loadMirrors();
-        if (state.error.value) {
-          state.lastFailedAction.value = "bootstrap";
-          return;
-        }
-        await autoPickMirror();
-        if (state.error.value) {
-          state.lastFailedAction.value = "bootstrap";
-          return;
-        }
-        await installNodeAction();
-        if (state.error.value) return;
-      }
-      if (!state.dshVersion.value) {
-        await installDshAction();
-        if (state.error.value) return;
-      }
-      if (state.nodeVersion.value && state.dshVersion.value) await startHost();
-    } catch (error) {
-      fail(error, "bootstrap");
-    } finally {
-      state.bootstrapping.value = false;
+  function startBootstrapAction(options?: {
+    keepSelectedMirror?: boolean;
+  }): Promise<void> {
+    if (activeBootstrap || state.phase.value === "ready") {
+      return activeBootstrap ?? Promise.resolve();
     }
+
+    const task = (async (): Promise<void> => {
+      state.bootstrapping.value = true;
+      try {
+        if (!state.nodeVersion.value) {
+          state.wizardStep.value = "resolving";
+          state.bootstrapPlan.value ??= await resolveBootstrapPlan();
+          await loadMirrors();
+          if (state.error.value) {
+            state.lastFailedAction.value = "bootstrap";
+            return;
+          }
+          if (!options?.keepSelectedMirror) {
+            await autoPickMirror();
+            if (state.error.value) {
+              state.lastFailedAction.value = "bootstrap";
+              return;
+            }
+          }
+          const installed = await installNodeAction();
+          if (!installed || state.error.value) return;
+        }
+        if (!state.dshVersion.value) {
+          await installDshAction();
+          if (state.error.value) return;
+        }
+        if (state.nodeVersion.value && state.dshVersion.value) await startHost();
+      } catch (error) {
+        fail(error, "bootstrap");
+      } finally {
+        state.bootstrapping.value = false;
+      }
+    })();
+
+    activeBootstrap = task;
+    void task.then(() => {
+      if (activeBootstrap === task) activeBootstrap = null;
+    });
+    return task;
   }
 
   function applyProgressEvent(event: ProgressEvent): void {
@@ -204,12 +256,22 @@ export function createBootstrapActions({
     validateCustomMirrorAction,
     selectMirror,
     installNodeAction,
+    restartNodeDownloadAction,
     installDshAction,
     startBootstrapAction,
     applyProgressEvent,
     applyDshInstallProgress,
     resetWizard,
   };
+}
+
+function isNodeInstallCancelled(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "kind" in error &&
+    (error as { kind: unknown }).kind === "node_install_cancelled"
+  );
 }
 
 function errorMessage(error: unknown): string {

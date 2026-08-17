@@ -28,7 +28,7 @@ impl NodeDownloadOperations {
             .expect("node download operations mutex poisoned");
         if active.is_some() {
             return Err(LauncherError::NodeDownload(
-                "another Node archive download is already in progress".to_string(),
+                "another Node installation is already in progress".to_string(),
             ));
         }
 
@@ -73,10 +73,10 @@ pub struct ActiveDownload<'a> {
 }
 
 impl ActiveDownload<'_> {
-    pub fn cancellation(&mut self) -> DownloadCancellation<'_> {
+    pub(crate) fn cancellation(&self) -> DownloadCancellation {
         DownloadCancellation {
-            operation_id: &self.operation_id,
-            receiver: &mut self.receiver,
+            operation_id: self.operation_id.clone(),
+            receiver: self.receiver.clone(),
         }
     }
 }
@@ -97,15 +97,28 @@ impl Drop for ActiveDownload<'_> {
     }
 }
 
-pub struct DownloadCancellation<'a> {
-    pub(crate) operation_id: &'a str,
-    pub(crate) receiver: &'a mut watch::Receiver<()>,
+#[doc(hidden)]
+#[derive(Clone)]
+pub struct DownloadCancellation {
+    operation_id: String,
+    receiver: watch::Receiver<()>,
 }
 
-impl DownloadCancellation<'_> {
+impl DownloadCancellation {
+    pub(crate) fn check(&self) -> Result<()> {
+        if self.receiver.has_changed().unwrap_or(false) {
+            return Err(self.error());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn receiver(&self) -> watch::Receiver<()> {
+        self.receiver.clone()
+    }
+
     pub(crate) fn error(&self) -> LauncherError {
         LauncherError::NodeInstallCancelled {
-            operation_id: self.operation_id.to_string(),
+            operation_id: self.operation_id.clone(),
         }
     }
 }
@@ -118,10 +131,11 @@ mod tests {
     fn cancellation_matches_only_the_active_operation() {
         let operations = NodeDownloadOperations::default();
         let active = operations.register("operation-1").unwrap();
+        let cancellation = active.cancellation();
 
         assert!(!operations.cancel("other-operation"));
         assert!(operations.cancel("operation-1"));
-        assert!(active.receiver.has_changed().unwrap());
+        assert!(cancellation.check().is_err());
     }
 
     #[test]

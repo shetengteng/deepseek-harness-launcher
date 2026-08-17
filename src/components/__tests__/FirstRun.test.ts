@@ -1,0 +1,62 @@
+import { flushPromises, shallowMount } from "@vue/test-utils";
+import { beforeEach, expect, test, vi } from "vitest";
+
+const store = vi.hoisted(() => ({
+  nodeVersion: null as string | null,
+  dshVersion: null as string | null,
+  wizardStep: "downloading",
+  installing: true,
+  installingDsh: false,
+  nodeInstallOperationId: "download-1" as string | null,
+  bootstrapPlan: { node_version: "22.19.0", dsh_version: "0.1.0" },
+  latestDshVersion: null,
+  downloadPercent: 42,
+  dshInstallProgress: 0,
+  dshInstallActivity: 0,
+  dshInstallStage: "resolving",
+  startBootstrap: vi.fn(),
+  restartNodeDownload: vi.fn(),
+  applyProgressEvent: vi.fn(),
+  applyDshInstallProgress: vi.fn(),
+}));
+
+vi.mock("@/stores/launcher", () => ({ useLauncherStore: () => store }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(vi.fn()) }));
+
+import FirstRun from "@/components/FirstRun.vue";
+
+const stubs = {
+  Button: { emits: ["click"], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+  Progress: { template: "<div />" },
+  MirrorSelector: { template: "<div data-testid=\"mirror-selector\" />" },
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  store.nodeVersion = null;
+  store.wizardStep = "downloading";
+  store.installing = true;
+  store.nodeInstallOperationId = "download-1";
+});
+
+test("shows advanced mirror controls without opening them by default", async () => {
+  const wrapper = shallowMount(FirstRun, { global: { stubs } });
+  await flushPromises();
+
+  const advanced = wrapper.find("details");
+  expect(advanced.attributes("open")).toBeUndefined();
+  expect(advanced.text()).toContain("切换下载来源");
+  expect(advanced.find('[data-testid="mirror-selector"]').exists()).toBe(true);
+});
+
+test("restarts the active Node installation during extraction", async () => {
+  store.wizardStep = "extracting";
+  const wrapper = shallowMount(FirstRun, { global: { stubs } });
+  await flushPromises();
+
+  await wrapper.findAll("button").find((button) =>
+    button.text().includes("重新使用此来源下载"),
+  )!.trigger("click");
+
+  expect(store.restartNodeDownload).toHaveBeenCalledOnce();
+});

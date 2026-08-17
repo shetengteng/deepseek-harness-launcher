@@ -4,8 +4,7 @@
 // 选中内置源会清空自定义源状态，避免双选。
 
 import { computed, ref, watch } from "vue";
-import { Loader2, CheckCircle2, AlertCircle, Zap } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-vue-next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -94,8 +93,19 @@ watch(
 <template>
   <div class="flex flex-col gap-4">
     <!-- 镜像源下拉（内置 + 自定义） -->
-    <div class="flex flex-col gap-2">
+    <div class="flex items-center justify-between gap-3">
       <Label for="builtin-mirror">镜像源</Label>
+      <button
+        v-if="!customMode"
+        type="button"
+        class="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+        :disabled="store.wizardStep === 'probing'"
+        @click="store.autoPickMirror()"
+      >
+        {{ store.wizardStep === "probing" ? "正在选择…" : "自动选择最快源" }}
+      </button>
+    </div>
+    <div class="flex flex-col gap-2">
       <Select v-model="selectValue">
         <SelectTrigger id="builtin-mirror" class="w-full">
           <SelectValue placeholder="选择镜像源" />
@@ -133,14 +143,8 @@ watch(
             v-if="isCustomSelected"
             class="h-4 w-4 text-green-500"
           />
-          <AlertCircle
-            v-else-if="customError"
-            class="h-4 w-4 text-red-500"
-          />
-          <Loader2
-            v-else
-            class="h-4 w-4 animate-spin text-muted-foreground"
-          />
+          <AlertCircle v-else-if="customError" class="h-4 w-4 text-red-500" />
+          <Loader2 v-else class="h-4 w-4 animate-spin text-muted-foreground" />
         </div>
       </div>
       <p v-if="customError" class="text-xs text-red-500">
@@ -150,16 +154,5 @@ watch(
         校验通过，将使用此源
       </p>
     </div>
-
-    <!-- 自动探活按钮：仅在内置源模式下显示，自定义模式隐藏 -->
-    <Button
-      v-if="!customMode"
-      variant="outline"
-      :disabled="store.wizardStep === 'probing'"
-      @click="store.autoPickMirror()"
-    >
-      <Zap class="h-4 w-4 mr-2" />
-      {{ store.wizardStep === "probing" ? "探活中…" : "自动选择最快源" }}
-    </Button>
   </div>
 </template>

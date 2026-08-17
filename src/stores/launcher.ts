@@ -127,6 +127,7 @@ export const useLauncherStore = defineStore("launcher", () => {
     validateCustomMirror: bootstrap.validateCustomMirrorAction,
     selectMirror: bootstrap.selectMirror,
     installNode: bootstrap.installNodeAction,
+    restartNodeDownload: bootstrap.restartNodeDownloadAction,
     installDsh: bootstrap.installDshAction,
     applyProgressEvent: bootstrap.applyProgressEvent,
     applyDshInstallProgress: bootstrap.applyDshInstallProgress,
