@@ -44,7 +44,6 @@ pub struct HostSupervisor {
     origin_cache: Arc<Mutex<Option<Origin>>>,
     shutdown_flag: Arc<AtomicBool>,
     intentional_restart_generation: Arc<AtomicU64>,
-    parser: ReadinessParser,
     output: Arc<Mutex<String>>,
     config: HostSupervisorConfig,
     exit_handler: Arc<RwLock<Option<UnexpectedExitCallback>>>,
@@ -61,7 +60,6 @@ impl HostSupervisor {
             origin_cache: Arc::new(Mutex::new(None)),
             shutdown_flag: Arc::new(AtomicBool::new(false)),
             intentional_restart_generation: Arc::new(AtomicU64::new(0)),
-            parser: ReadinessParser::new(),
             output: Arc::new(Mutex::new(String::new())),
             config,
             exit_handler: Arc::new(RwLock::new(None)),
@@ -103,10 +101,11 @@ impl HostSupervisor {
             .stderr
             .take()
             .ok_or_else(|| HostSupervisorError::Other("stderr not piped".into()))?;
+        let parser = new_startup_parser();
         let (ready_rx, stdout_task, stderr_task) = start_output_tasks(
             stdout,
             stderr,
-            self.parser.clone(),
+            parser,
             Arc::clone(&self.output),
             self.config.log.clone(),
         );
@@ -197,4 +196,8 @@ impl HostSupervisor {
     pub async fn output_snapshot(&self) -> String {
         self.output.lock().await.clone()
     }
+}
+
+fn new_startup_parser() -> ReadinessParser {
+    ReadinessParser::new()
 }

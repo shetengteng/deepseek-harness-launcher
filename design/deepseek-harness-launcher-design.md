@@ -44,7 +44,7 @@ dsh 启动后在 stdout 输出就绪行：
 dsh web: http://127.0.0.1:<port>/
 ```
 
-壳子解析此行后拿到 origin，将 Tauri webview 导航到该 URL。约束（来自 [host-supervisor.ts](./deepseek-harness-desktop/apps/desktop/src/host-supervisor.ts#L25-L40)）：
+壳子解析此行后拿到 origin，将 Tauri webview 导航到该 URL。约束与 dsh desktop 的 host supervisor 保持等价；上游参考实现不随本仓库分发：
 
 - 协议必须为 `http:`
 - hostname 必须为 `127.0.0.1` 或 `localhost`
@@ -191,7 +191,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 
 首启的运行时版本由用户选定 dsh 的已发布元数据决定，前端不得把 `DEFAULT_NODE_VERSION` 当成安装决策来源。`DEFAULT_NODE_VERSION` 仅是 dsh 没有声明 Node 约束时的已验证回退版本。
 
-**当前官方发布核验（2026-08-16）**：npm 官方 registry 的 `@deepseek-ai/dsh` `dist-tags.latest` 为 `0.1.0-rc.6`。该发布包未声明 `package.json.engines.node`；`_nodeVersion` 是发布构建信息，不能作为运行时兼容性契约。因此首次安装选择经过本壳子验证的 Node `22.19.0`，界面必须显示“dsh 未声明 Node 要求，使用已验证版本”，不得伪称这是官方要求。
+**运行时版本核验**：`dist-tags.latest`、`package.json.engines.node` 与 Node 发布索引都是运行时数据，不在本文档中写死版本号。若 dsh 未声明 `engines.node`，使用壳子验证过的 `DEFAULT_NODE_VERSION`，并在界面显示“dsh 未声明 Node 要求，使用已验证版本”；不得用 npm 的 `_nodeVersion` 伪称运行时兼容性要求。
 
 ```
 1. 读 state.json：
@@ -374,17 +374,17 @@ src/
 
 ### 7.3 为什么不用 Bun/Deno 替代 Node
 
-dsh 依赖 Node 内部模块（[vendor/loader/src/internal.ts](./deepseek-harness-desktop/vendor/loader/src/internal.ts#L103-L129)）：
+dsh 依赖 Node 内部模块：
 
 ```ts
 require("internal/modules/esm/loader"); // 需要 --expose-internals
 ```
 
-Bun/Deno 不支持此特性。详见 [vendor/hmr/src/index.ts:121](./deepseek-harness-desktop/vendor/hmr/src/index.ts#L121)。
+Bun/Deno 不支持此特性；兼容性以 dsh 的当前发布包为准。
 
 ### 7.4 为什么 dsh 安装走 npm 而非直接下 tarball
 
-dsh 有 160 多个 workspace 依赖（见 [apps/desktop/runtime/package.json](./deepseek-harness-desktop/apps/desktop/runtime/package.json)），都是独立的 npm 包。直接下 dsh 的 tarball 装不全依赖，必须走 npm/pnpm 的依赖解析。
+dsh 有大量独立 npm 依赖。直接下 dsh 的 tarball 装不全依赖，必须走 npm/pnpm 的依赖解析。
 
 ### 7.5 为什么用符号链接而非复制
 
@@ -405,7 +405,7 @@ dsh 有 160 多个 workspace 依赖（见 [apps/desktop/runtime/package.json](./
 
 ### 8.2 webview 安全
 
-复用原版 [main.ts](./deepseek-harness-desktop/apps/desktop/src/main.ts#L123-L138) 的策略：
+Webview 策略与 dsh desktop 的安全边界保持等价：
 
 - 只允许导航到 dsh web 的 origin
 - http/https 外链交给系统浏览器
@@ -414,7 +414,7 @@ dsh 有 160 多个 workspace 依赖（见 [apps/desktop/runtime/package.json](./
 
 ### 8.3 子进程隔离
 
-- dsh 子进程的 cwd 设为用户选择的工作目录，不是壳子目录
+- dsh 子进程的 cwd 设为其已安装版本目录；项目目录由 dsh Web UI 管理。v1 不提供 launcher 侧的工作目录配置，避免把工作区路径写入壳子状态。
 - 环境变量过滤：去掉壳子自己的 `RUST_*`、`TAURI_*`，只传必要的 `DSH_*`
 - stdin 关闭（`stdio: ['ignore', 'pipe', 'pipe']`）
 
@@ -451,7 +451,6 @@ macOS 额外处理：
 | ------------------- | ------------ | --------------------------------------------- |
 | `node_registry`     | 自动选择     | 仅在首启失败或用户主动更换时使用              |
 | `npm_registry`      | 默认 registry | 仅在 dsh 更新失败时提供更换源重试              |
-| `working_directory` | 用户文档目录 | dsh 默认工作目录                              |
 
 `crash_retry_limit`、版本保留数量、完整性校验和回滚策略由壳子内部固定，不出现在设置页。
 

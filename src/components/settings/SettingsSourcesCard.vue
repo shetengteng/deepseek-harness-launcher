@@ -40,7 +40,7 @@ function nodeMirrorLabel(mirror: MirrorInfo): string {
         <Select
           :model-value="nodeMirror"
           @update:model-value="$emit('setNodeMirror', $event)"
-          ><SelectTrigger class="w-44 shrink-0"
+          ><SelectTrigger class="h-7 w-44 shrink-0 text-xs"
             ><SelectValue placeholder="选择下载源" /></SelectTrigger
           ><SelectContent
             ><SelectItem
@@ -62,7 +62,7 @@ function nodeMirrorLabel(mirror: MirrorInfo): string {
         <Select
           :model-value="registry"
           @update:model-value="$emit('setRegistry', $event)"
-          ><SelectTrigger class="w-44 shrink-0"
+          ><SelectTrigger class="h-7 w-44 shrink-0 text-xs"
             ><SelectValue placeholder="选择下载源" /></SelectTrigger
           ><SelectContent
             ><SelectItem value="https://registry.npmmirror.com"

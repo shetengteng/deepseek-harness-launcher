@@ -66,9 +66,6 @@ const canRestartDownload = computed(
   () => store.installing && store.nodeInstallOperationId !== null,
 );
 const restartingDshInstall = ref(false);
-const canRestartDshInstall = computed(
-  () => store.installingDsh && store.dshInstallOperationId !== null,
-);
 const npmRegistry = computed({
   get: () => store.bootstrapPlan?.registry ?? "https://registry.npmjs.org",
   set: (registry: string) => {
@@ -87,7 +84,6 @@ async function restartNodeDownload(): Promise<void> {
 }
 
 async function restartDshInstall(): Promise<void> {
-  if (!canRestartDshInstall.value) return;
   restartingDshInstall.value = true;
   try {
     await store.restartDshInstall(npmRegistry.value);
@@ -265,7 +261,6 @@ onUnmounted(() => {
               <Button
                 class="w-full"
                 variant="outline"
-                :disabled="!canRestartDshInstall || restartingDshInstall"
                 @click="restartDshInstall"
               >
                 <RotateCcw

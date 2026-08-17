@@ -36,7 +36,7 @@ import FirstRun from "@/components/FirstRun.vue";
 const stubs = {
   Button: {
     emits: ["click"],
-    template: "<button @click=\"$emit('click')\"><slot /></button>",
+    template: "<button v-bind=\"$attrs\" @click=\"$emit('click')\"><slot /></button>",
   },
   Progress: { template: "<div />" },
   MirrorSelector: { template: '<div data-testid="mirror-selector" />' },
@@ -97,6 +97,25 @@ test("allows switching the npm source while dsh is installing", async () => {
     .find((button) => button.text().includes("重新使用此 npm 来源下载"))!
     .trigger("click");
 
+  expect(store.restartDshInstall).toHaveBeenCalledWith(
+    "https://registry.npmjs.org",
+  );
+});
+
+test("keeps npm restart available after the installation task stops", async () => {
+  store.nodeVersion = "22.19.0";
+  store.installing = false;
+  store.installingDsh = false;
+  store.dshInstallOperationId = null;
+  const wrapper = shallowMount(FirstRun, { global: { stubs } });
+  await flushPromises();
+
+  const restart = wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("重新使用此 npm 来源下载"))!;
+  expect(restart.attributes("disabled")).toBeUndefined();
+
+  await restart.trigger("click");
   expect(store.restartDshInstall).toHaveBeenCalledWith(
     "https://registry.npmjs.org",
   );

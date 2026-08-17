@@ -66,3 +66,21 @@ async fn append_output_respects_char_boundary() {
     assert!(output.len() <= MAX_STARTUP_OUTPUT_CHARS + 3);
     assert!(output.is_char_boundary(output.len()));
 }
+
+#[tokio::test]
+async fn each_startup_parser_accepts_its_own_random_port() {
+    let first = new_startup_parser();
+    first
+        .push("dsh web: http://127.0.0.1:49808/\n")
+        .await
+        .expect("first startup readiness");
+
+    let restarted = new_startup_parser();
+    let origin = restarted
+        .push("dsh web: http://127.0.0.1:52819/\n")
+        .await
+        .expect("restarted host readiness")
+        .expect("restarted host origin");
+
+    assert_eq!(origin.as_str(), "http://127.0.0.1:52819");
+}

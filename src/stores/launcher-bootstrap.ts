@@ -176,14 +176,13 @@ export function createBootstrapActions({
     if (!(await setRegistryAction(registry))) return;
 
     const operationId = state.dshInstallOperationId.value;
-    if (!operationId) return;
+    if (operationId) {
+      const bootstrap = activeBootstrap;
+      const dshInstall = activeDshInstall;
+      await cancelDshInstall(operationId);
+      await (bootstrap ?? dshInstall);
+    }
 
-    const bootstrap = activeBootstrap;
-    const dshInstall = activeDshInstall;
-    const cancelled = await cancelDshInstall(operationId);
-    if (!cancelled) return;
-
-    await (bootstrap ?? dshInstall);
     state.error.value = null;
     state.lastFailedAction.value = null;
     await startBootstrapAction({ keepSelectedMirror: true });

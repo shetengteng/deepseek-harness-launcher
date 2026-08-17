@@ -67,7 +67,7 @@ test("updates only to the registry latest version after explicit confirmation", 
   await flushPromises();
 
   expect(wrapper.text()).toContain("0.1.0");
-  await button(wrapper, "更新到最新版本").trigger("click");
+  await button(wrapper, "安装新版本").trigger("click");
   await flushPromises();
 
   expect(api.installDsh).toHaveBeenCalledWith();
@@ -77,13 +77,37 @@ test("updates only to the registry latest version after explicit confirmation", 
   ]);
 });
 
-test("disables the update when current version is already latest", async () => {
+test("keeps the update status height fixed when the current version is latest", async () => {
   api.getDshState.mockResolvedValue(state("0.1.0"));
   const wrapper = mount(Settings);
   await flushPromises();
 
-  expect(button(wrapper, "已是最新版本").attributes("disabled")).toBeDefined();
+  expect(wrapper.text()).not.toContain("可更新版本");
+  expect(wrapper.text()).not.toContain("安装新版本");
+  expect(wrapper.text()).toContain("正在使用的 DeepSeek Harness 版本");
+  expect(wrapper.text()).not.toContain("当前启动的 DeepSeek Harness");
+  expect(wrapper.text()).toContain("已是最新版本");
+  expect(wrapper.find('[data-testid="dsh-update-status"]').classes()).toContain(
+    "min-h-7",
+  );
   expect(api.installDsh).not.toHaveBeenCalled();
+
+  await button(wrapper, "刷新").trigger("click");
+  await flushPromises();
+
+  expect(api.getLatestDshVersion).toHaveBeenCalledTimes(2);
+});
+
+test("does not expose the automatic recovery version in settings", async () => {
+  api.getDshState.mockResolvedValue({
+    ...state("0.0.9"),
+    known_good: "0.0.8",
+  });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.text()).not.toContain("可恢复的版本");
+  expect(wrapper.text()).not.toContain("0.0.8");
 });
 
 test("retains the displayed current version when installing latest fails", async () => {
@@ -93,7 +117,7 @@ test("retains the displayed current version when installing latest fails", async
   const wrapper = mount(Settings);
   await flushPromises();
 
-  await button(wrapper, "更新到最新版本").trigger("click");
+  await button(wrapper, "安装新版本").trigger("click");
   await flushPromises();
 
   expect(wrapper.text()).toContain("0.0.9");

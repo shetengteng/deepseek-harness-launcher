@@ -6,12 +6,27 @@
 
 ## 0. 审阅清单
 
+### 当前待办（2026-08-17）
+
+本节是唯一的当前 TODO。下文 M1–M4 的已完成 PR 记录用于追溯，不应据此重复实施。
+
+| 优先级 | 工作项 | 状态 |
+| ------ | ------ | ---- |
+| P0 | 补齐 PR-020b/PR-020c：用户确认后冻结展示版本、`pending` 切换、更新提示与显式重启 | 未开始 |
+| P0 | dsh 子进程持久化日志；诊断包只收集最近 3 份 dsh 日志 | 未开始 |
+| P0 | 日常启动校验 current Node/dsh；current 损坏或启动失败时回退 `known_good` 一次 | 未开始 |
+| P0 | Webview 导航/权限限制验收；确认 dsh Web UI 管理项目目录的边界 | 未开始 |
+| P1 | dsh 更新触发的 Node 升级确认与原子切换 | 未开始 |
+| P1 | Node 安装命令按平台选择 archive，并执行下载后二进制版本校验 | 未开始 |
+| P1 | PR-021–PR-026：CI、签名/公证、打包、发布文档 | 未开始 |
+| P2 | Tauri 冷启动、更新与崩溃恢复 E2E | 未开始 |
+
 实施前必读：
 
 - [deepseek-harness-launcher-design.md](./deepseek-harness-launcher-design.md)：架构、目录、契约、安全、跨平台
 - [deepseek-harness-launcher-prototype.html](./deepseek-harness-launcher-prototype.html)：UI 视觉、状态机、文案
-- [deepseek-harness-desktop/apps/desktop/src/host-supervisor.ts](./deepseek-harness-desktop/apps/desktop/src/host-supervisor.ts)：就绪行解析、超时/重试语义（Rust 端要等价实现）
-- [deepseek-harness-desktop/apps/desktop/src/main.ts](./deepseek-harness-desktop/apps/desktop/src/main.ts)：webview 安全策略原版
+- dsh desktop 的 host supervisor：就绪行解析、超时/重试语义（Rust 端保持等价；上游源码不随本仓库分发）
+- dsh desktop 的 main 进程：Webview 安全策略参考（上游源码不随本仓库分发）
 
 约定：
 
@@ -212,7 +227,7 @@ deepseek-harness-launcher/
 
 ### M1.3 Host 监管（`host/`） ✅ PR-003 已完成
 
-参照 [host-supervisor.ts](./deepseek-harness-desktop/apps/desktop/src/host-supervisor.ts) 实现 Rust 等价物：
+参照 dsh desktop 的 host supervisor 行为实现 Rust 等价物；上游源码不随本仓库分发：
 
 - [x] `readiness.rs`：
   - 常量 `READINESS_PREFIX = "dsh web: "`
@@ -306,28 +321,19 @@ deepseek-harness-launcher/
 
 **验收**：`cargo test` 115/115（lib 93 + commands_integration 4 + mirror 9 + download 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿。
 
-- `GET {mirror}/v{version}/node-v{version}-{platform}-{arch}.tar.gz`
-- 流式下载，`reqwest::Response::bytes_stream()` → 写临时文件
-- 通过 `tauri::Emitter::emit` 推 `download-progress` 事件（`{ stage, bytes, total }`）
-- [ ] SHA-256 校验：`GET {mirror}/v{version}/SHASUMS256.txt`，匹配同名条目
-- [ ] 失败重试：单镜像最多 2 次，全镜像失败抛 `NodeDownloadExhausted`
-- [ ] macOS 下载完成后调用 `xattr -d com.apple.quarantine`（Rust 用 `std::process::Command` 或 `xattr` crate）
+### M2.3 解压与安装（`node/install.rs`） 🚧
 
-### M2.3 解压与安装（`node/install.rs`）
+- [x] 下载 archive 解压到版本化 staging 目录，再原子提升到 `node-runtime/node-v<version>/` 并更新 `VERSION`。
+- [x] Unix tar.gz 和 Windows zip 解压实现保留可执行权限/路径安全校验。
+- [x] 安装成功后写入 `state.node` 与首启计划阶段。
+- [ ] `install_node_command` 目前固定下载 tar.gz；需按平台选择 `.tar.gz` 或 Windows `.zip`，并与 Node 发布索引的正式产物对应。
+- [ ] 安装后执行受管 `node --version`，确认入口存在且版本与下载目标一致。
 
-- [ ] 解压目标：`<data_dir>/node-runtime-new/`
-- [ ] Unix：`flate2::GzDecoder` + `tar::Archive`，保留可执行位
-- [ ] Windows：`zip::ZipArchive` 解压
-- [ ] 校验入口：`node-runtime-new/bin/node`（或 `node.exe`）存在并能 `--version` 输出预期版本
-- [ ] 原子切换：`rename(node-runtime-new, node-runtime)`，原目录存在则先 `rename(node-runtime, node-runtime-old)`，切换后删 old
-- [ ] 写 `node-runtime/VERSION`
-- [ ] 更新 `state.node`
+### M2.4 版本与 engines（`node/version.rs`） ✅
 
-### M2.4 版本与 engines（`node/version.rs`）
-
-- [ ] `parse_node_version(s) -> Result<Version>`
-- [ ] `satisfies_engines(node_version, engines_node_range) -> bool`：解析 dsh `package.json.engines.node`，用 `semver::VersionReq`
-- [ ] 默认目标版本：硬编码常量 `DEFAULT_NODE_VERSION = "v22.19.0"`（与 dsh engines 对齐，每发布前确认）
+- [x] `parse_node_version(s) -> Result<Version>`。
+- [x] `satisfies_engines(node_version, engines_node_range) -> bool`：使用 `semver::VersionReq` 校验 dsh `engines.node`。
+- [x] `DEFAULT_NODE_VERSION` 仅作为 dsh 未声明约束时的已验证回退；发布前通过发布检查清单复核。
 
 ### M2.5 首启向导（`FirstRun.vue`） ⚠️ PR-011 已完成，交互由 PR-020b 替换
 
@@ -480,7 +486,6 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 - [x] `promote_to_current(state, dsh_dir, version)`：state + 指针双更新
   - 旧 current → known_good（指针 + state）
   - 新版本 → current（指针 + state）
-  - 清除 pending
   - upsert installed（status = "verified"）
   - 同版本连续 promote 不会把 current 设为 known_good
 - [x] `rollback_to_known_good(state, dsh_dir) -> Result<String>`：
@@ -489,19 +494,20 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - **known_good 字段清空**（已提升为 current，没有更老的 known_good）
   - 失败版本（原 current）→ installed 中标记为 broken
   - installed 中标记 broken
-  - 清除 pending
-- [x] `set_pending(state, version)` / `clear_pending(state)`：pending 字段管理
+- [ ] `set_pending(state, version)` / `clear_pending(state)`：留给 PR-020c；当前 `DshState` 只有 `current` 和 `known_good`
 - [x] `prune_old_versions(state, dsh_dir, keep_extra) -> Result<Vec<String>>`：
-  - 保留集：current + known_good + pending + 最新 `keep_extra` 个（按版本号降序）
+  - 保留集：current + known_good + 最新 `keep_extra` 个（按版本号降序）
   - **从文件系统扫描版本目录**（不依赖 state.dsh.installed，避免 state 与 FS 不同步）
   - 跳过指针文件（current / known-good / *.json）
   - 删除不在保留集内的版本目录
 - [x] `list_installed_versions(dsh_dir) -> Result<Vec<String>>`：列出所有版本（排序，排除指针）
 - [x] `is_version_installed(dsh_dir, version) -> bool`：版本目录存在性检查
+- [ ] 日常启动恢复：验证 current 的 Node 与 dsh 入口；当前版本缺失或启动失败时切到 `known_good` 并只重试一次，否则进入修复流程。
 
 ### M3.3 测试
 
-- [x] 单元测试 28 个（`version.rs`）：指针读写 roundtrip、覆盖、switch、promote 首次 / 旧变 known_good / 清 pending / 失败、rollback 成功 / 无 known_good / 目录缺失、set/clear pending、prune 保留 current+known_good / 保留 extra / 保留 pending / 跳过指针 / 空目录、list 排序 / 排除指针 / 空目录、is_version_installed、完整升级回滚场景、同版本 promote 无自引用
+- [x] 单元测试：指针读写、切换、提升、回滚、已安装版本清理和状态持久化。
+- [ ] `pending` 的状态机与回滚测试：随 PR-020c 增加。
 - [x] 集成测试 19 个（`tests/version_dsh.rs`，mock 版本目录 + state 持久化）：
   - 完整升级生命周期成功
   - 升级失败触发回滚
@@ -512,17 +518,15 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - switch 未安装版本报错
   - prune 删除旧版本
   - prune 保留 N 个额外版本
-  - prune 保留 pending
   - prune 不删指针文件
   - list 返回所有版本（排序）
-  - clear_pending
   - 完整场景：升级→失败回滚→再次更新→清理
   - state 序列化/反序列化 roundtrip
   - 同版本 promote 两次不产生自引用 known_good
   - state save + reload
   - 原子指针切换一致性
 - [x] 本地演示脚本 `examples/version_dsh_demo.rs`：9 步流程可视化
-  - 首次安装 → 升级成功 → 升级失败回滚 → 再升级成功 → 清理旧版本 → 状态总结 → 手动 switch → clear_pending
+  - 首次安装 → 升级成功 → 升级失败回滚 → 再升级成功 → 清理旧版本 → 状态总结 → 手动 switch
 
 **验收**：`cargo test` 249/249（lib 175 + commands 4 + mirror 9 + download 7 + install_dsh 12 + registry 14 + version_dsh 19 + 其他 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿；`cargo run --example version_dsh_demo` 输出完整升级回滚流程。
 
@@ -564,19 +568,21 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 **后续策略**：这段历史实现中的复杂后台升级流程已由 PR-020c 收敛为轻量版本检查、右侧更新提示和用户主动安装；`Settings.vue` 的通用设置布局继续复用。
 
-### M3.3b 首启体验与原型 03 对齐 ✅ PR-020b
+### M3.3b 首启体验与原型 03 对齐 🚧 PR-020b
 
 **目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，用户点击后才安装；不提供历史版本选择、范围规则或复杂版本管理。
 
 - [x] 后端首启编排：
   - `get_latest_dsh_version_command` 查询 registry 元数据，验证 `dist-tags.latest` 对应 manifest 后返回精确版本
-  - `resolve_bootstrap_plan_command(expected_version)` 接收界面已展示的精确版本，重新校验该版本 manifest、Node 目标并持久化 `bootstrap_plan`，不得漂移到新的 `latest`
+  - [x] `resolve_bootstrap_plan_command` 解析并持久化 `bootstrap_plan`，安装重试复用已冻结的计划
+  - [ ] `resolve_bootstrap_plan_command(expected_version)` 接收界面已经展示且经用户确认的精确版本。当前实现仍会在解析计划时读取 `latest`，因此可能与界面展示版本漂移；随 PR-020c 修复
   - `install_node_command` 完成后将计划标记为 `node_installed`；`install_dsh_command` 只消费冻结的版本和 registry，不得在重试时重新读取 `latest`
   - dsh 完整性校验成功后清除计划并自动调用 `start_host`；Host 就绪后进入 dsh Web UI
-  - `state.json` schema 迁移到 `3`：保留 Node、current、known_good、pending 和已安装版本；移除范围、轮询、自动升级和忽略版本字段
+  - `state.json` schema 迁移到 `3`：保留 Node、current、known_good 和已安装版本；范围、轮询、自动升级和忽略版本字段已移除
 - [x] 前端双任务 bootstrap 界面：
   - 采用原型 03 的标题栏、标识、说明与两个任务卡，不展示通用 Card 向导和“步骤 N/M”计数
-  - dsh 任务卡显示 `latest` 解析出的精确版本和“开始安装”按钮；加载失败时显示可操作错误和重试
+  - [x] dsh 任务卡显示 `latest` 解析结果，并在加载失败时显示可操作错误和重试
+  - [ ] 用户点击“开始安装”后才解析并冻结该展示版本。当前 bootstrap 在界面挂载后自动启动，随 PR-020c 收敛为显式确认
   - 点击后冻结目标版本；Node 卡展示实际解析版本及状态：解析、下载、SHA-256 校验、解压、完成
   - dsh 卡展示冻结的精确版本及状态：等待 Node、npm install、完整性校验、完成；仅在 npm 可报告可靠总量时展示百分比或剩余时间
   - 下载源自动选择可信镜像；仅在对应任务失败时提供“重试 / 更换镜像源”恢复操作，`MirrorSelector` 不再占据首屏
@@ -595,7 +601,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 **目标**：应用启动后轻量检查一次 registry；发现新版时通过主窗口右侧非阻塞提示告知用户。只有用户点击提示或设置页按钮后才下载，不自动重启。
 
 - [ ] 后端：
-  - `install_dsh_command` 在首启复用冻结计划，其他场景接收提示中展示的精确版本，重新校验该版本 manifest 后冻结安装目标
+  - `install_dsh_command` 在首启复用冻结计划；更新场景接收提示中展示且经确认的精确版本，重新校验 manifest 后冻结安装目标
   - 启动时的版本检查只读取元数据，失败不影响 dsh 启动；不引入定时任务或数据库
   - `state.json` 只增加一个 `last_notified` 版本字段，避免同一版本在每次启动时重复打扰
   - 当前版本就是 `latest` 时前端禁用更新；安装成功后设置 `pending`，由用户点击“立即重启”触发切换
@@ -607,7 +613,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - 用户未点击时不下载；安装失败显示“当前版本未受影响”，提供“重试 / 更换源重试”
 - [ ] 可行性验证：
   - `dsh/registry.rs` 已有 `dist-tags.latest`、精确 manifest、缓存和错误处理，无需排序或返回完整版本列表
-  - `dsh/install.rs` 已按精确版本创建隔离目录，`dsh/version.rs` 已支持 `pending`、`current`、`known_good` 和回滚；无需变更安装目录协议
+  - `dsh/install.rs` 已按精确版本创建隔离目录；`dsh/version.rs` 已支持 `current`、`known_good` 和回滚，PR-020c 需增加 `pending` 状态与切换协议
   - `semver` crate 仅用于 Node `engines` 校验，不再解释或排序用户提供的 dsh 版本
 - [ ] 测试与验收：
   - Rust：`latest` 精确 manifest 校验、Node 不兼容时不写 pending、安装失败不提升 current、回滚
@@ -616,9 +622,9 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 ### M3.5 既有升级功能的收敛
 
-PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、自动重启和复杂升级设置不再是产品功能。当前保留轻量版本检查、右侧更新提示、用户主动安装、安装进度、版本指针与回滚实现。历史 PR 记录仅用于追溯，不代表当前需求。
+PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、自动重启和复杂升级设置不再是产品功能。PR-020c 应以轻量版本检查、右侧更新提示、用户主动安装、安装进度、版本指针与回滚取代它们。当前设置页仍是“安装后立即提升并重启”的过渡实现，不代表目标产品行为。
 
-**验收**：
+**PR-020c 验收**：
 
 - 启动应用时最多发起一次轻量 dsh registry 检查；检查失败不阻塞启动
 - 右侧提示只展示新版和“更新”按钮；没有用户点击时不下载、不重启
@@ -629,60 +635,49 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 
 ## 7. M4 — 健壮性
 
-### M4.1 崩溃恢复（`host/lifecycle.rs`）
+### M4.1 崩溃恢复（`host/crash.rs` + `commands/recovery.rs`） ✅
 
-- [ ] `crash_counter` 持久化到 `state.json`
-- [ ] dsh 启动后意外退出（`onUnexpectedExit`）：
-  - `crash_counter += 1`，写 state
-  - 若 `< crash_retry_limit` 且距上次崩溃 < 5 分钟 → 自动重启 current
-  - 若 `>= crash_retry_limit` → emit `crash-limit-reached` 事件，前端弹窗
-- [ ] 弹窗选项：[回滚 known_good] [继续重试 current] [退出]
-- [ ] 用户手动重启 app → `crash_counter = 0`
+- [x] `crash_counter` 与最后崩溃时间持久化到 `state.json`。
+- [x] dsh 意外退出后在 5 分钟窗口内计数；低于上限时自动重启 current，达到上限时发出 `host-crash-limit` 事件。
+- [x] 前端提供回滚到 `known_good` 与重试 current 的恢复操作；手动启动 Host 会清零崩溃计数。
+- [ ] 在崩溃弹窗中提供“退出应用”操作；当前可关闭弹窗并从托盘退出。
 
-### M4.2 Node 升级流程
+### M4.2 Node 升级流程 🚧
 
 实现设计 §5.4：
 
-- [ ] dsh 新版 `engines.node` 不满足当前 → 弹窗显示"需要 Node X，当前 Y"
-- [ ] 用户确认 → 走 M2.2/M2.3 下载新 Node → 原子切换 → 继续 dsh 启动
-- [ ] 取消则放弃该 dsh 版本升级
+- [x] 首启会由 dsh 的 `engines.node` 与 Node 发布索引解析可用的具体 Node 版本。
+- [x] 更新目标与当前 Node 不兼容时会中止安装，保留当前 dsh。
+- [ ] 更新场景显示 Node 版本差异，用户确认后下载、原子切换 Node 并继续 dsh 更新。
+- [ ] 用户取消时明确放弃该次更新。
 
-### M4.3 错误提示与日志
+### M4.3 错误提示与日志 🚧
 
-- [ ] `error.rs`：每种错误对应设计 §11.1 的用户文案
-- [ ] `logging.rs`：
-  - `tracing_subscriber::fmt` + `tracing_appender::rolling::daily`
-  - macOS 日志目录 `~/Library/Logs/deepseek-harness-launcher/app.log`
-  - dsh 子进程日志按 `<data_dir>/logs/dsh-<timestamp>.log` 分文件
-- [ ] "导出诊断信息"按钮：把壳子日志 + 最近 3 份 dsh 子进程日志打包成 zip，让用户另存
+- [x] `error.rs` 为网络、磁盘、下载、Host 等错误提供用户可读文案。
+- [x] 壳子日志使用 `tracing_subscriber` + `tracing_appender::rolling::daily`；macOS 写入 `~/Library/Logs/deepseek-harness-launcher/`。
+- [x] 设置页可导出 `state.json` 与现有日志目录中的文件。
+- [ ] dsh stdout/stderr 按启动会话写入 `<data_dir>/logs/dsh-<timestamp>.log`；当前只保留有限的内存输出，因此诊断包通常没有 dsh 运行日志。
+- [ ] 导出时只保留最近 3 份 dsh 日志，并测试文件数与归档内容。
 
-### M4.4 网络与磁盘错误
+### M4.4 网络与磁盘错误 ✅
 
-- [ ] 下载前检查磁盘可用空间 ≥ 200MB（`fs2` crate 或 `std::fs::statvfs` 封装）
-- [ ] 无网络识别：`reqwest::Error::is_connect`、`is_timeout` → 提示"无法连接网络"
-- [ ] 镜像源全失败：聚合每个源的错误信息，统一提示
+- [x] 下载前检查磁盘可用空间 ≥ 200MB（`fs2`）。
+- [x] 下载错误区分连接/超时与磁盘或权限问题，返回可操作文案。
+- [x] 镜像探活会汇总所有失败来源。
 
-### M4.5 系统托盘与窗口生命周期
+### M4.5 系统托盘与窗口生命周期 🚧
 
 原型中的托盘菜单定义信息架构：dsh 状态、显示主窗口、重启 dsh、检查更新、设置、关于、导出诊断日志和退出。实际实现使用 Tauri 2 的系统原生托盘菜单，不以 `TrayMenu.vue` 复刻 HTML/CSS 视觉，保证 macOS、Windows、Linux 的平台一致性与可访问性。
 
-- [ ] `Cargo.toml` 启用 Tauri tray 所需 API；`lib.rs` 用 `TrayIconBuilder` 创建应用图标和原生菜单
-- [ ] 菜单项与稳定 ID：禁用的状态行、`show-main-window`、`restart-dsh`、`check-dsh-update`、`open-settings`、`about`、`export-diagnostics`、分隔线、`quit`
-- [ ] `on_menu_event` 按菜单 ID 分发：显示并聚焦主窗口；发出 `tray-open-settings` / `tray-check-dsh-update` / `tray-about` 前端事件；复用现有 host 生命周期执行重启；复用诊断导出命令；退出前 `shutdown_host()`
-- [ ] `on_tray_icon_event`：左键点击显示并聚焦主窗口；右键及其他平台默认手势由原生菜单处理；不依赖仅 macOS 有效的手势
-- [ ] 前端新增 `useTrayEvents.ts`，在 `App.vue` 订阅托盘事件，打开既有设置、升级或关于视图；组件不得直接调用 tray API
-- [ ] Host 生命周期通过事件更新托盘状态行：启动中、运行中（携带当前 dsh 版本）和已停止/异常；状态行仅展示信息，不提供可点击操作
-- [ ] 拦截 `tauri::RunEvent::ExitRequested` 与主窗口关闭：默认隐藏主窗口并保留托盘和 dsh；用户从 `quit` 明确退出时执行 host shutdown 后再退出进程
-- [ ] 平台资源：补齐 `src-tauri/icons/` 的 tray 图标变体，macOS 模板图标保持单色，Windows/Linux 使用适配系统托盘的 16/32 px 图标
+- [x] `Cargo.toml` 启用 `tray-icon`；`TrayIconBuilder` 创建原生菜单。
+- [x] 菜单具有稳定 ID，包含显示窗口、重启 dsh、检查更新、设置、关于、导出诊断与退出。
+- [x] 菜单与左键事件可显示窗口、发出前端事件、重启 Host 或在退出前关闭 Host。
+- [x] `useTrayEvents.ts` 将托盘事件桥接至设置、关于和诊断导出视图。
+- [x] 主窗口关闭时隐藏；用户从托盘退出时等待 Host 停止后退出。
+- [ ] 让状态行覆盖所有 Host 生命周期（启动、运行、停止、异常）；当前只在创建和托盘重启路径更新。
+- [ ] 补齐平台专用 tray 图标变体；macOS 使用模板图标，Windows/Linux 使用 16/32 px 图标。
 
-**验收**：
-
-- 杀掉 dsh 子进程 3 次，观察崩溃弹窗
-- 模拟 Node 下载文件被篡改（改 1 字节），SHA 校验失败
-- 磁盘满时显示对应提示
-- 启动后托盘显示“运行中”及当前 dsh 版本；重启 dsh 后状态依次变化为“启动中”与“运行中”
-- 从托盘显示主窗口、打开设置、检查更新和导出诊断日志，确认分别触发对应既有流程
-- 关闭主窗口后 dsh 持续运行；从托盘退出后 dsh 被关闭且应用进程退出
+**剩余验收**：dsh 日志按会话落盘并被诊断包收集；所有 Host 状态同步到托盘；确认 Node 升级或取消更新不会改变当前可用运行时。
 
 ---
 
@@ -732,33 +727,23 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 
 ## 9. 测试策略
 
-### 9.1 单元测试（Rust）
+### 9.1 已有 Rust 测试
 
-- `host/readiness.rs`：复刻 `host-supervisor.ts` 的边界用例（无 URL、冲突 URL、非 loopback、无端口、超长输出截断）
-- `dsh/version.rs`：已发布版本排序、精确版本切换与回滚状态机
-- `node/install.rs`：用 fixture tarball 验证解压、SHA 失败
-- `state.rs`：并发写、损坏文件
-- `mirror.rs`：URL 拼接、自定义源校验
+- 覆盖状态持久化、Node 下载/解压/校验、镜像探活、registry、dsh 安装与版本指针、Host readiness/监管、崩溃策略和命令层。
+- 2026-08-17 本地基线：`cargo test --quiet` 通过 126 个 crate 测试和 4 个集成测试。
 
-覆盖率目标：核心模块 ≥ 90%。
+### 9.2 已有前端测试
 
-### 9.2 集成测试（Rust）
+- Vitest 覆盖首启、启动遮罩和设置页的关键交互。
+- 2026-08-17 本地基线：`pnpm test` 通过 10 个测试；`pnpm lint && pnpm build` 通过，`pnpm build` 已包含 `vue-tsc --noEmit`。
 
-- `tests/host_lifecycle.rs`：用 mock 子进程（脚本输出就绪行后 sleep）跑通 start/shutdown/超时/意外退出
-- `tests/first_run.rs`：mock 镜像源服务器（`wiremock` crate）跑通下载流程
+### 9.3 测试待办
 
-### 9.3 前端测试
-
-- Vitest + `@vue/test-utils` + `@testing-library/vue`：状态机切换、错误展示
-- Pinia store 用 `setActivePinia(createPinia())` 隔离测试
-- shadcn-vue 组件交互测试：`Dialog` 打开/关闭、`Select` 选项触发、`Switch` 切换回写 store
-- 关键交互（最新版本展示、安装确认、设置页）配快照测试
-
-### 9.4 E2E
-
-- `tauri-driver` + WebdriverIO
-- 关键路径：首启 → 显示 `latest` 精确版本 → 下载 → 主界面 → 设置 → 确认更新最新版本
-- 放行到 CI 的 nightly job
+- [ ] 为 PR-020b/PR-020c 增加“展示版本即安装版本”、`pending`、用户确认重启和 Node 不兼容的 Rust/Vue 测试。
+- [ ] 为 dsh 文件日志和诊断导出最近 3 份日志增加测试。
+- [ ] 补充 mock 子进程的 Host 生命周期集成测试：就绪、超时、意外退出和关闭。
+- [ ] 建立 Tauri E2E：首启、更新、回滚和崩溃恢复；作为 CI nightly 门禁。
+- [ ] 在 CI 中采集覆盖率后，再设定可测量的模块覆盖率目标。
 
 ---
 
@@ -779,7 +764,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 
 - ✅ PR-007 [M2] `mirror` 模块 + 探活（详见 §M2.1）
 - ✅ PR-008 [M2] `node/download` + SHA 校验 + 进度事件（详见 §M2.2 + §M2.4）
-- ✅ PR-009 [M2] `node/install` 跨平台解压 + 原子切换（详见 §M2.3）
+- 🚧 PR-009 [M2] `node/install` 解压 + 原子切换；Windows archive 选择与安装后二进制校验待补齐（详见 §M2.3）
 - ✅ PR-010 [M2] `node/version` + engines 校验（已并入 PR-008，详见 §M2.4）
 - ✅ PR-011 [M2] 前端首启向导 + 镜像源选择器（详见 §M2.5）
 
@@ -791,16 +776,16 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 - ✅ PR-014a [M3] 启动流程闭环修复（冒烟测试前置）（详见 §M3.3a）
 - ⚠️ PR-015 [M3] 历史升级编排实现；由 PR-020c 删除并替换为显式版本安装
 - ⚠️ PR-016 [M3] 历史升级设置与对话框；由 PR-020c 收敛为最新版本更新 UI
-- ✅ PR-020b [M3] 首启 latest 展示 + 冻结安装计划（详见 §M3.3b）
+- 🚧 PR-020b [M3] 首启 latest 展示 + 安装计划；“用户确认后冻结展示版本”待 PR-020c 补齐（详见 §M3.3b）
 - ⬜ PR-020c [M3] 更新提示、显式安装与重启切换（详见 §M3.4）
 
 ### M4
 
 - ✅ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（`host/crash.rs` 计数窗口策略 + supervisor 自动重启 + `host-crash-limit`/`host-restarted` 事件 + 前端 `CrashDialog.vue` + store 恢复 actions）
-- ✅ PR-018 [M4] Node 升级基础设施；最新 dsh 更新的 Node 不兼容会阻止安装并保留当前版本
-- ✅ PR-019 [M4] 错误文案 + 诊断导出（`LauncherError::user_message` 中文文案 + `export_diagnostics` zip 打包 state.json/壳子日志/dsh 日志 + 设置页导出按钮）
+- 🚧 PR-018 [M4] Node 升级基础设施；当前只会阻止不兼容更新，确认后的 Node 升级待实现
+- 🚧 PR-019 [M4] 错误文案 + 诊断导出；dsh 子进程日志落盘与“最近 3 份”筛选待实现
 - ✅ PR-020 [M4] 磁盘/网络错误识别（`node/disk.rs` 200MB 下载前检查 + 下载错误文案区分网络/磁盘不足）
-- ⬜ PR-020a [M4] 系统托盘与窗口生命周期（原生 tray 菜单 + 状态同步 + 前端事件桥接 + 退出时 host shutdown，详见 §M4.5）
+- 🚧 PR-020a [M4] 系统托盘与窗口生命周期（菜单、事件桥接与退出时 host shutdown 已完成；全生命周期状态同步和平台图标待完成，详见 §M4.5）
 
 ### M5
 
@@ -834,13 +819,13 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 2. dsh web 前端资源与 dsh web 后端的兼容性是否需要壳子侧额外校验？
 3. 多 profile 支持（stable + canary 并存）推迟到 v2，但 `state.json` schema 是否预留 `profiles` 字段？
 
-建议在 M1 启动前对上述三项做一次性决策，避免 schema 后续迁移。
+建议在启动 M5 发布工作前对上述三项做一次性决策，避免产物矩阵和 schema 后续迁移。
 
 ---
 
-## 13. 实施前置条件
+## 13. 发布前置条件
 
-启动 M1 前必须就绪：
+启动 M5 前必须就绪：
 
 - [ ] macOS / Windows / Linux 三平台的本地开发环境
 - [ ] Apple Developer ID 证书（M5 用，M1-M4 可空）

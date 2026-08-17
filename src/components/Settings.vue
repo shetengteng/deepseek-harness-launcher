@@ -4,7 +4,6 @@ import { RefreshCw } from "lucide-vue-next";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
-import SettingsUpdateCard from "@/components/settings/SettingsUpdateCard.vue";
 import {
   exportDiagnostics,
   getDshState,
@@ -198,9 +197,6 @@ watch(
         <SettingsEnvironmentCard
           :dsh-state="dshState"
           :node-version="props.nodeVersion"
-        />
-        <SettingsUpdateCard
-          :dsh-state="dshState"
           :latest-version="latestDshVersion"
           :refreshing="versionsLoading"
           :upgrading="upgrading"

@@ -32,7 +32,7 @@ defineEmits<{
         </div>
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           :disabled="exporting"
           @click="$emit('export')"
           ><FileArchive class="mr-2 h-4 w-4" />{{
@@ -60,7 +60,7 @@ defineEmits<{
         <Button
           v-if="!confirmingUninstall"
           variant="destructive"
-          size="sm"
+          size="xs"
           @click="$emit('confirmUninstall')"
           >卸载</Button
         >
@@ -76,13 +76,13 @@ defineEmits<{
         <div class="flex justify-end gap-2">
           <Button
             variant="outline"
-            size="sm"
+            size="xs"
             :disabled="uninstalling"
             @click="$emit('cancelUninstall')"
             >取消</Button
           ><Button
             variant="destructive"
-            size="sm"
+            size="xs"
             :disabled="uninstalling"
             @click="$emit('uninstall')"
             >{{ uninstalling ? "正在卸载…" : "卸载并退出" }}</Button

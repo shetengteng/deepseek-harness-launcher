@@ -155,7 +155,7 @@ const needInstallDsh = computed(() => store.dshVersion === null);
     <Dialog :open="showSettings" @update:open="showSettings = $event">
       <DialogContent
         v-if="showSettings"
-        class="h-[500px] w-[460px] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
+        class="h-[640px] w-[640px] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
       >
         <DialogHeader
           class="h-10 shrink-0 justify-center gap-0 border-b px-4 text-center"
