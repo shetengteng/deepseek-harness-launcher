@@ -4,15 +4,15 @@ import {
   getLatestDshVersion,
   installDsh,
   installNode,
-  listMirrors,
-  probeMirrors,
   resolveBootstrapPlan,
-  setRegistry,
-  validateCustomMirror,
   type DshInstallProgressEvent,
-  type LauncherErrorPayload,
   type ProgressEvent,
 } from "@/lib/tauri";
+import {
+  isDshInstallCancelled,
+  isNodeInstallCancelled,
+} from "./launcher-bootstrap-errors";
+import { createMirrorActions } from "./launcher-bootstrap-mirrors";
 import { detectPlatformArch } from "./launcher-platform";
 import type { LauncherState } from "./launcher-state";
 import type { LastAction } from "./launcher-types";
@@ -36,75 +36,19 @@ export function createBootstrapActions({
   let activeNodeInstall: Promise<boolean> | null = null;
   let activeDshInstall: Promise<void> | null = null;
 
+  const {
+    loadMirrors,
+    autoPickMirror,
+    validateCustomMirrorAction,
+    selectMirror,
+    setRegistryAction,
+  } = createMirrorActions(state, fail);
+
   async function loadLatestDshVersionAction(): Promise<void> {
     try {
       state.latestDshVersion.value = await getLatestDshVersion();
     } catch (error) {
       fail(error, "bootstrap");
-    }
-  }
-
-  async function loadMirrors(): Promise<void> {
-    try {
-      state.mirrors.value = await listMirrors();
-      if (
-        state.selectedMirrorId.value === null &&
-        state.mirrors.value.length > 0
-      ) {
-        state.selectedMirrorId.value = state.mirrors.value[0]!.id;
-      }
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  async function autoPickMirror(): Promise<void> {
-    const previousStep = state.wizardStep.value;
-    state.wizardStep.value = "probing";
-    try {
-      const custom = state.customMirrorUrl.value
-        ? [state.customMirrorUrl.value]
-        : undefined;
-      const picked = await probeMirrors(custom);
-      state.selectedMirrorId.value = picked.id;
-      if (!state.mirrors.value.some((mirror) => mirror.id === picked.id)) {
-        state.mirrors.value = [...state.mirrors.value, picked];
-      }
-      state.wizardStep.value =
-        previousStep === "probing" ? "mirror_select" : previousStep;
-    } catch (error) {
-      state.wizardStep.value = "mirror_select";
-      state.error.value = toLauncherError(error);
-      state.phase.value = "error";
-    }
-  }
-
-  async function validateCustomMirrorAction(url: string): Promise<void> {
-    if (!url) {
-      state.customMirrorValidation.value = null;
-      return;
-    }
-    try {
-      state.customMirrorValidation.value = await validateCustomMirror(url);
-    } catch (error) {
-      state.customMirrorValidation.value = errorMessage(error);
-    }
-  }
-
-  function selectMirror(id: string): void {
-    state.selectedMirrorId.value = id;
-  }
-
-  async function setRegistryAction(registry: string): Promise<boolean> {
-    try {
-      await setRegistry(registry);
-      if (state.bootstrapPlan.value) {
-        state.bootstrapPlan.value.registry = registry;
-      }
-      return true;
-    } catch (error) {
-      fail(error);
-      return false;
     }
   }
 
@@ -315,47 +259,4 @@ export function createBootstrapActions({
     applyDshInstallProgress,
     resetWizard,
   };
-}
-
-function isNodeInstallCancelled(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "kind" in error &&
-    (error as { kind: unknown }).kind === "node_install_cancelled"
-  );
-}
-
-function isDshInstallCancelled(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "kind" in error &&
-    "message" in error &&
-    (error as { kind: unknown }).kind === "dsh_install" &&
-    String((error as { message: unknown }).message).includes("cancelled")
-  );
-}
-
-function errorMessage(error: unknown): string {
-  return typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof (error as { message: unknown }).message === "string"
-    ? (error as { message: string }).message
-    : error instanceof Error
-      ? error.message
-      : String(error);
-}
-
-function toLauncherError(error: unknown): LauncherErrorPayload {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "kind" in error &&
-    "message" in error
-  ) {
-    return error as LauncherErrorPayload;
-  }
-  return { kind: "io", message: errorMessage(error) };
 }

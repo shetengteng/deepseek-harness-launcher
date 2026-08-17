@@ -24,6 +24,9 @@ async fn run_npm_install_cancellable(
             opts.package_json_path().display()
         )));
     }
+    if let Some(cancellation) = cancellation {
+        cancellation.check()?;
+    }
 
     let mut cmd = if let Some(npm) = &opts.npm_script {
         let mut command = Command::new(&opts.node_executable);
@@ -109,7 +112,6 @@ async fn wait_for_install(
     cancellation: Option<&DshInstallCancellation>,
 ) -> Result<std::process::ExitStatus> {
     if let Some(cancellation) = cancellation {
-        cancellation.check()?;
         return wait_for_install_cancellable(child, timeout_secs, cancellation).await;
     }
 

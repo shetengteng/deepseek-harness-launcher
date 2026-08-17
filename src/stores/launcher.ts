@@ -70,7 +70,17 @@ export const useLauncherStore = defineStore("launcher", () => {
     if (state.error.value === null) return;
     const kind = state.error.value.kind;
     state.error.value = null;
-    if (kind === "node_not_installed" || kind === "dsh_not_installed") {
+    if (kind === "node_not_installed") {
+      state.nodeVersion.value = null;
+      state.dshVersion.value = null;
+      state.bootstrapPlan.value = null;
+      state.phase.value = "first_run";
+      state.wizardStep.value = "resolving";
+      return;
+    }
+    if (kind === "dsh_not_installed") {
+      state.dshVersion.value = null;
+      state.bootstrapPlan.value = null;
       state.phase.value = "first_run";
       state.wizardStep.value = "resolving";
       return;

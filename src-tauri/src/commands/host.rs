@@ -1,20 +1,36 @@
+mod fallback;
+mod spawn;
+mod status;
+
+#[cfg(test)]
+mod test_support;
+
 use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::State;
 
 use crate::error::{LauncherError, Result};
-use crate::host::{HostSupervisor, HostSupervisorConfig, HostSupervisorError, SpawnDshWebOptions};
+use crate::host::{HostSupervisor, HostSupervisorConfig, HostSupervisorError};
 use crate::state::{AppState, StateStatus};
+
+pub(crate) use spawn::build_spawn_options;
+pub use status::{build_status_snapshot, host_platform_arch, StatusSnapshot};
+
+use self::fallback::{
+    current_dsh_version, rollback_failed_dsh_update, start_with_one_known_good_fallback,
+};
 
 pub struct SharedState {
     pub supervisor: Arc<HostSupervisor>,
+    pub(crate) navigation: crate::navigation::NavigationPolicy,
 }
 
 impl SharedState {
     pub fn new() -> Self {
         Self {
             supervisor: Arc::new(HostSupervisor::new(HostSupervisorConfig::default())),
+            navigation: crate::navigation::NavigationPolicy::default(),
         }
     }
 }
@@ -25,15 +41,9 @@ impl Default for SharedState {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct StatusSnapshot {
-    pub phase: String,
-    pub host_origin: Option<String>,
-    pub dsh_version: Option<String>,
-    pub node_version: Option<String>,
-    pub platform: String,
-    pub arch: String,
+#[tauri::command]
+pub async fn launcher_status() -> Result<StatusSnapshot> {
+    status::load_runtime_status().await
 }
 
 #[derive(Debug, Serialize)]
@@ -44,57 +54,11 @@ pub struct DshUpgradeRestartResult {
     pub rolled_back: bool,
 }
 
-pub fn host_platform_arch() -> (&'static str, &'static str) {
-    let platform = match std::env::consts::OS {
-        "macos" => "darwin",
-        "windows" => "win",
-        _ => "linux",
-    };
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        _ => "x64",
-    };
-    (platform, arch)
-}
-
-#[tauri::command]
-pub async fn launcher_status() -> Result<StatusSnapshot> {
-    Ok(build_status_snapshot(AppState::load()?))
-}
-
-pub fn build_status_snapshot(status: StateStatus) -> StatusSnapshot {
-    let (platform, arch) = host_platform_arch();
-    match status {
-        StateStatus::FirstRun => StatusSnapshot {
-            phase: "first_run".to_string(),
-            host_origin: None,
-            dsh_version: None,
-            node_version: None,
-            platform: platform.to_string(),
-            arch: arch.to_string(),
-        },
-        StateStatus::Loaded(state) => {
-            let node_version = state.node.as_ref().map(|node| node.version.clone());
-            let dsh_version = state.dsh.current.clone();
-            let phase = match (node_version.as_ref(), dsh_version.as_ref()) {
-                (Some(_), Some(_)) => "idle",
-                _ => "first_run",
-            };
-            StatusSnapshot {
-                phase: phase.to_string(),
-                host_origin: None,
-                dsh_version,
-                node_version,
-                platform: platform.to_string(),
-                arch: arch.to_string(),
-            }
-        }
-    }
-}
-
 #[tauri::command]
 pub async fn start_host(state: State<'_, SharedState>) -> Result<String> {
-    start_host_inner(&state.supervisor).await
+    let origin = start_with_one_known_good_fallback(|| start_host_inner(&state.supervisor)).await?;
+    state.navigation.activate_dsh_origin(&origin);
+    Ok(origin)
 }
 
 async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
@@ -117,20 +81,28 @@ pub async fn restart_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<Stri
 
 #[tauri::command]
 pub async fn restart_host(state: State<'_, SharedState>) -> Result<String> {
-    restart_host_inner(&state.supervisor).await
+    state.navigation.clear_dsh_origin();
+    let origin =
+        start_with_one_known_good_fallback(|| restart_host_inner(&state.supervisor)).await?;
+    state.navigation.activate_dsh_origin(&origin);
+    Ok(origin)
 }
 
 #[tauri::command]
 pub async fn restart_host_after_dsh_update(
     state: State<'_, SharedState>,
 ) -> Result<DshUpgradeRestartResult> {
+    state.navigation.clear_dsh_origin();
     let active_version = current_dsh_version()?;
     match restart_host_inner(&state.supervisor).await {
-        Ok(origin) => Ok(DshUpgradeRestartResult {
-            origin,
-            active_version,
-            rolled_back: false,
-        }),
+        Ok(origin) => {
+            state.navigation.activate_dsh_origin(&origin);
+            Ok(DshUpgradeRestartResult {
+                origin,
+                active_version,
+                rolled_back: false,
+            })
+        }
         Err(restart_error) => {
             let restart_error = restart_error.to_string();
             let active_version = rollback_failed_dsh_update()?;
@@ -141,6 +113,7 @@ pub async fn restart_host_after_dsh_update(
                         "dsh update restart failed: {restart_error}; rollback restart failed: {rollback_error}"
                     ))
                 })?;
+            state.navigation.activate_dsh_origin(&origin);
             tracing::warn!(%restart_error, %active_version, "dsh update failed to start; restored known-good version");
             Ok(DshUpgradeRestartResult {
                 origin,
@@ -153,6 +126,7 @@ pub async fn restart_host_after_dsh_update(
 
 #[tauri::command]
 pub async fn shutdown_host(state: State<'_, SharedState>) -> Result<()> {
+    state.navigation.clear_dsh_origin();
     let shutdown = state.supervisor.shutdown().await;
     shutdown.await_completion().await;
     Ok(())
@@ -167,136 +141,6 @@ fn reset_crash_counter_after_manual_start() {
     }
 }
 
-fn current_dsh_version() -> Result<String> {
-    match AppState::load()? {
-        StateStatus::Loaded(state) => {
-            state
-                .dsh
-                .current
-                .clone()
-                .ok_or_else(|| LauncherError::DshNotInstalled {
-                    reason: "state.dsh.current is None".to_string(),
-                })
-        }
-        StateStatus::FirstRun => Err(LauncherError::DshNotInstalled {
-            reason: "state.json not found".to_string(),
-        }),
-    }
-}
-
-fn rollback_failed_dsh_update() -> Result<String> {
-    let mut state = match AppState::load()? {
-        StateStatus::Loaded(state) => *state,
-        StateStatus::FirstRun => {
-            return Err(LauncherError::DshNotInstalled {
-                reason: "state.json not found".to_string(),
-            })
-        }
-    };
-    let version = rollback_dsh_update(&mut state, &crate::paths::dsh_dir()?)?;
-    state.save()?;
-    Ok(version)
-}
-
-fn rollback_dsh_update(state: &mut AppState, dsh_dir: &std::path::Path) -> Result<String> {
-    crate::dsh::rollback_to_known_good(state, dsh_dir)
-}
-
-pub(super) fn build_spawn_options() -> Result<SpawnDshWebOptions> {
-    use crate::dsh::{read_current_pointer, DSH_ENTRY_REL};
-    use crate::node::install::current_node_dir;
-
-    let node_dir = current_node_dir().map_err(|error| match error {
-        LauncherError::NodeDownload(message) if message.contains("read VERSION file failed") => {
-            LauncherError::NodeNotInstalled {
-                reason: "node-runtime/VERSION not found; first-run wizard not completed"
-                    .to_string(),
-            }
-        }
-        other => other,
-    })?;
-    let dsh_dir = crate::paths::dsh_dir()?;
-    let current_version = read_current_pointer(&dsh_dir)
-        .map_err(|error| LauncherError::PathResolve {
-            what: "dsh_current_pointer",
-            cause: error.to_string(),
-        })?
-        .ok_or_else(|| LauncherError::DshNotInstalled {
-            reason: "dsh/current pointer not set; first-run wizard not completed".to_string(),
-        })?;
-    let version_dir = dsh_dir.join(&current_version);
-    let cli_entry = version_dir
-        .join("node_modules")
-        .join("@deepseek-ai")
-        .join("dsh")
-        .join(DSH_ENTRY_REL);
-    if !cli_entry.exists() {
-        return Err(LauncherError::DshNotInstalled {
-            reason: format!(
-                "dsh cli entry not found: {} (version {current_version} may be broken)",
-                cli_entry.display()
-            ),
-        });
-    }
-    let mut env = crate::host::filtered_env();
-    env.insert(
-        "DSH_CLI_ENTRY".to_string(),
-        cli_entry.to_string_lossy().into_owned(),
-    );
-    Ok(SpawnDshWebOptions {
-        node_executable: crate::node::install::node_bin_path(&node_dir),
-        cli_entry,
-        cwd: version_dir,
-        env,
-        electron_run_as_node: false,
-    })
-}
-
 fn map_host_error(error: HostSupervisorError) -> LauncherError {
     LauncherError::Host(error.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::state::{AppState, NodeState};
-    use chrono::Utc;
-
-    #[test]
-    fn loaded_runtime_is_idle() {
-        let mut state = AppState::new();
-        state.dsh.current = Some("0.1.0".to_string());
-        state.node = Some(NodeState {
-            version: "20.18.0".to_string(),
-            installed_at: Utc::now(),
-            mirror: "https://example.test".to_string(),
-        });
-        assert_eq!(
-            build_status_snapshot(StateStatus::Loaded(Box::new(state))).phase,
-            "idle"
-        );
-    }
-
-    #[test]
-    fn host_platform_uses_node_archive_names() {
-        let (platform, arch) = host_platform_arch();
-        assert!(matches!(platform, "darwin" | "win" | "linux"));
-        assert!(matches!(arch, "arm64" | "x64"));
-    }
-
-    #[test]
-    fn failed_update_restores_known_good_version() {
-        let temp = tempfile::tempdir().unwrap();
-        let dsh_dir = temp.path().join("dsh");
-        std::fs::create_dir_all(dsh_dir.join("0.1.0")).unwrap();
-        std::fs::create_dir_all(dsh_dir.join("0.2.0")).unwrap();
-        let mut state = AppState::new();
-
-        crate::dsh::promote_to_current(&mut state, &dsh_dir, "0.1.0").unwrap();
-        crate::dsh::promote_to_current(&mut state, &dsh_dir, "0.2.0").unwrap();
-
-        assert_eq!(rollback_dsh_update(&mut state, &dsh_dir).unwrap(), "0.1.0");
-        assert_eq!(state.dsh.current.as_deref(), Some("0.1.0"));
-        assert!(state.dsh.known_good.is_none());
-    }
 }

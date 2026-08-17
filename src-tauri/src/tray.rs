@@ -12,6 +12,7 @@ use crate::{
 const TRAY_ID: &str = "launcher-tray";
 const TRAY_STATUS_ID: &str = "tray-status";
 const TRAY_SHOW_WINDOW_ID: &str = "show-main-window";
+const TRAY_OPEN_DSH_IN_BROWSER_ID: &str = "open-dsh-in-browser";
 const TRAY_RESTART_HOST_ID: &str = "restart-dsh";
 const TRAY_CHECK_UPDATES_ID: &str = "check-latest-dsh-version";
 const TRAY_OPEN_SETTINGS_ID: &str = "open-settings";
@@ -34,6 +35,13 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         "显示主窗口",
         true,
         Some("CmdOrCtrl+1"),
+    )?;
+    let open_in_browser = MenuItem::with_id(
+        app,
+        TRAY_OPEN_DSH_IN_BROWSER_ID,
+        "在浏览器中打开 DeepSeek Harness",
+        true,
+        None::<&str>,
     )?;
     let restart = MenuItem::with_id(
         app,
@@ -72,6 +80,7 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
             &status,
             &PredefinedMenuItem::separator(app)?,
             &show_window,
+            &open_in_browser,
             &restart,
             &check_updates,
             &PredefinedMenuItem::separator(app)?,
@@ -93,6 +102,7 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             TRAY_SHOW_WINDOW_ID => show_main_window(app),
+            TRAY_OPEN_DSH_IN_BROWSER_ID => open_dsh_in_browser(app.clone()),
             TRAY_RESTART_HOST_ID => restart_host_from_tray(app.clone(), status_for_events.clone()),
             TRAY_CHECK_UPDATES_ID => emit_event(app, "tray-check-dsh-update"),
             TRAY_OPEN_SETTINGS_ID => emit_event(app, "tray-open-settings"),
@@ -113,6 +123,21 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         })
         .build(app)?;
     Ok(())
+}
+
+fn open_dsh_in_browser(app: AppHandle) {
+    let origin = app
+        .state::<commands::SharedState>()
+        .navigation
+        .current_dsh_origin();
+    let Some(origin) = origin else {
+        tracing::warn!("cannot open DeepSeek Harness in browser before the host is ready");
+        show_main_window(&app);
+        return;
+    };
+    if let Err(error) = tauri_plugin_opener::open_url(origin, None::<&str>) {
+        tracing::error!(%error, "failed to open DeepSeek Harness in browser");
+    }
 }
 
 fn status_label() -> String {
@@ -161,9 +186,14 @@ fn restart_host_from_tray(app: AppHandle, status: MenuItem<tauri::Wry>) {
         tracing::warn!(%error, "failed to update tray status");
     }
     tauri::async_runtime::spawn(async move {
-        let supervisor = app.state::<commands::SharedState>().supervisor.clone();
+        let state = app.state::<commands::SharedState>();
+        state.navigation.clear_dsh_origin();
+        let supervisor = state.supervisor.clone();
         match commands::restart_host_inner(&supervisor).await {
             Ok(origin) => {
+                app.state::<commands::SharedState>()
+                    .navigation
+                    .activate_dsh_origin(&origin);
                 if let Err(error) = status.set_text(running_status_label()) {
                     tracing::warn!(%error, "failed to update tray status");
                 }

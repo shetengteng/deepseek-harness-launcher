@@ -82,9 +82,14 @@ pub async fn decide_after_crash(
 pub fn spawn_crash_recovery(app: tauri::AppHandle, detail: HostExitDetail) {
     tokio::spawn(async move {
         use tauri::{Emitter, Manager};
-        let supervisor = app.state::<SharedState>().supervisor.clone();
+        let state = app.state::<SharedState>();
+        state.navigation.clear_dsh_origin();
+        let supervisor = state.supervisor.clone();
         match decide_after_crash(&supervisor, detail).await {
             CrashAction::Restarted { attempt, origin } => {
+                app.state::<SharedState>()
+                    .navigation
+                    .activate_dsh_origin(&origin);
                 let _ = app.emit("host-restarted", &HostRestartedPayload { attempt, origin });
             }
             CrashAction::PromptUser(payload) => {

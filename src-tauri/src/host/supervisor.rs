@@ -4,6 +4,7 @@ mod config;
 mod monitor;
 mod output;
 mod reader;
+mod session_log;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -107,7 +108,7 @@ impl HostSupervisor {
             stderr,
             parser,
             Arc::clone(&self.output),
-            self.config.log.clone(),
+            session_log::start_session_log(self.config.log.clone()),
         );
 
         let origin = match timeout(self.config.readiness_timeout, ready_rx).await {

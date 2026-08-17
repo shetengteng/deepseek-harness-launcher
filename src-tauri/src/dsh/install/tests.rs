@@ -141,6 +141,33 @@ async fn install_dsh_cleans_the_version_directory_after_spawn_failure() {
     assert!(!opts.version_dir().exists());
 }
 
+#[tokio::test]
+async fn cancelled_install_cleans_target_without_touching_the_current_version() {
+    let temp = tempdir().unwrap();
+    let current_entry = temp
+        .path()
+        .join("0.1.0/node_modules/@deepseek-ai/dsh/lib/bin.js");
+    std::fs::create_dir_all(current_entry.parent().unwrap()).unwrap();
+    std::fs::write(&current_entry, "// current dsh").unwrap();
+    let opts = make_opts(temp.path(), "0.2.0");
+    let operations = DshInstallOperations::default();
+    let active = operations.register("update-0.2.0").unwrap();
+    let cancellation = active.cancellation();
+    assert!(operations.cancel("update-0.2.0"));
+    assert!(cancellation.check().is_err());
+
+    let error = install_dsh_cancellable(&opts, Some(&cancellation))
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("cancelled"));
+    assert!(!opts.version_dir().exists());
+    assert_eq!(
+        std::fs::read_to_string(current_entry).unwrap(),
+        "// current dsh"
+    );
+}
+
 #[test]
 fn default_log_accepts_output() {
     default_log()("test line");

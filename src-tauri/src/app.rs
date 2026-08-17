@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
-use crate::{commands, logging, node::NodeDownloadOperations, paths, platform, tray};
+use crate::{commands, logging, navigation, node::NodeDownloadOperations, paths, platform, tray};
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -38,6 +38,7 @@ pub fn run() {
         eprintln!("warning: ensure_dirs failed: {error:?}");
     }
     tauri::Builder::default()
+        .plugin(navigation::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::SharedState::new())

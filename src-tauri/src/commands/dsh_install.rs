@@ -77,30 +77,12 @@ pub async fn install_dsh_command(
     }
     let version = selected_install_version(bootstrap_plan.as_ref(), expected_version.as_deref())?;
     let manifest = metadata.manifest_for(&version)?;
-    if let Some(plan) = bootstrap_plan.as_ref() {
-        let manifest_engines =
-            (!manifest.engines.node.trim().is_empty()).then_some(manifest.engines.node.as_str());
-        if manifest_engines != plan.engines_node.as_deref() {
-            return Err(LauncherError::DshRegistry(format!(
-                "frozen dsh {version} manifest engines.node changed after bootstrap resolution"
-            )));
-        }
-        if let Some(requirement) = plan.engines_node.as_deref() {
-            if !crate::node::current_node_satisfies(Some(&node_state.version), requirement)? {
-                return Err(LauncherError::NodeVersion(format!(
-                    "installed Node {} does not satisfy frozen dsh requirement {requirement}",
-                    node_state.version
-                )));
-            }
-        }
-    } else if !manifest.engines.node.trim().is_empty()
-        && !crate::node::current_node_satisfies(Some(&node_state.version), &manifest.engines.node)?
-    {
-        return Err(LauncherError::NodeVersion(format!(
-            "dsh {version} requires Node {}, current version is {}",
-            manifest.engines.node, node_state.version
-        )));
-    }
+    ensure_node_compatible(
+        bootstrap_plan.as_ref(),
+        &manifest,
+        &node_state.version,
+        &version,
+    )?;
     let _ = app.emit(
         "dsh-install-progress",
         DshInstallProgressPayload {
@@ -127,6 +109,39 @@ pub async fn install_dsh_command(
     state.bootstrap_plan = None;
     state.save()?;
     Ok(version)
+}
+
+fn ensure_node_compatible(
+    bootstrap_plan: Option<&crate::state::BootstrapPlan>,
+    manifest: &crate::dsh::PackageManifest,
+    node_version: &str,
+    dsh_version: &str,
+) -> Result<()> {
+    if let Some(plan) = bootstrap_plan {
+        let manifest_engines =
+            (!manifest.engines.node.trim().is_empty()).then_some(manifest.engines.node.as_str());
+        if manifest_engines != plan.engines_node.as_deref() {
+            return Err(LauncherError::DshRegistry(format!(
+                "frozen dsh {dsh_version} manifest engines.node changed after bootstrap resolution"
+            )));
+        }
+        if let Some(requirement) = plan.engines_node.as_deref() {
+            if !crate::node::current_node_satisfies(Some(node_version), requirement)? {
+                return Err(LauncherError::NodeVersion(format!(
+                    "installed Node {} does not satisfy frozen dsh requirement {requirement}",
+                    node_version
+                )));
+            }
+        }
+    } else if !manifest.engines.node.trim().is_empty()
+        && !crate::node::current_node_satisfies(Some(node_version), &manifest.engines.node)?
+    {
+        return Err(LauncherError::NodeVersion(format!(
+            "dsh {dsh_version} requires Node {}, current version is {node_version}",
+            manifest.engines.node
+        )));
+    }
+    Ok(())
 }
 
 fn selected_install_version(
@@ -204,5 +219,27 @@ mod tests {
             "0.2.0"
         );
         assert!(selected_install_version(Some(&plan), Some("0.3.0")).is_err());
+    }
+
+    #[test]
+    fn incompatible_node_rejects_an_update_before_current_is_promoted() {
+        let manifest = crate::dsh::PackageManifest {
+            version: "0.2.0".to_string(),
+            engines: crate::dsh::EnginesField {
+                node: ">=24.0.0".to_string(),
+                ..Default::default()
+            },
+            dist: crate::dsh::DistInfo {
+                integrity: "sha512-test".to_string(),
+                tarball: "https://example.test/dsh-0.2.0.tgz".to_string(),
+            },
+        };
+        let mut state = AppState::new();
+        state.dsh.current = Some("0.1.0".to_string());
+
+        let error = ensure_node_compatible(None, &manifest, "22.19.0", "0.2.0").unwrap_err();
+
+        assert!(matches!(error, LauncherError::NodeVersion(_)));
+        assert_eq!(state.dsh.current.as_deref(), Some("0.1.0"));
     }
 }

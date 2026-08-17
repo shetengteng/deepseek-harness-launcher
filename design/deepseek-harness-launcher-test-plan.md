@@ -27,24 +27,25 @@
 | Host | readiness 解析、子进程启动/关闭、输出缓冲和崩溃计数策略 |
 | 前端 | 首启双任务视图、启动遮罩、设置页、错误展示与托盘事件桥接 |
 
-2026-08-17 的本地基线：`cargo test --quiet` 通过 126 个 crate 测试和 4 个集成测试；`pnpm test` 通过 10 个测试；`pnpm lint && pnpm build` 通过。
+2026-08-17 的本地基线：`cargo test --quiet` 通过 147 个 crate 测试和 4 个集成测试；`pnpm test` 通过 23 个测试；`pnpm lint && pnpm build` 通过。`cargo clippy --all-targets -- -D warnings` 仍由既有的 3 处 `too_many_arguments` 与 1 处 `trim_split_whitespace` 阻塞，未在本轮 P0 范围内修改。
 
 ## 3. 当前测试待办
 
 ### P0：更新与诊断
 
-- [ ] 首启界面展示的精确版本必须是用户确认后写入 `bootstrap_plan` 的版本；registry 在确认前后变化时不得漂移。
+- [x] 首启界面挂载后自动将当前 latest 写入 `bootstrap_plan` 并开始安装；之后 registry 变化或重试均不得漂移该计划。
 - [x] 更新必须安装通知或设置页已展示的精确版本；用户点击更新后立即提升 current 并重启，启动失败恢复 `known_good`。
-- [ ] 更新时 Node 不兼容、安装失败、取消和同版本重试都必须保留当前可用 dsh。
-- [ ] 日常启动时 current 的 Node/dsh 缺失或启动失败，应仅回退 `known_good` 一次；两者都不可用时进入修复流程。
-- [ ] dsh stdout/stderr 应写入独立文件；诊断导出只包含最近 3 份 dsh 日志，并有归档内容测试。
+- [x] 更新时 Node 不兼容、安装失败、取消和同版本重试都必须保留当前可用 dsh。
+- [x] 日常启动时 current 的 Node/dsh 缺失或启动失败，应仅回退 `known_good` 一次；两者都不可用时进入修复流程。
+- [x] dsh stdout/stderr 应写入独立文件；诊断导出只包含最近 3 份 dsh 日志，并有归档内容测试。
+- [x] Webview 仅允许 launcher origin 与当前 dsh 的精确 origin；旧 Host、其他 loopback 端口和外部 URL 均被拒绝。用户点击来自当前 dsh iframe 的 `http/https` 外链，经来源与 payload 校验后使用系统浏览器打开。
+- [x] dsh 不具有 Tauri `remote` capability；iframe 委派摄像头、麦克风、定位等浏览器能力并保留弹窗，由 dsh 与用户决定。launcher 不持久化或配置 dsh 项目目录，Host cwd 固定为托管 dsh 版本目录。
 
 ### P1：运行时与托盘
 
 - [ ] 用 mock 子进程覆盖 Host 的就绪、超时、意外退出、自动重启、显式关闭和回滚。
 - [ ] 覆盖确认 Node 升级、取消升级和原子切换后的 dsh 更新。
 - [ ] 覆盖托盘状态在 Host 启动、运行、停止和异常时的更新；验证关闭主窗口后 Host 继续运行、托盘退出后 Host 结束。
-- [ ] 为 Webview 导航白名单与权限拒绝策略补充可自动化的安全验收。
 
 ### P2：端到端与发布
 

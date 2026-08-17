@@ -7,7 +7,7 @@
 核心目标：
 
 - **壳子常驻不变**：Tauri 二进制本身极少更新，体积小（~15 MB）
-- **dsh 独立版本管理**：轻量检查 registry 的最新 dsh 版本，发现新版时提示用户，只有用户确认后才安装
+- **dsh 独立版本管理**：首启自动安装 registry 当前的最新 dsh；后续发现新版时提示用户，只有用户确认更新后才安装
 - **Node 运行时托管**：首次启动时自动下载 Node 到用户目录，不污染系统、不依赖用户预装
 - **失败可回滚**：dsh 切换后启动失败自动回退到上个已知好版本
 
@@ -55,7 +55,7 @@ dsh web: http://127.0.0.1:<port>/
 
 dsh 处于开发者预览期，可能破坏性变更。壳子通过以下机制对冲：
 
-- **显式更新**：首启与设置页显示当前 `latest` 的精确版本；只有用户点击安装或更新后才下载，并在安装前冻结该版本
+- **安装一致性**：首启自动解析并冻结当前 `latest`；后续更新只安装提示或设置页已经展示、且经用户确认的精确版本
 - **启动失败回滚**：用户切换后的新版本启动失败自动降级到 `known_good` 版本
 - **engines 校验**：安装或切换前读取目标 dsh 的 `package.json.engines.node`，不满足当前 Node 版本时要求用户先确认升级 Node
 
@@ -186,9 +186,9 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 
 首启使用专用 bootstrap 界面，占据主窗口但不创建第二个 Tauri WebviewWindow。视觉和信息架构以 [原型 03](./deepseek-harness-launcher-prototype.html) 为准：标题栏、产品标识、简短说明，以及并列展示 Node 与 dsh 的两个任务卡。
 
-首启先查询官方 npm registry 的 `dist-tags.latest`，在 dsh 任务卡上显示其当前解析值，例如 `最新版本 0.1.0-rc.6`。用户确认安装后，将该值冻结为精确版本；`latest` 仅用于查询，绝不写入安装目录或 `state.json.current`。
+首启先查询官方 npm registry 的 `dist-tags.latest`，在 dsh 任务卡上显示其当前解析值，例如 `最新版本 0.1.0-rc.6`。界面挂载后立即将该值冻结为精确版本并自动开始安装；`latest` 仅用于查询，绝不写入安装目录或 `state.json.current`。
 
-首启的运行时版本由用户选定 dsh 的已发布元数据决定，前端不得把 `DEFAULT_NODE_VERSION` 当成安装决策来源。`DEFAULT_NODE_VERSION` 仅是 dsh 没有声明 Node 约束时的已验证回退版本。
+首启的运行时版本由自动选定的最新 dsh 的已发布元数据决定，前端不得把 `DEFAULT_NODE_VERSION` 当成安装决策来源。`DEFAULT_NODE_VERSION` 仅是 dsh 没有声明 Node 约束时的已验证回退版本。
 
 **运行时版本核验**：`dist-tags.latest`、`package.json.engines.node` 与 Node 发布索引都是运行时数据，不在本文档中写死版本号。若 dsh 未声明 `engines.node`，使用壳子验证过的 `DEFAULT_NODE_VERSION`，并在界面显示“dsh 未声明 Node 要求，使用已验证版本”；不得用 npm 的 `_nodeVersion` 伪称运行时兼容性要求。
 
@@ -196,14 +196,14 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 1. 读 state.json：
    - 无 state → 显示 bootstrap 窗口，查询 registry 的 latest 并显示精确版本
    - 有未完成 bootstrap_plan → 复用该计划，不能重新读取 latest
-2. 用户确认安装：
+2. 自动冻结并开始安装：
    - 将本次请求的 dist-tags.latest 解析为精确版本
    - 取得目标精确版本的 manifest，读取 engines.node 与 dist.integrity
    - 解析 Node 目标：
      - engines.node 存在且默认 Node 满足 → 选已验证的 DEFAULT_NODE_VERSION
      - engines.node 存在且默认 Node 不满足 → 从受信任 Node 发布索引选择满足范围、且当前平台有正式安装包的具体版本
      - engines.node 缺失 → 选 DEFAULT_NODE_VERSION，并标记 requirement_source = "launcher-verified-fallback"
-   - 写入 state.bootstrap_plan：用户选择、精确 dsh 版本、registry、engines.node（可空）、Node 目标、解析时间与阶段
+   - 写入 state.bootstrap_plan：精确 dsh 版本、registry、engines.node（可空）、Node 目标、解析时间与阶段
 3. 渲染双任务卡：
    - Node.js v<resolved_node_version>：解析中 → 下载中 → SHA-256 校验 → 已完成
    - @deepseek-ai/dsh <resolved_dsh_version>：等待 Node → npm install → 完整性校验 → 已完成
@@ -247,7 +247,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
    - latest != current 且不是最近已提示的版本 → 右侧显示“发现 dsh 新版本”提示，并记录 `last_notified`
 2. 用户点击“更新”：
    - 使用提示中已展示的精确版本，重新取得并校验该版本 manifest
-   - 将精确版本、registry、engines.node 和 dist.integrity 冻结到本次安装请求
+   - 将提示中的精确版本作为本次安装目标；重试始终复用该目标版本，重新请求 manifest 只用于校验和从新的下载源恢复
    - 不接受历史版本、版本范围或手动版本输入
 3. 目标 == current → 显示“已是最新版本”
 4. 当前 Node 不满足 engines.node → 显示简单提示，保留当前版本，不开始安装
@@ -264,7 +264,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 
 - **数据来源已具备**：`dsh/registry.rs` 已能读取 `dist-tags.latest` 和精确 manifest。更新提示只需要保存当前内存中的 latest，不需要历史版本列表或数据库。
 - `last_notified` 只记录最近一次提示的版本，不是历史版本列表；用户关闭提示后仍可在设置页手动检查。
-- **安装一致性不变**：提示只用于告知；用户点击更新后才冻结精确版本。网络重试继续使用同一目标版本，不因 registry 变化而漂移。
+- **安装一致性不变**：提示只用于告知；用户点击更新后才选定已展示的精确版本。网络重试继续使用同一目标版本，不因 registry 的 `latest` 变化而漂移。
 - **安全与回滚保持**：每个目标版本仍校验 `engines.node`、npm integrity 和入口文件；安装失败不改动当前版本。用户确认更新后，若新版本启动失败则恢复 known-good。
 - **范围**：本期不提供历史版本选择、版本范围输入、后台自动下载、未经用户点击的自动重启、复杂源管理或用户可调重试参数。
 
@@ -400,18 +400,29 @@ dsh 有大量独立 npm 依赖。直接下 dsh 的 tarball 装不全依赖，必
 - dsh 包：用 npm registry 返回的 `dist.integrity` 字段（SHA-512）
 - npm install 本身会校验每个依赖的 integrity
 
-### 8.2 webview 安全
+### 8.2 Webview 导航与外链
 
-Webview 策略与 dsh desktop 的安全边界保持等价：
+主 Webview 只允许两类应用内导航：
 
-- 只允许导航到 dsh web 的 origin
-- http/https 外链交给系统浏览器
-- `set_permission_check_handler` 全部拒绝（摄像头、麦克风、地理位置等）
-- webview 启用 `contextIsolation`、`sandbox`
+1. launcher 自身 origin（发布包的 Tauri origin；开发环境为配置的 Vite origin）；
+2. dsh 就绪行解析出的**精确** origin（同一 `http`、host、port；该 origin 以最新一次 Host 就绪行为准）。
 
-### 8.3 子进程隔离
+其他 URL，包括其他端口的 loopback 地址、`file:`、自定义 scheme 以及公网 URL，均取消应用内导航。Host 停止、重启或崩溃时立即撤销旧 dsh origin；新 Host 就绪后才重新加入白名单。
 
-- dsh 子进程的 cwd 设为其已安装版本目录；项目目录由 dsh Web UI 管理。v1 不提供 launcher 侧的工作目录配置，避免把工作区路径写入壳子状态。
+dsh 在跨域 iframe 内运行，父页面不能直接监听其 DOM 点击。因此对“用户点击外链”采用以下受限桥接：
+
+- 注入到 dsh 直接子帧的脚本仅拦截用户点击的 `http/https` 链接；同 origin 路由不受影响；
+- 壳页仅接受 `event.source` 等于当前 iframe、`event.origin` 等于当前精确 dsh origin，且 payload 为合法 `http/https` URL 的消息；
+- 校验通过后，壳页通过 opener 使用系统默认浏览器打开该 URL；伪造消息、`file:` 等非网页 URL 与未获用户点击的应用内跳转均不会获得该能力。
+
+iframe 保持 `sandbox` 隔离，并保留 dsh 所需的 `allow-popups`、`allow-modals`。同时将 camera、microphone、geolocation、display capture 与 clipboard 能力委派给 dsh iframe；launcher 不拒绝或代替用户授权，最终仍由 dsh 与系统 Webview 的正常权限流程决定。
+
+dsh 作为远程页面不配置任何 Tauri `remote` capability，不能直接调用 launcher 命令或 opener；系统浏览器打开外链仅能经过上述壳页校验路径。
+
+### 8.3 dsh 项目目录边界
+
+- dsh 子进程的 cwd 固定为其已安装版本目录；项目目录由 dsh Web UI 管理。v1 不提供 launcher 侧的工作目录配置，也不将项目路径写入壳子状态。
+- 这是一条 launcher 的产品边界，不是 Node 的操作系统级沙箱：dsh 仍在当前用户权限下运行，可访问用户已授权给它的文件。项目目录的选择、读写授权与数据治理由 dsh 负责。
 - 环境变量过滤：去掉壳子自己的 `RUST_*`、`TAURI_*`，只传必要的 `DSH_*`
 - stdin 关闭（`stdio: ['ignore', 'pipe', 'pipe']`）
 
@@ -471,6 +482,8 @@ macOS 额外处理：
 
 - 壳子日志：`~/Library/Logs/deepseek-harness-launcher/app.log`（macOS）
 - dsh 子进程日志：`<data_dir>/logs/dsh-<timestamp>.log`
+- 诊断导出仅收集最近 3 份 dsh 子进程日志，以及 `state.json` 与壳子日志
+- dsh 会话日志为尽力写入：目录、文件创建或单次写入失败只记录壳子 warning，绝不阻止 dsh Host 的启动或运行
 - 崩溃时自动收集两份日志，提供"导出诊断信息"按钮
 
 ## 12. 发布与打包

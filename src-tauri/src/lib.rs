@@ -1,6 +1,7 @@
 //! DeepSeek Harness Launcher shell library.
 
 mod app;
+mod navigation;
 mod platform;
 mod tray;
 

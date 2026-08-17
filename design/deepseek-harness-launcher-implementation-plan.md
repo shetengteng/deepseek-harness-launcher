@@ -12,10 +12,10 @@
 
 | 优先级 | 工作项 | 状态 |
 | ------ | ------ | ---- |
-| P0 | 补齐 PR-020b/PR-020c：用户确认后冻结展示版本、更新提示与立即切换重启 | 进行中 |
-| P0 | dsh 子进程持久化日志；诊断包只收集最近 3 份 dsh 日志 | 未开始 |
-| P0 | 日常启动校验 current Node/dsh；current 损坏或启动失败时回退 `known_good` 一次 | 未开始 |
-| P0 | Webview 导航/权限限制验收；确认 dsh Web UI 管理项目目录的边界 | 未开始 |
+| P0 | 补齐 PR-020b/PR-020c：首启自动冻结 latest、更新提示与立即切换重启 | 已完成 |
+| P0 | dsh 子进程持久化日志；诊断包只收集最近 3 份 dsh 日志 | 已完成 |
+| P0 | 日常启动校验 current Node/dsh；current 损坏或启动失败时回退 `known_good` 一次 | 已完成 |
+| P0 | Webview 精确 origin 白名单、用户点击 `http/https` 外链转系统浏览器；确认 dsh Web UI 管理项目目录的边界（浏览器权限与弹窗保留给 dsh/用户） | 已完成 |
 | P1 | dsh 更新触发的 Node 升级确认与原子切换 | 未开始 |
 | P1 | Node 安装命令按平台选择 archive，并执行下载后二进制版本校验 | 未开始 |
 | P1 | PR-021–PR-026：CI、签名/公证、打包、发布文档 | 未开始 |
@@ -501,7 +501,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - 删除不在保留集内的版本目录
 - [x] `list_installed_versions(dsh_dir) -> Result<Vec<String>>`：列出所有版本（排序，排除指针）
 - [x] `is_version_installed(dsh_dir, version) -> bool`：版本目录存在性检查
-- [ ] 日常启动恢复：验证 current 的 Node 与 dsh 入口；当前版本缺失或启动失败时切到 `known_good` 并只重试一次，否则进入修复流程。
+- [x] 日常启动恢复：状态查询先校验受管 Node；启动时再校验 current 的 Node/dsh 入口。current 缺失或启动失败时切到 `known_good` 并只重试一次；没有可回退版本时进入修复安装流程。
 
 ### M3.3 测试
 
@@ -553,20 +553,20 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 ### M3.3b 首启体验与原型 03 对齐 🚧 PR-020b
 
-**目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，用户点击后才安装；不提供历史版本选择、范围规则或复杂版本管理。
+**目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，界面挂载后自动冻结并安装；不提供历史版本选择、范围规则或复杂版本管理。
 
 - [x] 后端首启编排：
   - `get_latest_dsh_version_command` 查询 registry 元数据，验证 `dist-tags.latest` 对应 manifest 后返回精确版本
   - [x] `resolve_bootstrap_plan_command` 解析并持久化 `bootstrap_plan`，安装重试复用已冻结的计划
-  - [ ] `resolve_bootstrap_plan_command(expected_version)` 接收界面已经展示且经用户确认的精确版本。当前实现仍会在解析计划时读取 `latest`，因此可能与界面展示版本漂移；随 PR-020c 修复
+  - [x] `resolve_bootstrap_plan_command` 在首启读取当前 `latest` 后立即冻结计划；未完成安装与重试始终复用同一计划
   - `install_node_command` 完成后将计划标记为 `node_installed`；`install_dsh_command` 只消费冻结的版本和 registry，不得在重试时重新读取 `latest`
   - dsh 完整性校验成功后清除计划并自动调用 `start_host`；Host 就绪后进入 dsh Web UI
   - `state.json` schema 迁移到 `3`：保留 Node、current、known_good 和已安装版本；范围、轮询、自动升级和忽略版本字段已移除
 - [x] 前端双任务 bootstrap 界面：
   - 采用原型 03 的标题栏、标识、说明与两个任务卡，不展示通用 Card 向导和“步骤 N/M”计数
   - [x] dsh 任务卡显示 `latest` 解析结果，并在加载失败时显示可操作错误和重试
-  - [ ] 用户点击“开始安装”后才解析并冻结该展示版本。当前 bootstrap 在界面挂载后自动启动，随 PR-020c 收敛为显式确认
-  - 点击后冻结目标版本；Node 卡展示实际解析版本及状态：解析、下载、SHA-256 校验、解压、完成
+  - [x] 界面挂载后自动解析并冻结当前 latest，随后开始安装；不展示“开始安装”确认步骤
+  - 冻结目标版本后，Node 卡展示实际解析版本及状态：解析、下载、SHA-256 校验、解压、完成
   - dsh 卡展示冻结的精确版本及状态：等待 Node、npm install、完整性校验、完成；仅在 npm 可报告可靠总量时展示百分比或剩余时间
   - 下载源自动选择可信镜像；仅在对应任务失败时提供“重试 / 更换镜像源”恢复操作，`MirrorSelector` 不再占据首屏
   - 删除“我已有 Node，手动指定路径”原型选项，不新增系统 Node 探测或路径配置
@@ -577,9 +577,9 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 - [x] 测试与验收：
   - Rust：`latest` manifest 校验、计划冻结/复用、Node engines 选择与 schema 迁移
   - Vue：显示当前 `latest`、开始安装、双任务状态展示、任务级错误重试
-  - 手动：清除 `state.json` 后启动，确认计划冻结后断网/安装失败的重试不改变该计划；“展示版本即安装版本”留给 PR-020c 验收
+  - 手动：清除 `state.json` 后启动，确认自动冻结计划后断网/安装失败的重试不改变该计划
 
-### M3.4 更新提示与安装最新 dsh 🚧 PR-020c
+### M3.4 更新提示与安装最新 dsh ✅ PR-020c
 
 **目标**：应用启动后轻量检查一次 registry；发现新版时通过主窗口右侧非阻塞提示告知用户。只有用户点击提示或设置页按钮后才下载；安装完成后立即切换并重启 dsh。
 
@@ -592,7 +592,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 - [x] 前端：
   - 增加右侧非阻塞更新通知：显示当前版本、新版本和“立即更新”按钮，关闭后不影响使用
   - 设置页展示当前版本、最新版本、检查/更新按钮、自动源和诊断信息；当前版本就是 latest 时禁用更新
-  - 用户未点击时不下载；失败时保留通知和精确目标版本，可重试或更换源后重试
+  - 用户未点击时不下载；失败时保留通知与精确目标版本，可重试或更换源后重试；取消会终止安装子进程并清理目标目录
 - [x] 可行性验证：
   - `dsh/registry.rs` 已有 `dist-tags.latest`、精确 manifest、缓存和错误处理，无需排序或返回完整版本列表
   - `dsh/install.rs` 已按精确版本创建隔离目录；`dsh/version.rs` 已支持 current、known_good、立即提升和回滚
@@ -638,8 +638,8 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 - [x] `error.rs` 为网络、磁盘、下载、Host 等错误提供用户可读文案。
 - [x] 壳子日志使用 `tracing_subscriber` + `tracing_appender::rolling::daily`；macOS 写入 `~/Library/Logs/deepseek-harness-launcher/`。
 - [x] 设置页可导出 `state.json` 与现有日志目录中的文件。
-- [ ] dsh stdout/stderr 按启动会话写入 `<data_dir>/logs/dsh-<timestamp>.log`；当前只保留有限的内存输出，因此诊断包通常没有 dsh 运行日志。
-- [ ] 导出时只保留最近 3 份 dsh 日志，并测试文件数与归档内容。
+- [x] dsh stdout/stderr 按启动会话写入 `<data_dir>/logs/dsh-<timestamp>.log`；同一时间戳冲突时追加序号，避免覆盖既有会话。
+- [x] 导出时只保留最近 3 份 dsh 日志，并测试文件数与归档内容。
 
 ### M4.4 网络与磁盘错误 ✅
 
@@ -721,8 +721,8 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 ### 9.3 测试待办
 
-- [x] 为 PR-020b/PR-020c 增加“展示版本即安装版本”、立即切换重启和 Node 不兼容的 Rust/Vue 测试。
-- [ ] 为 dsh 文件日志和诊断导出最近 3 份日志增加测试。
+- [x] 为 PR-020b/PR-020c 增加“展示版本即安装版本”、立即切换重启、Node 不兼容、取消和同版本重试的 Rust/Vue 测试。
+- [x] 为 dsh 文件日志和诊断导出最近 3 份日志增加测试。
 - [ ] 补充 mock 子进程的 Host 生命周期集成测试：就绪、超时、意外退出和关闭。
 - [ ] 建立 Tauri E2E：首启、更新、回滚和崩溃恢复；作为 CI nightly 门禁。
 - [ ] 在 CI 中采集覆盖率后，再设定可测量的模块覆盖率目标。
@@ -758,14 +758,14 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 - ✅ PR-014a [M3] 启动流程闭环修复（冒烟测试前置）（详见 §M3.3a）
 - ⚠️ PR-015 [M3] 历史升级编排实现；由 PR-020c 删除并替换为显式版本安装
 - ⚠️ PR-016 [M3] 历史升级设置与对话框；由 PR-020c 收敛为最新版本更新 UI
-- 🚧 PR-020b [M3] 首启 latest 展示 + 安装计划；“用户确认后冻结展示版本”待 PR-020c 补齐（详见 §M3.3b）
-- ⬜ PR-020c [M3] 更新提示、显式安装与重启切换（详见 §M3.4）
+- ✅ PR-020b [M3] 首启 latest 展示 + 自动冻结安装计划（详见 §M3.3b）
+- ✅ PR-020c [M3] 更新提示、显式安装与重启切换（详见 §M3.4）
 
 ### M4
 
 - ✅ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（`host/crash.rs` 计数窗口策略 + supervisor 自动重启 + `host-crash-limit`/`host-restarted` 事件 + 前端 `CrashDialog.vue` + store 恢复 actions）
 - 🚧 PR-018 [M4] Node 升级基础设施；当前只会阻止不兼容更新，确认后的 Node 升级待实现
-- 🚧 PR-019 [M4] 错误文案 + 诊断导出；dsh 子进程日志落盘与“最近 3 份”筛选待实现
+- ✅ PR-019 [M4] 错误文案、诊断导出、dsh 子进程日志落盘与“最近 3 份”筛选
 - ✅ PR-020 [M4] 磁盘/网络错误识别（`node/disk.rs` 200MB 下载前检查 + 下载错误文案区分网络/磁盘不足）
 - 🚧 PR-020a [M4] 系统托盘与窗口生命周期（菜单、事件桥接与退出时 host shutdown 已完成；全生命周期状态同步和平台图标待完成，详见 §M4.5）
 

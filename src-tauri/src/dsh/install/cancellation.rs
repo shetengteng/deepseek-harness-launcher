@@ -11,7 +11,7 @@ pub struct DshInstallOperations {
 
 struct ActiveOperation {
     id: String,
-    cancelled: watch::Sender<()>,
+    cancelled: watch::Sender<bool>,
 }
 
 impl DshInstallOperations {
@@ -32,7 +32,7 @@ impl DshInstallOperations {
             ));
         }
 
-        let (cancelled, receiver) = watch::channel(());
+        let (cancelled, receiver) = watch::channel(false);
         *active = Some(ActiveOperation {
             id: operation_id.to_string(),
             cancelled,
@@ -52,8 +52,7 @@ impl DshInstallOperations {
         let Some(active) = active.as_ref().filter(|active| active.id == operation_id) else {
             return false;
         };
-        active.cancelled.send_replace(());
-        true
+        active.cancelled.send(true).is_ok()
     }
 }
 
@@ -87,12 +86,12 @@ impl Drop for ActiveDshInstall<'_> {
 
 #[derive(Clone)]
 pub struct DshInstallCancellation {
-    receiver: watch::Receiver<()>,
+    receiver: watch::Receiver<bool>,
 }
 
 impl DshInstallCancellation {
     pub fn check(&self) -> Result<()> {
-        if self.receiver.has_changed().unwrap_or(true) {
+        if *self.receiver.borrow() {
             return Err(self.error());
         }
         Ok(())
@@ -100,7 +99,7 @@ impl DshInstallCancellation {
 
     pub async fn cancelled(&self) {
         let mut receiver = self.receiver.clone();
-        if receiver.has_changed().unwrap_or(true) {
+        if *receiver.borrow() {
             return;
         }
         let _ = receiver.changed().await;

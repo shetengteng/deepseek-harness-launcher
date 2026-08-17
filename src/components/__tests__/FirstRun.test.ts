@@ -54,6 +54,13 @@ beforeEach(() => {
   store.bootstrapPlan.registry = "https://registry.npmjs.org";
 });
 
+test("starts bootstrap installation automatically on first run", async () => {
+  shallowMount(FirstRun, { global: { stubs } });
+  await flushPromises();
+
+  expect(store.startBootstrap).toHaveBeenCalledOnce();
+});
+
 test("shows advanced mirror controls without opening them by default", async () => {
   const wrapper = shallowMount(FirstRun, { global: { stubs } });
   await flushPromises();
