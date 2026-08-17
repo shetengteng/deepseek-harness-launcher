@@ -8,7 +8,7 @@
 
 ### 当前待办（2026-08-17）
 
-本节是唯一的当前 TODO。下文 M1–M4 的已完成 PR 记录用于追溯，不应据此重复实施。
+本节是唯一的当前 TODO。下文 M1–M4 是历史交付记录与实现说明，不应据此重复实施或判断当前完成度。
 
 | 优先级 | 工作项 | 状态 |
 | ------ | ------ | ---- |
@@ -508,23 +508,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 - [x] 单元测试：指针读写、切换、提升、回滚、已安装版本清理和状态持久化。
 - [ ] `pending` 的状态机与回滚测试：随 PR-020c 增加。
-- [x] 集成测试 19 个（`tests/version_dsh.rs`，mock 版本目录 + state 持久化）：
-  - 完整升级生命周期成功
-  - 升级失败触发回滚
-  - 多次升级失败后仍保留 current，失败版本标记为 broken
-  - 无 known_good 时回滚报错
-  - known_good 目录缺失时回滚报错
-  - switch 仅改指针不改 state
-  - switch 未安装版本报错
-  - prune 删除旧版本
-  - prune 保留 N 个额外版本
-  - prune 不删指针文件
-  - list 返回所有版本（排序）
-  - 完整场景：升级→失败回滚→再次更新→清理
-  - state 序列化/反序列化 roundtrip
-  - 同版本 promote 两次不产生自引用 known_good
-  - state save + reload
-  - 原子指针切换一致性
+- [x] 回归测试覆盖升级、回滚、清理与状态持久化；当前测试位置以 `src-tauri/src/dsh/version/tests.rs` 为准。
 - [x] 本地演示脚本 `examples/version_dsh_demo.rs`：9 步流程可视化
   - 首次安装 → 升级成功 → 升级失败回滚 → 再升级成功 → 清理旧版本 → 状态总结 → 手动 switch
 
@@ -594,7 +578,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 - [x] 测试与验收：
   - Rust：`latest` manifest 校验、计划冻结/复用、Node engines 选择与 schema 迁移
   - Vue：显示当前 `latest`、开始安装、双任务状态展示、任务级错误重试
-  - 手动：清除 `state.json` 后启动，确认显示最新精确版本；断网/安装失败后重试不改变已冻结版本
+  - 手动：清除 `state.json` 后启动，确认计划冻结后断网/安装失败的重试不改变该计划；“展示版本即安装版本”留给 PR-020c 验收
 
 ### M3.4 更新提示与显式安装最新 dsh ⬜ PR-020c
 
@@ -754,7 +738,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载、�
 
 ### M1
 
-- ✅ PR-001 [M1] 初始化 Tauri + Vue 工程、CI 骨架（详见 §M1.1）
+- ✅ PR-001 [M1] 初始化 Tauri + Vue 工程（CI 留给 PR-021，详见 §M1.1）
 - ✅ PR-002 [M1] `paths` + `state` + `error` + `logging`（详见 §M1.2）
 - ✅ PR-003 [M1] `host/readiness` + `host/supervisor` + `host/lifecycle` + 单元测试（原计划的 PR-004 已并入本 PR，详见 §M1.3）
 - ✅ PR-004 [M1] `commands` + Tauri 注册（原 PR-005，详见 §M1.4）
