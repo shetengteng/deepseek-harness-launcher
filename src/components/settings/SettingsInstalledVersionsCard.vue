@@ -2,8 +2,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DshStateSnapshot } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 defineProps<{ dshState: DshStateSnapshot }>();
+const { t } = useI18n();
 
 function statusBadgeVariant(status: string) {
   switch (status) {
@@ -19,11 +21,11 @@ function statusBadgeVariant(status: string) {
 function statusLabel(status: string) {
   switch (status) {
     case "verified":
-      return "可用";
+      return t("versions.verified");
     case "broken":
-      return "无法使用";
+      return t("versions.broken");
     default:
-      return "状态未知";
+      return t("versions.unknown");
   }
 }
 </script>
@@ -31,7 +33,7 @@ function statusLabel(status: string) {
 <template>
   <Card v-if="dshState.installed.length > 0">
     <CardHeader
-      ><CardTitle class="text-base">已下载的版本</CardTitle></CardHeader
+      ><CardTitle class="text-base">{{ t("versions.title") }}</CardTitle></CardHeader
     >
     <CardContent
       ><div class="space-y-2">

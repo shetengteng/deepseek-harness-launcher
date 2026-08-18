@@ -11,6 +11,7 @@ pub mod dsh;
 pub mod error;
 pub mod host;
 pub mod logging;
+pub mod marketplace;
 pub mod node;
 pub mod paths;
 pub mod state;

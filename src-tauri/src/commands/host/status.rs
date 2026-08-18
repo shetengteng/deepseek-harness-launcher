@@ -141,6 +141,14 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_persisted_state_remains_first_run() {
+        assert_eq!(
+            build_status_snapshot(StateStatus::Loaded(Box::new(AppState::new()))).phase,
+            "first_run"
+        );
+    }
+
+    #[test]
     fn host_platform_uses_node_archive_names() {
         let (platform, arch) = host_platform_arch();
         assert!(matches!(platform, "darwin" | "win" | "linux"));

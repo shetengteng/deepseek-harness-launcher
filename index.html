@@ -1,10 +1,24 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/deepseek-harness-launcher.svg" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/deepseek-harness-launcher.svg"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>deepseek-harness-launcher</title>
+    <script>
+      (() => {
+        try {
+          const theme = localStorage.getItem("deepseek-harness-launcher.theme");
+          document.documentElement.classList.toggle("dark", theme === "dark");
+        } catch {
+          document.documentElement.classList.remove("dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

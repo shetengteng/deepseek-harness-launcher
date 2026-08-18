@@ -38,6 +38,10 @@ pub enum LauncherError {
     DshVersion(String),
     #[error("dsh CLI command error: {0}")]
     DshCli(String),
+    #[error("theme error: {0}")]
+    Theme(String),
+    #[error("marketplace error: {0}")]
+    Marketplace(String),
     #[error("dsh not installed: {reason}")]
     DshNotInstalled { reason: String },
     #[error("node not installed: {reason}")]
@@ -81,6 +85,8 @@ impl LauncherError {
             Self::DshInstall(_) => "dsh_install",
             Self::DshVersion(_) => "dsh_version",
             Self::DshCli(_) => "dsh_cli",
+            Self::Theme(_) => "theme",
+            Self::Marketplace(_) => "marketplace",
             Self::DshNotInstalled { .. } => "dsh_not_installed",
             Self::NodeNotInstalled { .. } => "node_not_installed",
             Self::NodeUpgradeRequired { .. } => "node_upgrade_required",

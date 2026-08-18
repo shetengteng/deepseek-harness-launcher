@@ -308,6 +308,18 @@ export function cancelDshInstall(operationId: string): Promise<boolean> {
 
 // ─── 设置页状态与来源配置 ───
 
+export type ThemeMode = "light" | "dark";
+
+/** 读取启动器主题偏好；dsh iframe 不读取也不会收到此值。 */
+export function getTheme(): Promise<ThemeMode> {
+  return invokeCommand<ThemeMode>("get_theme_command");
+}
+
+/** 保存启动器主题偏好；只影响 launcher 自身的根页面。 */
+export function setTheme(theme: ThemeMode): Promise<void> {
+  return invokeCommand<void>("set_theme_command", { theme });
+}
+
 /** dsh 状态详情，供设置页展示。对应 Rust `DshStateSnapshot`。 */
 export interface DshStateSnapshot {
   current: string | null;
@@ -358,4 +370,130 @@ export function exportDiagnostics(dest: string): Promise<number> {
 /** 调 `uninstall_managed_runtime`：移除应用托管的 dsh、Node 和设置后退出应用。 */
 export function uninstallManagedRuntime(): Promise<void> {
   return invokeCommand<void>("uninstall_managed_runtime");
+}
+
+// ─── 插件市场 ───
+
+export type MarketplaceSort = "relevance" | "updated" | "popularity";
+export type MarketplacePluginStatus =
+  | "available"
+  | "installed"
+  | "update_available"
+  | "unknown"
+  | "operation_running";
+
+export interface MarketplaceInstallSpec {
+  owner: string;
+  repository: string;
+  subdirectory: string | null;
+  reference: string | null;
+}
+
+export interface MarketplacePopularity {
+  marketplace_rank: number | null;
+  ranking_updated_at: string | null;
+  github_stars: number | null;
+  stars_fetched_at: string | null;
+}
+
+export interface MarketplacePlugin {
+  id: string;
+  name: string;
+  repository_url: string | null;
+  install_spec: MarketplaceInstallSpec | null;
+  description: string;
+  category: string | null;
+  tags: string[];
+  source_updated_at: string | null;
+  validated_at: string | null;
+  popularity: MarketplacePopularity;
+  status: MarketplacePluginStatus;
+  installation_id: string | null;
+  installed_source: string | null;
+  local_only: boolean;
+}
+
+export interface MarketplaceSource {
+  label: string;
+  fetched_at: string | null;
+  stale: boolean;
+}
+
+export interface MarketplaceSnapshot {
+  source: MarketplaceSource;
+  plugins: MarketplacePlugin[];
+  profiles: string[];
+}
+
+export interface MarketplaceQuery {
+  query?: string;
+  category?: string;
+  installedOnly?: boolean;
+  sort: MarketplaceSort;
+  profile: string;
+}
+
+export interface MarketplaceOperation {
+  id: string;
+  kind: "install" | "custom_install" | "remove";
+  plugin_id: string;
+  profile: string;
+  phase: "preparing" | "running" | "verifying" | "succeeded" | "failed";
+  message: string;
+  log_path: string | null;
+}
+
+export interface MarketplaceOperationEvent {
+  operation: MarketplaceOperation;
+}
+
+export interface MarketplaceCustomInstallPreview {
+  profile: string;
+  source: string;
+  dsh_version: string;
+}
+
+export function marketplaceQuery(
+  query: MarketplaceQuery,
+): Promise<MarketplaceSnapshot> {
+  return invokeCommand<MarketplaceSnapshot>("marketplace_query", { query });
+}
+
+export function marketplaceRefresh(): Promise<MarketplaceSnapshot> {
+  return invokeCommand<MarketplaceSnapshot>("marketplace_refresh");
+}
+
+export function marketplaceParseCustomInstall(
+  command: string,
+): Promise<MarketplaceCustomInstallPreview> {
+  return invokeCommand<MarketplaceCustomInstallPreview>(
+    "marketplace_parse_custom_install",
+    { request: { command } },
+  );
+}
+
+export function marketplaceInstall(options: {
+  pluginId: string;
+  profile: string;
+}): Promise<MarketplaceOperation> {
+  return invokeCommand<MarketplaceOperation>("marketplace_install", {
+    request: options,
+  });
+}
+
+export function marketplaceInstallCustom(
+  command: string,
+): Promise<MarketplaceOperation> {
+  return invokeCommand<MarketplaceOperation>("marketplace_install_custom", {
+    request: { command },
+  });
+}
+
+export function marketplaceRemove(options: {
+  installationId: string;
+  profile: string;
+}): Promise<MarketplaceOperation> {
+  return invokeCommand<MarketplaceOperation>("marketplace_remove", {
+    request: options,
+  });
 }

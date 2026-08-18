@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { MirrorInfo } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 defineProps<{
   nodeMirrors: MirrorInfo[];
@@ -20,28 +21,29 @@ defineEmits<{
   setNodeMirror: [value: unknown];
   setRegistry: [value: unknown];
 }>();
+const { t } = useI18n();
 
 function nodeMirrorLabel(mirror: MirrorInfo): string {
-  return mirror.id === "tuna" ? "tsinghua（清华大学）" : mirror.id;
+  return mirror.id === "tuna" ? t("sources.tsinghua") : mirror.id;
 }
 </script>
 
 <template>
   <Card>
-    <CardHeader><CardTitle class="text-base">下载来源</CardTitle></CardHeader>
+    <CardHeader><CardTitle class="text-base">{{ t("sources.title") }}</CardTitle></CardHeader>
     <CardContent class="space-y-3">
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <Label>Node.js 下载源</Label>
+          <Label>{{ t("sources.node") }}</Label>
           <p class="text-xs text-muted-foreground">
-            下次下载或更新 Node.js 时使用
+            {{ t("sources.nodeDescription") }}
           </p>
         </div>
         <Select
           :model-value="nodeMirror"
           @update:model-value="$emit('setNodeMirror', $event)"
           ><SelectTrigger class="h-7 w-44 shrink-0 text-xs"
-            ><SelectValue placeholder="选择下载源" /></SelectTrigger
+            ><SelectValue :placeholder="t('sources.select')" /></SelectTrigger
           ><SelectContent
             ><SelectItem
               v-for="mirror in nodeMirrors"
@@ -54,21 +56,21 @@ function nodeMirrorLabel(mirror: MirrorInfo): string {
       </div>
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <Label>npm 下载源</Label>
+          <Label>{{ t("sources.npm") }}</Label>
           <p class="text-xs text-muted-foreground">
-            下次安装或更新 DeepSeek Harness 时使用
+            {{ t("sources.npmDescription") }}
           </p>
         </div>
         <Select
           :model-value="registry"
           @update:model-value="$emit('setRegistry', $event)"
           ><SelectTrigger class="h-7 w-44 shrink-0 text-xs"
-            ><SelectValue placeholder="选择下载源" /></SelectTrigger
+            ><SelectValue :placeholder="t('sources.select')" /></SelectTrigger
           ><SelectContent
             ><SelectItem value="https://registry.npmmirror.com"
               >npmmirror.com</SelectItem
             ><SelectItem value="https://registry.npmjs.org"
-              >npmjs.com（官方）</SelectItem
+              >{{ t("sources.official") }}</SelectItem
             ></SelectContent
           ></Select
         >

@@ -28,6 +28,13 @@ const eventListeners = vi.hoisted(
       }) => void
     >(),
 );
+const theme = vi.hoisted(() => ({
+  mode: "dark" as "light" | "dark",
+  initializing: false,
+  saving: false,
+  error: null as string | null,
+  updateTheme: vi.fn(),
+}));
 
 vi.mock("@/lib/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/tauri")>();
@@ -47,6 +54,8 @@ vi.mock("@tauri-apps/api/event", () => ({
     },
   ),
 }));
+
+vi.mock("@/stores/theme", () => ({ useThemeStore: () => theme }));
 
 import Settings from "@/components/Settings.vue";
 
@@ -77,17 +86,32 @@ beforeEach(() => {
     active_version: "0.1.0",
     rolled_back: false,
   });
+  theme.mode = "dark";
+  theme.initializing = false;
+  theme.saving = false;
+  theme.error = null;
 });
 
-test("requires explicit confirmation before uninstalling managed runtime", async () => {
+test("changes the launcher theme from settings", async () => {
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  await wrapper
+    .get('[data-testid="black-white-theme-switch"]')
+    .trigger("click");
+
+  expect(theme.updateTheme).toHaveBeenCalledWith("light");
+});
+
+test("requires explicit confirmation before reinstalling managed runtime", async () => {
   api.uninstallManagedRuntime.mockResolvedValue(undefined);
   const wrapper = mount(Settings);
   await flushPromises();
 
-  await button(wrapper, "卸载").trigger("click");
+  await button(wrapper, "重新安装").trigger("click");
   expect(api.uninstallManagedRuntime).not.toHaveBeenCalled();
 
-  await button(wrapper, "卸载并退出").trigger("click");
+  await button(wrapper, "清除并退出").trigger("click");
   expect(api.uninstallManagedRuntime).toHaveBeenCalledTimes(1);
 });
 

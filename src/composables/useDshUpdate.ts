@@ -23,6 +23,7 @@ import {
   type NodeUpgradeRequired,
 } from "@/lib/tauri";
 import { useLauncherStore } from "@/stores/launcher";
+import { useI18n } from "@/lib/i18n";
 
 export type DshUpdateDialogState =
   | "idle"
@@ -35,6 +36,7 @@ export type DshUpdateDialogState =
 
 export function useDshUpdate() {
   const store = useLauncherStore();
+  const { t } = useI18n();
   const dshUpdateChecked = ref(false);
   const updateNotice = ref<ReturnType<typeof toast> | null>(null);
   const updateDialogState = ref<DshUpdateDialogState>("idle");
@@ -73,16 +75,18 @@ export function useDshUpdate() {
     }
   });
   const updateStageMessage = computed(() => {
-    if (updateDialogState.value === "cancelling") return "正在取消安装…";
-    if (updateDialogState.value === "restarting") return "正在重启 dsh…";
+    if (updateDialogState.value === "cancelling") return t("update.cancellingInstall");
+    if (updateDialogState.value === "restarting") return t("update.restartingDsh");
     if (updateDialogState.value === "upgrading_node") {
-      return `正在下载并切换 Node ${nodeUpgrade.value?.suggested_node ?? ""}…`;
+      return t("update.upgradingNode", {
+        version: nodeUpgrade.value?.suggested_node ?? "",
+      });
     }
     return {
-      resolving: "正在从当前下载源获取最新版本…",
-      downloading: `npm install 进行中，已处理 ${updateInstallActivity.value} 个包…`,
-      installing: "正在安装依赖…",
-      verifying: "正在校验安装结果…",
+      resolving: t("update.resolving"),
+      downloading: t("update.downloading", { count: updateInstallActivity.value }),
+      installing: t("update.installing"),
+      verifying: t("update.verifying"),
     }[updateStage.value];
   });
 
@@ -123,7 +127,10 @@ export function useDshUpdate() {
     store.setHostReady(restart.origin);
     if (restart.rolled_back) {
       updateDialogState.value = "failed";
-      updateError.value = `版本 ${version} 无法启动，已恢复 ${restart.active_version}。`;
+      updateError.value = t("update.rollbackVersion", {
+        version,
+        activeVersion: restart.active_version,
+      });
       return;
     }
     updateNotice.value?.dismiss();
@@ -135,7 +142,7 @@ export function useDshUpdate() {
     const expectedVersion = updateTargetVersion.value;
     if (!expectedVersion) {
       updateDialogState.value = "failed";
-      updateError.value = "未获取到可安装的新版本，请重新检查更新。";
+      updateError.value = t("update.noVersion");
       return;
     }
     const operationId = crypto.randomUUID();
@@ -251,7 +258,7 @@ export function useDshUpdate() {
               h(RefreshCw, {
                 class: ["size-3.5", updateInProgress.value && "animate-spin"],
               }),
-              updateInProgress.value ? "更新中…" : "立即更新",
+              updateInProgress.value ? t("update.running") : t("update.now"),
             ],
           );
       },
@@ -270,8 +277,11 @@ export function useDshUpdate() {
       updateNotice.value = toast({
         type: "background",
         duration: Number.POSITIVE_INFINITY,
-        title: "发现新版本",
-        description: `当前 ${update.current_version}，可更新至 ${update.latest_version}。更新会在你确认后开始，并自动重启服务。`,
+        title: t("update.available"),
+        description: t("update.availableDescription", {
+          currentVersion: update.current_version,
+          targetVersion: update.latest_version,
+        }),
         action: createUpdateToastAction(),
       });
     } catch {

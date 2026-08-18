@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { CrashLimitPayload } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 const props = defineProps<{
   /** 崩溃上限 payload。非空时弹窗打开。 */
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 }>();
 
 const open = computed(() => props.crash !== null);
+const { t } = useI18n();
 
 /** 是否显示"回滚"按钮：仅当存在 known_good 稳定版本。 */
 const canRollback = computed(() => props.crash?.known_good != null);
@@ -41,8 +43,8 @@ const canRollback = computed(() => props.crash?.known_good != null);
 const exitDetail = computed(() => {
   if (!props.crash) return "";
   const parts: string[] = [];
-  if (props.crash.exit_code !== null) parts.push(`退出码 ${props.crash.exit_code}`);
-  if (props.crash.exit_signal !== null) parts.push(`信号 ${props.crash.exit_signal}`);
+  if (props.crash.exit_code !== null) parts.push(t("crash.exitCode", { value: props.crash.exit_code }));
+  if (props.crash.exit_signal !== null) parts.push(t("crash.signal", { value: props.crash.exit_signal }));
   return parts.length > 0 ? `（${parts.join("，")}）` : "";
 });
 </script>
@@ -53,15 +55,14 @@ const exitDetail = computed(() => {
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <AlertTriangle class="h-5 w-5 text-destructive" />
-          DeepSeek Harness 反复崩溃
+          {{ t("crash.title") }}
         </DialogTitle>
         <DialogDescription class="space-y-2">
           <p v-if="crash">
-            Host 在短时间内崩溃了 {{ crash.crash_counter }} 次（自动重试上限
-            {{ crash.retry_limit }} 次）{{ exitDetail }}，已停止自动重启。
+            {{ t("crash.description", { count: crash.crash_counter, limit: crash.retry_limit, detail: exitDetail }) }}
           </p>
           <p class="text-xs text-muted-foreground">
-            可以重试启动；若新版本存在问题，可回滚到上一个稳定版本。
+            {{ t("crash.hint") }}
           </p>
         </DialogDescription>
       </DialogHeader>
@@ -69,7 +70,7 @@ const exitDetail = computed(() => {
       <DialogFooter class="gap-2 sm:gap-0">
         <Button variant="outline" :disabled="recovering" @click="emit('dismiss')">
           <X class="h-4 w-4 mr-2" />
-          忽略
+          {{ t("crash.dismiss") }}
         </Button>
         <Button
           v-if="canRollback"
@@ -78,11 +79,11 @@ const exitDetail = computed(() => {
           @click="emit('rollback')"
         >
           <Undo2 class="h-4 w-4 mr-2" />
-          {{ recovering ? "处理中…" : `回滚到 ${crash?.known_good}` }}
+          {{ recovering ? t("crash.processing") : t("crash.rollback", { version: crash?.known_good ?? "" }) }}
         </Button>
         <Button :disabled="recovering" @click="emit('retry')">
           <RotateCcw class="h-4 w-4 mr-2" />
-          {{ recovering ? "重启中…" : "重试启动" }}
+          {{ recovering ? t("crash.restarting") : t("crash.retry") }}
         </Button>
       </DialogFooter>
     </DialogContent>

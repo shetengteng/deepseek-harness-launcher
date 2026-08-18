@@ -2,13 +2,13 @@
 
 ## 1. 目标与边界
 
-本设计为 `deepseek-harness-launcher` 增加一个位于**全屏设置页**中的插件市场。用户可以搜索目录、查看来源与风险信息、安装到指定 dsh profile，以及卸载已安装插件；设置页占用当前 Launcher 主界面，用户可随时返回 dsh Web UI。
+本设计为 `deepseek-harness-launcher` 增加一个位于**全屏设置页**中的插件市场。用户可以搜索目录、查看来源与风险信息、从目录安装或输入受支持的 dsh 插件命令安装到指定 profile，以及卸载已安装插件；设置页占用当前 Launcher 主界面，用户可随时返回 dsh Web UI。
 
 市场是一个受控的**目录与安装入口**，不是安全背书，也不执行目录提供方返回的任意命令。
 
 ### 目标
 
-- 在一个完整的设置页内完成查找、安装和卸载，不要求用户理解 npm、Git URL 或 dsh profile 的内部文件结构。
+- 在一个完整的设置页内完成查找、目录安装、自定义安装和卸载，不要求用户理解 npm、Git URL 或 dsh profile 的内部文件结构。
 - 默认使用可缓存的公开目录 API；断网时仍可浏览上次成功同步的目录并准确展示其过期状态。
 - 所有安装和卸载都由 Launcher 使用托管的 dsh 运行时执行，且由本地 profile 的真实状态决定最终结果。
 - 让用户在执行前看清仓库、固定引用、目标 profile 和 dsh 将运行的动作。
@@ -18,6 +18,7 @@
 - 不在第一期维护自有的 GitHub 爬虫、Cloudflare D1 或安装统计服务。
 - 不将目录中的静态格式校验视为代码审计、恶意代码检测或来源担保。
 - 不安装 Node 依赖、不执行目录中的 shell 命令，也不解析或运行插件仓库代码来获得详情。
+- 不把“自定义安装”做成任意 shell 或可复制粘贴脚本的执行入口；输入中的 source 始终作为单个 dsh 参数传递。
 - 不改变 dsh 的插件格式、依赖解析规则或 profile 存储格式。
 - 不自动安装、更新或移除插件。
 
@@ -36,7 +37,7 @@ Launcher 主界面
         ├── 左侧导航：设置 / 插件（当前）
         └── 插件页
             ├── 市场顶部栏：标题、目录新鲜度、市场 / 已安装 Tabs
-            └── 双栏：搜索、筛选与目录结果列表 / 选中插件的详情与操作区
+            └── 双栏：搜索、筛选、其下的自定义安装文本按钮与目录结果列表 / 选中插件或自定义命令的详情与操作区
 ```
 
 设置通过主界面路由切换，不创建第二个 WebviewWindow、不使用系统对话框，也不从 dsh Web UI 上叠抽屉。用户打开设置时是在做维护工作，因此检索、来源判断和确认安装应在同一处完成。
@@ -119,6 +120,8 @@ Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类、�
 - 排序，默认“市场排名”，可选择“相关性”“GitHub Stars”或“最近更新”；
 - 当前 dsh profile，下拉框默认 `web`。
 
+分类、排序、榜单范围与 GitHub Stars 门槛在桌面宽度下固定为同一行的四个等宽控件；宽度不足时才折为两列，避免压缩标签或点击目标。
+
 “已安装” Tab 的判断来自本地 profile 的真实依赖状态，不来自目录服务。目录中不存在但已经安装的插件，在该 Tab 中仍应出现为“本地插件”，并提示它未被当前目录收录。
 
 ### 3.2 结果列表
@@ -163,13 +166,41 @@ Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类、�
 
 具体命令参数由当前 dsh 版本的受控适配器生成。Launcher 将其 stdout/stderr 写入自身 dsh 子进程日志，UI 只读取长度受限、去除控制字符的进度摘要。
 
-### 3.4 卸载
+### 3.4 自定义安装
+
+“市场”Tab 的筛选器下方提供默认收起的 `+ 自定义安装` 文本按钮。它面向低频的已知来源安装，不与搜索和常用筛选争夺视觉权重；点击后才在原位展开命令输入和“继续”按钮。展开状态由用户保留到离开市场 Tab，正在解析、确认、安装或显示错误时不得自动收起。输入框显示受支持格式的占位示例：
+
+```text
+dsh plugin --profile web add <source>
+```
+
+用户可输入当前 dsh `plugin add` 支持的任意来源形式。点击“继续”或在输入框按 Enter 后，前端仅做即时格式提示；真正的解析和校验必须由 Rust 后端完成。受支持格式是单条、无引号的 dsh 添加命令：
+
+- 命令前缀固定为 `dsh plugin --profile <profile> add`，`profile` 必须是 Launcher 当前可用的 profile 名称；
+- `<source>` 必须是单个无空白参数。Launcher 不枚举、转换或限制其 scheme、仓库、注册表、URL 或本地来源，具体语义由当前 dsh 处理；
+- 后端仅做命令结构与安全字符校验，拒绝控制字符、引号、额外 flag、重定向、管道和环境变量，并将 source 作为一个独立 argv 参数传递；
+- 输入中的 dsh 二进制名只表示此受控语法，Launcher 不读取 PATH，也不执行用户输入的字符串。
+
+解析通过后，详情区切换为“自定义安装”预览。它明确显示目标 profile、原样保留的 source spec、Launcher 托管的 dsh 版本，以及“此来源未经过市场目录校验”的风险提示。用户仍需点“确认安装”；后端从已验证的结构化字段重新构造参数数组，而不是将原始命令传给 shell 或子进程。
+
+```text
+自定义来源，尚未执行
+将安装到 profile：web
+来源：<source>
+执行者：Launcher 托管的 dsh <version>
+
+[返回编辑]  [确认安装]
+```
+
+成功后重新读取 profile。若 inventory 匹配，该项在“已安装”Tab 显示为“本地插件”，并标注“未被当前目录收录”；若未匹配或命令失败，保持保守的未确认状态，并显示已净化错误摘要、日志路径和“重试”。自定义来源不会写入目录缓存，也不会在“市场”Tab 伪装成目录条目。
+
+### 3.5 卸载
 
 只有 `installed` 或 `update_available` 状态显示“卸载”。按钮第一次点击后在详情区展开高风险确认区，明确写出被移除的本地安装 spec 与 profile；第二次“确认卸载”才调用 dsh。
 
 卸载必须使用读取到的**已安装 spec**，不能使用目录当前返回的 URL，也不能为未在本地解析到的包猜测删除目标。成功后重新读取 profile 确认该 spec 已消失；失败时保持“已安装”状态并给出重试和日志入口。
 
-### 3.5 风险信息
+### 3.6 风险信息
 
 详情区底部常驻一段紧凑说明：
 
@@ -188,7 +219,7 @@ src-tauri/src/marketplace/
 ├── dsh1024_provider.rs    默认公开目录 API 适配器
 ├── cache.rs               原子缓存读写、ETag 与过期策略
 ├── catalog.rs             查询、排序、目录与本地状态合并
-├── install.rs             固定安装 spec 的生成、受控 dsh 调用、结果核验
+├── install.rs             目录 spec / 自定义命令解析、受控 dsh 调用、结果核验
 ├── inventory.rs           从 profile 读取已安装插件的权威快照
 └── types.rs               前后端共享的序列化模型
 ```
@@ -214,7 +245,7 @@ type MarketplaceSnapshot = {
 
 type MarketplaceOperation = {
   id: string
-  kind: 'install' | 'remove'
+  kind: 'install' | 'custom_install' | 'remove'
   pluginId: string
   profile: string
   phase: 'preparing' | 'running' | 'verifying' | 'succeeded' | 'failed'
@@ -222,13 +253,18 @@ type MarketplaceOperation = {
   logPath: string | null
 }
 
+type MarketplaceCustomInstallRequest = {
+  command: string
+}
+
 invoke('marketplace_query', query): Promise<MarketplaceSnapshot>
 invoke('marketplace_refresh'): Promise<MarketplaceSnapshot>
 invoke('marketplace_install', { pluginId, profile }): Promise<MarketplaceOperation>
+invoke('marketplace_install_custom', request: MarketplaceCustomInstallRequest): Promise<MarketplaceOperation>
 invoke('marketplace_remove', { installationId, profile }): Promise<MarketplaceOperation>
 ```
 
-`marketplace_install` 仅接收目录 ID 和 profile。后端先从当前已验证的目录快照找到记录，再构造 spec，因此 UI 传入的展示字段无法影响实际命令。`marketplace_remove` 接收 inventory 产生的 installation ID，不接收路径、URL 或包名。
+`marketplace_install` 仅接收目录 ID 和 profile。后端先从当前已验证的目录快照找到记录，再构造 spec，因此 UI 传入的展示字段无法影响实际命令。`marketplace_install_custom` 只把输入作为待解析文本，不执行它：后端先按 3.4 的固定命令结构解析为 profile 与单个 source spec，核验 profile 存在后，使用结构化字段重建 dsh 参数数组。`marketplace_remove` 接收 inventory 产生的 installation ID，不接收路径、URL 或包名。
 
 进度以 Tauri event `marketplace://operation` 推送。整个应用同一时刻只能有一个安装或卸载操作；目录刷新可并行，但不能替换正在被操作引用的快照。
 
@@ -253,6 +289,16 @@ stateDiagram-v2
   Installing --> InstallFailed: dsh 失败
   VerifyingInstall --> InstallFailed: inventory 不匹配
   InstallFailed --> ConfirmInstall: 重试
+  Browsing --> ParsingCustomInstall: 提交自定义命令
+  ParsingCustomInstall --> Browsing: 格式或 profile 无效
+  ParsingCustomInstall --> ConfirmCustomInstall: 解析成功
+  ConfirmCustomInstall --> Browsing: 返回编辑
+  ConfirmCustomInstall --> InstallingCustom: 确认安装
+  InstallingCustom --> VerifyingCustom: dsh 退出成功
+  VerifyingCustom --> Installed: inventory 匹配
+  InstallingCustom --> InstallFailed: dsh 失败
+  VerifyingCustom --> InstallFailed: inventory 不匹配
+  InstallFailed --> ConfirmCustomInstall: 重试
   Installed --> ConfirmRemove: 点击卸载
   ConfirmRemove --> Installed: 取消
   ConfirmRemove --> Removing: 确认卸载
@@ -270,6 +316,8 @@ stateDiagram-v2
 | 未找到匹配 | 没有匹配的插件。可清除筛选或调整关键词。 | 清除筛选 |
 | 当前 dsh 未就绪 | dsh 运行时尚未准备好，暂不能管理插件。 | 打开运行时设置 |
 | profile 无法读取 | 无法确认此 profile 的插件状态，未执行任何更改。 | 重试、查看日志 |
+| 自定义命令格式无效 | 使用 `dsh plugin --profile <profile> add <source>`，source 必须是单个参数。 | 返回编辑 |
+| 自定义命令指定的 profile 不可用 | 找不到指定的 profile，未执行任何更改。 | 返回编辑、选择可用 profile |
 | 安装失败 | 插件未被确认安装。当前 profile 保持原状或需在 dsh 中检查。 | 重试、查看日志 |
 | 卸载失败 | 未确认插件已移除，当前状态保持为已安装。 | 重试、查看日志 |
 
@@ -280,8 +328,9 @@ stateDiagram-v2
 - 默认仅请求目录数据和 GitHub 元数据，不上传已安装插件列表、搜索词、用户路径、用户名、profile 内容、命令输出或 dsh 会话内容。
 - 不接入第三方的安装统计上报。若未来启用遥测，必须单独设计并采用关闭默认值、明确说明和本地可审计队列。
 - HTTP 客户端只接受 HTTPS 和 provider allowlist，不跟随跨 host 重定向。
-- 对目录数据、profile 名、仓库 ID、子目录和 ref 全部做长度限制和字符集验证；不会将任何字段插入 shell。
+- 对目录数据、profile 名、仓库 ID、子目录、ref 和自定义 source spec 全部做长度限制和字符集验证；不会将任何字段插入 shell。
 - 每次安装前以本地已验证的目录快照为准，并在详情区展示构造后的 spec。缓存更新不能在确认之后悄悄改变待执行 spec。
+- 自定义命令仅在本地解析，绝不上传给目录服务；它不能绕过 profile 与单操作锁的校验，也不能使用原始文本启动 shell 或任意可执行文件。
 - dsh 自身执行插件所带来的权限由 dsh 负责；Launcher 的职责是缩小“目录数据 → 启动命令”的输入面并保留日志。
 
 ## 7. 前端实现
@@ -292,6 +341,7 @@ stateDiagram-v2
 src/components/settings/
 ├── SettingsMarketplace.vue            设置内的三栏容器
 ├── MarketplaceToolbar.vue             搜索、筛选、刷新、profile
+├── MarketplaceCustomInstall.vue       受控命令输入、格式提示与内联确认预览
 ├── MarketplaceResultList.vue          可访问的结果列表和骨架屏
 ├── MarketplacePluginDetail.vue        详情、内联确认与操作状态
 ├── MarketplaceSourceStatus.vue        数据新鲜度与错误状态
@@ -303,7 +353,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 
 `SettingsMarketplace.vue` 在全屏设置页中用 CSS grid 管理目录与详情两栏。宽度低于 900px 时，结果列表与详情改为单栏切换，不缩小可点击目标或让两栏横向挤压。焦点在切换布局时保留在搜索框或当前详情标题。
 
-使用 shadcn-vue 的 `Input`、`Select`、`Tabs`、`Button`、`Badge`、`Skeleton`、`ScrollArea` 和 `Tooltip`。不需要以 `Dialog` 承载安装确认，因为全屏设置页本身已经提供了维护操作的上下文。
+使用 shadcn-vue 的 `Input`、`Select`、`Tabs`、`Button`、`Badge`、`Skeleton`、`ScrollArea`、`Tooltip` 和 `Collapsible`。`MarketplaceCustomInstall.vue` 在筛选器下方默认以 `Button ghost` 文本按钮作为可收起触发器，并用 `aria-expanded`、`aria-controls` 标明展开状态。展开后，命令输入与“继续”按钮组成单一 form，Enter 提交，校验错误通过 `aria-describedby` 和 `role="alert"` 关联到输入框。它只在“市场”Tab 中显示，输入值与当前详情保留到用户取消或确认结束。无需以 `Dialog` 承载安装确认，因为全屏设置页本身已经提供了维护操作的上下文。
 
 ### 7.1 shadcn-vue 视觉合约
 
@@ -315,6 +365,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 | 安装、确认安装 | `Button`，`default` |
 | 卸载、确认卸载 | `Button`，`destructive` |
 | 搜索 | `Input`，默认 `h-10`、`border-input`、`bg-background` 与 `ring` 焦点态 |
+| 自定义安装 | 筛选器下方默认收起的 `Collapsible` + `Button ghost` 文本按钮；展开后使用 `Input` + `Button default`，窄屏时按钮换至下一行 |
 | 分类、排序、排名与 Stars 过滤 | `Select` + `SelectTrigger`，默认 `h-10` |
 | 市场、已安装范围切换 | `Tabs` + `TabsList` + `TabsTrigger`，已安装数量作为标签内计数 |
 | 已安装、可安装、排名状态 | `Badge`，以 `secondary`/`outline` 为基调；成功和警告只用于语义状态 |
@@ -330,7 +381,8 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 - provider 对正常、缺失字段、恶意 URL、超长 ID、无效 subdirectory/ref 的规范化测试。
 - provider 对排名与 Star 的缺失、过期时间和口径字段测试；不得将其中一个字段映射为另一个字段。
 - 缓存的原子写入、ETag、过期与失败不覆盖旧缓存测试。
-- 安装 spec 只能由有效目录记录构造，且不含 shell 可解释字段。
+- 目录安装 spec 只能由有效目录记录构造，且不含 shell 可解释字段。
+- 自定义命令只接受固定的 dsh 添加结构；覆盖多种 dsh source 的原样传递测试，以及额外 flag、引号、重定向、管道和未知 profile 的拒绝测试。
 - inventory 与目录合并时，对根插件、monorepo 子目录、catalog 外本地插件和未知状态的测试。
 - install/remove 的成功、dsh 失败、核验失败、并发操作拒绝和重启后恢复测试。
 
@@ -339,15 +391,16 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 - 市场/已安装 Tab、搜索、分类、排名范围、Star 门槛、排序和 profile 切换。
 - 结果列表的键盘导航、空状态、骨架屏、失焦恢复。
 - 首次点击只展开确认，取消不调用 Tauri 命令；确认后才调用。
+- 自定义安装默认收起，触发器的 `aria-expanded` 与内容可见性同步；展开后按 Enter 或“继续”只展示已解析预览，错误文本可被读屏读取，确认前不调用 Tauri 命令，取消后保留原始输入。
 - 安装/卸载成功后按后端快照更新状态；失败时保持保守状态并显示日志入口。
 - 陈旧缓存和无缓存失败时的可访问状态文本。
 
 ### 验收标准
 
-- 从设置页打开市场后，用户能在同一完整页面完成“搜索 → 查看来源 → 确认安装 → 看到已安装”，并可通过顶部栏返回 dsh。
+- 从设置页打开市场后，用户能在同一完整页面完成“搜索 → 查看来源 → 确认安装 → 看到已安装”，或“输入受支持命令 → 检查解析结果 → 确认安装 → 在已安装中看到本地插件”，并可通过顶部栏返回 dsh。
 - 列表始终可见市场排名与 GitHub Star 数；Top 与 Star 过滤能组合使用，且无排名/无 Star 的条目遵循保守的过滤规则。
 - 无网络时，已有缓存不会消失；无缓存时不会显示可安装的伪结果。
-- UI 中任意可编辑文本都无法改变实际安装 spec。
+- 目录安装时，UI 中任意可编辑文本都无法改变实际安装 spec；自定义安装时，只有后端成功解析出的结构化字段可以决定 spec。
 - 操作完成后必须重新读取 profile；不能仅凭 dsh 退出码把状态标为成功。
 - 安装/卸载不发送任何统计或用户行为数据。
 

@@ -25,8 +25,16 @@ const store = vi.hoisted(() => ({
   applyProgressEvent: vi.fn(),
   applyDshInstallProgress: vi.fn(),
 }));
+const theme = vi.hoisted(() => ({
+  mode: "light" as "light" | "dark",
+  initializing: false,
+  saving: false,
+  error: null as string | null,
+  updateTheme: vi.fn(),
+}));
 
 vi.mock("@/stores/launcher", () => ({ useLauncherStore: () => store }));
+vi.mock("@/stores/theme", () => ({ useThemeStore: () => theme }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
 }));
@@ -36,10 +44,17 @@ import FirstRun from "@/components/FirstRun.vue";
 const stubs = {
   Button: {
     emits: ["click"],
-    template: "<button v-bind=\"$attrs\" @click=\"$emit('click')\"><slot /></button>",
+    template:
+      '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>',
   },
   Progress: { template: "<div />" },
   MirrorSelector: { template: '<div data-testid="mirror-selector" />' },
+  ThemeToggleButton: {
+    props: ["mode", "disabled", "saving", "error"],
+    emits: ["change"],
+    template:
+      "<button data-testid=\"first-run-theme-toggle\" @click=\"$emit('change', 'dark')\">主题</button>",
+  },
 };
 
 beforeEach(() => {
@@ -52,6 +67,18 @@ beforeEach(() => {
   store.nodeInstallOperationId = "download-1";
   store.dshInstallOperationId = null;
   store.bootstrapPlan.registry = "https://registry.npmjs.org";
+  theme.mode = "light";
+  theme.initializing = false;
+  theme.saving = false;
+  theme.error = null;
+});
+
+test("keeps a theme toggle available during first-run installation", async () => {
+  const wrapper = shallowMount(FirstRun, { global: { stubs } });
+
+  await wrapper.get('[data-testid="first-run-theme-toggle"]').trigger("click");
+
+  expect(theme.updateTheme).toHaveBeenCalledWith("dark");
 });
 
 test("starts bootstrap installation automatically on first run", async () => {

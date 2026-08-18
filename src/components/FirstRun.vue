@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/select";
 import MirrorSelector from "@/components/MirrorSelector.vue";
 import LauncherIcon from "@/components/LauncherIcon.vue";
+import ThemeToggleButton from "@/components/theme/ThemeToggleButton.vue";
+import LanguageToggleButton from "@/components/LanguageToggleButton.vue";
 import { useFirstRunWizard } from "@/composables/useFirstRunWizard";
+import { useI18n } from "@/lib/i18n";
+import { useThemeStore } from "@/stores/theme";
 
 const {
   store,
@@ -36,20 +40,32 @@ const {
   restartNodeDownload,
   restartDshInstall,
 } = useFirstRunWizard();
+const theme = useThemeStore();
+const { t } = useI18n();
 </script>
 <template>
   <main class="min-h-screen flex items-center justify-center bg-muted/50 p-6">
     <section
-      class="w-[460px] max-w-full overflow-hidden rounded-lg bg-card shadow-2xl"
+      class="relative w-[460px] max-w-full overflow-hidden rounded-lg bg-card shadow-2xl"
     >
+      <div class="absolute right-3 top-3 flex items-start gap-1">
+        <LanguageToggleButton />
+        <ThemeToggleButton
+        :mode="theme.mode"
+        :disabled="theme.initializing || theme.saving"
+        :saving="theme.saving"
+        :error="theme.error"
+        @change="theme.updateTheme"
+        />
+      </div>
       <div class="flex flex-col gap-[18px] p-[30px]">
         <div class="flex size-16 shrink-0 items-center justify-center">
           <LauncherIcon class="size-16" />
         </div>
         <div>
-          <h1 class="text-lg font-semibold tracking-tight">正在准备运行环境</h1>
+          <h1 class="text-lg font-semibold tracking-tight">{{ t("firstRun.preparing") }}</h1>
           <p class="mt-1 text-[13px] leading-5 text-muted-foreground">
-            首次启动需要下载 Node.js 运行时和 DeepSeek Harness。
+            {{ t("firstRun.description") }}
           </p>
         </div>
 
@@ -73,10 +89,10 @@ const {
             <span class="shrink-0 font-mono text-[11px] text-muted-foreground">
               {{
                 nodeDone
-                  ? "已完成"
+                  ? t("firstRun.completed")
                   : store.downloadPercent
                     ? `${store.downloadPercent}%`
-                    : "准备中"
+                    : t("firstRun.preparingStatus")
               }}
             </span>
           </div>
@@ -124,10 +140,10 @@ const {
             <span class="shrink-0 font-mono text-[11px] text-muted-foreground">
               {{
                 dshDone
-                  ? "已完成"
+                  ? t("firstRun.completed")
                   : store.installingDsh
                     ? `${store.dshInstallProgress}%`
-                    : "等待中"
+                    : t("firstRun.waiting")
               }}
             </span>
           </div>
@@ -151,28 +167,26 @@ const {
           <summary
             class="flex cursor-pointer list-none items-center gap-1 py-1 font-medium text-muted-foreground [&::-webkit-details-marker]:hidden"
           >
-            {{ nodeDone ? "切换 npm 下载源" : "切换下载来源" }}
+            {{ nodeDone ? t("firstRun.switchNpm") : t("firstRun.switchDownload") }}
             <ChevronDown class="h-4 w-4" />
           </summary>
           <div class="mt-3 space-y-4 border-t pt-4">
             <template v-if="nodeDone">
               <p class="text-xs leading-5 text-muted-foreground">
-                安装缓慢时可切换 npm
-                下载源。重新开始会停止当前安装，并使用所选来源重新下载 DeepSeek
-                Harness。
+                {{ t("firstRun.npmExplanation") }}
               </p>
               <div class="space-y-2">
-                <Label for="dsh-registry">npm 下载源</Label>
+                <Label for="dsh-registry">{{ t("firstRun.npmRegistry") }}</Label>
                 <Select v-model="npmRegistry">
                   <SelectTrigger id="dsh-registry" class="w-full">
-                    <SelectValue placeholder="选择下载源" />
+                    <SelectValue :placeholder="t('firstRun.selectSource')" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="https://registry.npmmirror.com">
                       npmmirror.com
                     </SelectItem>
                     <SelectItem value="https://registry.npmjs.org">
-                      npmjs.com（官方）
+                      {{ t("firstRun.npmOfficial") }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -190,15 +204,14 @@ const {
                 />
                 {{
                   restartingDshInstall
-                    ? "正在重新开始…"
-                    : "重新使用此 npm 来源下载"
+                    ? t("firstRun.restarting")
+                    : t("firstRun.restartNpm")
                 }}
               </Button>
             </template>
             <template v-else>
               <p class="text-xs leading-5 text-muted-foreground">
-                下载缓慢时可切换 Node.js
-                来源。重新开始会停止当前下载，并使用所选来源从头下载。
+                {{ t("firstRun.nodeExplanation") }}
               </p>
               <MirrorSelector />
               <Button
@@ -214,7 +227,7 @@ const {
                   ]"
                 />
                 {{
-                  restartingDownload ? "正在重新开始…" : "重新使用此来源下载"
+                  restartingDownload ? t("firstRun.restarting") : t("firstRun.restartSource")
                 }}
               </Button>
             </template>

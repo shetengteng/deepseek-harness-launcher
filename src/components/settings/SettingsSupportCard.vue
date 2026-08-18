@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { FileArchive, Trash2 } from "lucide-vue-next";
+import { FileArchive, RefreshCw } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 
 defineProps<{
   exporting: boolean;
@@ -17,17 +18,18 @@ defineEmits<{
   cancelUninstall: [];
   uninstall: [];
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
   <Card>
-    <CardHeader><CardTitle class="text-base">问题排查</CardTitle></CardHeader>
+    <CardHeader><CardTitle class="text-base">{{ t("support.title") }}</CardTitle></CardHeader>
     <CardContent class="space-y-3"
       ><div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <div class="text-sm font-medium">导出排查资料</div>
+          <div class="text-sm font-medium">{{ t("support.exportTitle") }}</div>
           <p class="text-xs text-muted-foreground">
-            打包应用状态和日志，便于反馈问题
+            {{ t("support.exportDescription") }}
           </p>
         </div>
         <Button
@@ -36,7 +38,7 @@ defineEmits<{
           :disabled="exporting"
           @click="$emit('export')"
           ><FileArchive class="mr-2 h-4 w-4" />{{
-            exporting ? "导出中…" : "导出"
+            exporting ? t("support.exporting") : t("support.export")
           }}</Button
         >
       </div>
@@ -47,14 +49,13 @@ defineEmits<{
   </Card>
 
   <Card>
-    <CardHeader><CardTitle class="text-base">卸载</CardTitle></CardHeader>
+    <CardHeader><CardTitle class="text-base">{{ t("uninstall.title") }}</CardTitle></CardHeader>
     <CardContent class="space-y-3"
       ><div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <div class="text-sm font-medium">移除 DeepSeek Harness</div>
+          <div class="text-sm font-medium">{{ t("uninstall.runtime") }}</div>
           <p class="text-xs text-muted-foreground">
-            删除托管的 DeepSeek Harness、Node.js
-            运行时和设置，保留启动器与诊断日志
+            {{ t("uninstall.description") }}
           </p>
         </div>
         <Button
@@ -62,7 +63,7 @@ defineEmits<{
           variant="destructive"
           size="xs"
           @click="$emit('confirmUninstall')"
-          ><Trash2 class="mr-2 h-4 w-4" />卸载</Button
+          ><RefreshCw class="mr-2 h-4 w-4" />{{ t("uninstall.action") }}</Button
         >
       </div>
       <div
@@ -70,8 +71,7 @@ defineEmits<{
         class="space-y-3 rounded border border-destructive/40 bg-destructive/5 p-3"
       >
         <p class="text-sm">
-          确认后将立即关闭应用。重新打开启动器后，需要重新安装 DeepSeek
-          Harness。
+          {{ t("uninstall.confirm") }}
         </p>
         <div class="flex justify-end gap-2">
           <Button
@@ -79,14 +79,14 @@ defineEmits<{
             size="xs"
             :disabled="uninstalling"
             @click="$emit('cancelUninstall')"
-            >取消</Button
+            >{{ t("common.cancel") }}</Button
           ><Button
             variant="destructive"
             size="xs"
             :disabled="uninstalling"
             @click="$emit('uninstall')"
-            ><Trash2 class="mr-2 h-4 w-4" />{{
-              uninstalling ? "正在卸载…" : "卸载并退出"
+            ><RefreshCw class="mr-2 h-4 w-4" />{{
+            uninstalling ? t("uninstall.running") : t("uninstall.exit")
             }}</Button
           >
         </div>

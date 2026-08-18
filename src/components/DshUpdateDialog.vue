@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useDshUpdate } from "@/composables/useDshUpdate";
+import { useI18n } from "@/lib/i18n";
 
 const emit = defineEmits<{ "open-settings": [] }>();
+const { t } = useI18n();
 
 const {
   updateDialogOpen,
@@ -46,10 +48,10 @@ function openUpdateSettings(): void {
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
             <AlertTriangle class="h-5 w-5 text-warning" />
-            dsh 更新失败
+            {{ t("update.failedTitle") }}
           </DialogTitle>
           <DialogDescription>
-            新版本没有安装成功，当前版本仍然可以继续使用。
+            {{ t("update.failedDescription") }}
           </DialogDescription>
         </DialogHeader>
 
@@ -57,18 +59,18 @@ function openUpdateSettings(): void {
           class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
           role="alert"
         >
-          <div class="mb-1 text-xs font-medium">更新失败</div>
+          <div class="mb-1 text-xs font-medium">{{ t("update.failed") }}</div>
           <p class="break-words text-xs leading-5 text-foreground/80">
             {{ updateError }}
           </p>
         </div>
 
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="ghost" @click="closeUpdateDialog">关闭</Button>
-          <Button variant="outline" @click="openUpdateSettings">更换源</Button>
+          <Button variant="ghost" @click="closeUpdateDialog">{{ t("error.close") }}</Button>
+          <Button variant="outline" @click="openUpdateSettings">{{ t("update.changeSource") }}</Button>
           <Button @click="startDshUpdate">
             <RefreshCw class="h-4 w-4" />
-            重试
+            {{ t("error.retry") }}
           </Button>
         </DialogFooter>
       </template>
@@ -77,22 +79,20 @@ function openUpdateSettings(): void {
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
             <AlertTriangle class="h-5 w-5 text-warning" />
-            需要升级 Node
+            {{ t("update.nodeRequired") }}
           </DialogTitle>
           <DialogDescription>
-            dsh {{ nodeUpgrade.dsh_version }} 需要 Node
-            {{ nodeUpgrade.engines_node }}，当前为
-            {{ nodeUpgrade.current_node }}。
+            {{ t("update.nodeRequiredDescription", { dshVersion: nodeUpgrade.dsh_version, requiredVersion: nodeUpgrade.engines_node, currentVersion: nodeUpgrade.current_node }) }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">当前 Node</span>
+            <span class="text-muted-foreground">{{ t("update.currentNode") }}</span>
             <span class="font-mono text-xs">{{ nodeUpgrade.current_node }}</span>
           </div>
           <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">将安装</span>
+            <span class="text-muted-foreground">{{ t("update.willInstall") }}</span>
             <span class="font-mono text-xs text-info">
               {{ nodeUpgrade.suggested_node }}
             </span>
@@ -100,8 +100,8 @@ function openUpdateSettings(): void {
         </div>
 
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="outline" @click="cancelDshUpdate">取消更新</Button>
-          <Button @click="confirmNodeUpgrade">确认升级并继续</Button>
+          <Button variant="outline" @click="cancelDshUpdate">{{ t("update.cancel") }}</Button>
+          <Button @click="confirmNodeUpgrade">{{ t("update.confirm") }}</Button>
         </DialogFooter>
       </template>
 
@@ -109,22 +109,22 @@ function openUpdateSettings(): void {
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
             <RefreshCw class="h-5 w-5 animate-spin text-info" />
-            正在更新 dsh
+            {{ t("update.updating") }}
           </DialogTitle>
           <DialogDescription>
-            正在下载并校验新版本，当前会话继续使用旧版本。
+            {{ t("update.updatingDescription") }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">当前</span>
+            <span class="text-muted-foreground">{{ t("update.current") }}</span>
             <span class="font-mono text-xs">{{
               updateCurrentVersion ?? "—"
             }}</span>
           </div>
           <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">目标</span>
+            <span class="text-muted-foreground">{{ t("update.target") }}</span>
             <span class="font-mono text-xs text-info">
               {{ updateTargetVersion ?? "—" }}
             </span>
@@ -138,7 +138,7 @@ function openUpdateSettings(): void {
           role="status"
         >
           <span>{{ updateStageMessage }}</span>
-          <span>请稍候</span>
+          <span>{{ t("update.wait") }}</span>
         </div>
 
         <DialogFooter>
@@ -150,7 +150,7 @@ function openUpdateSettings(): void {
             "
             @click="cancelDshUpdate"
           >
-            {{ updateDialogState === "cancelling" ? "正在取消…" : "取消" }}
+            {{ updateDialogState === "cancelling" ? t("update.cancelling") : t("common.cancel") }}
           </Button>
         </DialogFooter>
       </template>

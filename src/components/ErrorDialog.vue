@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { LauncherErrorPayload } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 type LastAction =
   | "bootstrap"
@@ -37,6 +38,7 @@ const emit = defineEmits<{
 }>();
 
 const open = computed(() => props.error !== null);
+const { t } = useI18n();
 
 /** 展示文案：优先 `user_message`（Rust 端映射的中文提示 + 可操作建议，PR-019），
  * 缺失时回退到 `message`。 */
@@ -58,17 +60,17 @@ const hasTechnicalDetail = computed(() => {
 const retryLabel = computed(() => {
   switch (props.lastFailedAction) {
     case "bootstrap":
-      return "重新准备运行环境";
+      return t("error.retryBootstrap");
     case "installNode":
-      return "重试安装 Node";
+      return t("error.retryNode");
     case "installDsh":
-      return "重试安装 Harness";
+      return t("error.retryDsh");
     case "startHost":
-      return "重试启动";
+      return t("error.retryStart");
     case "shutdownHost":
-      return "重试关闭";
+      return t("error.retryShutdown");
     default:
-      return "重试";
+      return t("error.retry");
   }
 });
 
@@ -88,7 +90,7 @@ function onDismiss() {
   <Dialog :open="open" @update:open="(v) => !v && onDismiss()">
     <DialogContent class="sm:max-w-[520px]">
       <DialogHeader>
-        <DialogTitle>操作失败</DialogTitle>
+        <DialogTitle>{{ t("error.title") }}</DialogTitle>
         <DialogDescription
           v-if="props.error"
           class="break-words whitespace-pre-wrap"
@@ -113,7 +115,7 @@ function onDismiss() {
         }}</pre>
       </div>
       <DialogFooter>
-        <Button variant="outline" @click="onDismiss">关闭</Button>
+        <Button variant="outline" @click="onDismiss">{{ t("error.close") }}</Button>
         <Button v-if="showRetry" variant="default" @click="onRetry">
           {{ retryLabel }}
         </Button>

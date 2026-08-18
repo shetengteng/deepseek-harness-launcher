@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::error::{LauncherError, Result};
 use crate::node::BUILTIN_MIRRORS;
-use crate::state::{AppState, StateStatus};
+use crate::state::{AppState, StateStatus, ThemeMode};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -55,6 +55,22 @@ pub async fn get_dsh_state() -> Result<DshStateSnapshot> {
     }
 }
 
+#[tauri::command]
+pub async fn get_theme_command() -> Result<ThemeMode> {
+    Ok(match AppState::load()? {
+        StateStatus::FirstRun => ThemeMode::default(),
+        StateStatus::Loaded(state) => state.theme,
+    })
+}
+
+fn validated_theme(theme: &str) -> Result<ThemeMode> {
+    match theme {
+        "light" => Ok(ThemeMode::Light),
+        "dark" => Ok(ThemeMode::Dark),
+        _ => Err(LauncherError::Theme("请选择受支持的主题".to_string())),
+    }
+}
+
 fn validated_node_mirror(mirror: &str) -> Result<String> {
     BUILTIN_MIRRORS
         .iter()
@@ -98,6 +114,16 @@ pub async fn set_registry_command(registry: String) -> Result<()> {
     state.save()
 }
 
+#[tauri::command]
+pub async fn set_theme_command(theme: String) -> Result<()> {
+    let mut state = match AppState::load()? {
+        StateStatus::FirstRun => AppState::new(),
+        StateStatus::Loaded(state) => *state,
+    };
+    state.theme = validated_theme(&theme)?;
+    state.save()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +136,15 @@ mod tests {
             "https://registry.npmjs.org"
         );
         assert!(validated_registry("https://example.test").is_err());
+    }
+
+    #[test]
+    fn validates_only_supported_themes() {
+        assert_eq!(validated_theme("light").expect("light"), ThemeMode::Light);
+        assert_eq!(validated_theme("dark").expect("dark"), ThemeMode::Dark);
+        assert!(matches!(
+            validated_theme("system"),
+            Err(LauncherError::Theme(_))
+        ));
     }
 }

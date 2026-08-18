@@ -15,8 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLauncherStore } from "@/stores/launcher";
+import { useI18n } from "@/lib/i18n";
 
 const store = useLauncherStore();
+const { t } = useI18n();
 
 /** 下拉里的"自定义"特殊值。选中后展示 Input，但 selectedMirrorId 暂留空。 */
 const CUSTOM_VALUE = "__custom__";
@@ -94,7 +96,7 @@ watch(
   <div class="flex flex-col gap-4">
     <!-- 镜像源下拉（内置 + 自定义） -->
     <div class="flex items-center justify-between gap-3">
-      <Label for="builtin-mirror">镜像源</Label>
+      <Label for="builtin-mirror">{{ t("mirror.label") }}</Label>
       <button
         v-if="!customMode"
         type="button"
@@ -102,13 +104,13 @@ watch(
         :disabled="store.wizardStep === 'probing'"
         @click="store.autoPickMirror()"
       >
-        {{ store.wizardStep === "probing" ? "正在选择…" : "自动选择最快源" }}
+        {{ store.wizardStep === "probing" ? t("mirror.autoPicking") : t("mirror.autoPick") }}
       </button>
     </div>
     <div class="flex flex-col gap-2">
       <Select v-model="selectValue">
         <SelectTrigger id="builtin-mirror" class="w-full">
-          <SelectValue placeholder="选择镜像源" />
+          <SelectValue :placeholder="t('mirror.select')" />
         </SelectTrigger>
         <SelectContent class="min-w-[420px]">
           <SelectItem
@@ -119,7 +121,7 @@ watch(
             <span>{{ m.name }}</span>
           </SelectItem>
           <SelectItem :value="CUSTOM_VALUE">
-            <span class="text-muted-foreground">自定义...</span>
+            <span class="text-muted-foreground">{{ t("mirror.custom") }}</span>
           </SelectItem>
         </SelectContent>
       </Select>
@@ -127,7 +129,7 @@ watch(
 
     <!-- 自定义源输入：仅在选中"自定义..."时展示 -->
     <div v-if="showCustomInput" class="flex flex-col gap-2">
-      <Label for="custom-mirror">自定义源 URL</Label>
+      <Label for="custom-mirror">{{ t("mirror.customUrl") }}</Label>
       <div class="relative">
         <Input
           id="custom-mirror"
@@ -151,7 +153,7 @@ watch(
         {{ customError }}
       </p>
       <p v-else-if="isCustomSelected" class="text-xs text-green-600">
-        校验通过，将使用此源
+        {{ t("mirror.valid") }}
       </p>
     </div>
   </div>

@@ -62,6 +62,7 @@ fn tmp_sibling(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ThemeMode;
     #[test]
     fn missing_state_is_first_run_without_writing() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -93,5 +94,23 @@ mod tests {
             load_from(path),
             Err(LauncherError::StateCorrupt { .. })
         ));
+    }
+
+    #[test]
+    fn missing_theme_defaults_to_light() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("state.json");
+        let mut state = serde_json::to_value(AppState::new()).expect("state json");
+        state.as_object_mut().expect("state object").remove("theme");
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&state).expect("state bytes"),
+        )
+        .expect("write state");
+
+        let StateStatus::Loaded(state) = load_from(path).expect("load state") else {
+            panic!("state should load");
+        };
+        assert_eq!(state.theme, ThemeMode::Light);
     }
 }

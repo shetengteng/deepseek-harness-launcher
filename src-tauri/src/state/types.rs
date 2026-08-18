@@ -3,6 +3,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::EXPECTED_SCHEMA_VERSION;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeMode {
+    Light,
+    Dark,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        Self::Light
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NodeState {
     pub version: String,
@@ -66,6 +79,8 @@ pub struct AppState {
     #[serde(default)]
     pub node_mirror: Option<String>,
     #[serde(default)]
+    pub theme: ThemeMode,
+    #[serde(default)]
     pub dsh: DshState,
     #[serde(default)]
     pub crash_counter: u32,
@@ -80,6 +95,7 @@ impl Default for AppState {
             bootstrap_plan: None,
             node: None,
             node_mirror: None,
+            theme: ThemeMode::default(),
             dsh: DshState::default(),
             crash_counter: 0,
             last_crash_at: None,

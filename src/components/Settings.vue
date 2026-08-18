@@ -3,11 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import LauncherIcon from "@/components/LauncherIcon.vue";
 import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
+import SettingsAppearanceCard from "@/components/settings/SettingsAppearanceCard.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useThemeStore } from "@/stores/theme";
+import { useI18n } from "@/lib/i18n";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +61,8 @@ const props = withDefaults(
 );
 
 const dshState = ref<DshStateSnapshot | null>(null);
+const theme = useThemeStore();
+const { t } = useI18n();
 const latestDshVersion = ref<LatestDshVersion | null>(null);
 const nodeMirrors = ref<MirrorInfo[]>([]);
 const nodeMirrorDraft = ref("");
@@ -104,14 +109,16 @@ const nodeUpdateProgress = computed(() => {
 });
 
 const nodeUpdateMessage = computed(() => {
-  if (nodeUpdateStage.value === "complete") return "已完成原子切换";
+  if (nodeUpdateStage.value === "complete") return t("settings.nodeComplete");
   if (nodeUpdateStage.value === "extracting")
-    return "正在解压、校验并切换 Node.js…";
-  return "正在下载并校验 Node.js 运行时…";
+    return t("settings.nodeExtracting");
+  return t("settings.nodeDownloading");
 });
 
 const nodeUpdateActionLabel = computed(() =>
-  manualNodeTarget.value?.update_available ? "仅更新 Node" : "重新安装 Node",
+  manualNodeTarget.value?.update_available
+    ? t("settings.nodeOnly")
+    : t("settings.nodeReinstall"),
 );
 
 async function loadDshState(): Promise<void> {
@@ -250,7 +257,7 @@ async function finishLatestInstall(): Promise<void> {
   const restart = await restartHostAfterDshUpdate();
   await loadDshState();
   if (restart.rolled_back) {
-    upgradeError.value = `新版本无法启动，已恢复 ${restart.active_version}。`;
+    upgradeError.value = t("settings.rollback", { version: restart.active_version });
   }
   emit("upgradeReady", restart.origin);
 }
@@ -261,13 +268,16 @@ async function handleExportDiagnostics(): Promise<void> {
   try {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const destination = await save({
-      title: "导出诊断信息",
+      title: t("settings.exportTitle"),
       defaultPath: `deepseek-harness-launcher-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
-      filters: [{ name: "ZIP 压缩包", extensions: ["zip"] }],
+      filters: [{ name: t("settings.zip"), extensions: ["zip"] }],
     });
     if (!destination) return;
     const size = await exportDiagnostics(destination);
-    exportInfo.value = `已导出（${(size / 1024).toFixed(1)} KB）：${destination}`;
+    exportInfo.value = t("settings.exported", {
+      size: (size / 1024).toFixed(1),
+      destination,
+    });
   } catch (error) {
     exportInfo.value = messageOf(error);
   } finally {
@@ -302,7 +312,7 @@ async function handleSetNodeMirror(value: unknown): Promise<void> {
     await setNodeMirror(value);
     if (dshState.value) dshState.value.node_mirror = value;
   } catch {
-    sourceError.value = "未能保存 Node.js 下载来源，请重试。";
+    sourceError.value = t("settings.nodeSourceSaveFailed");
     nodeMirrorDraft.value = dshState.value?.node_mirror ?? "";
   }
 }
@@ -315,7 +325,7 @@ async function handleSetRegistry(value: unknown): Promise<void> {
     await setRegistry(value);
     if (dshState.value) dshState.value.registry = value;
   } catch {
-    sourceError.value = "未能保存 npm 下载源，请重试。";
+    sourceError.value = t("settings.npmSourceSaveFailed");
     registryDraft.value = dshState.value?.registry ?? "";
   }
 }
@@ -331,6 +341,10 @@ async function handleInstallDshCli(): Promise<void> {
   } finally {
     installingDshCli.value = false;
   }
+}
+
+function handleThemeChange(mode: "light" | "dark"): void {
+  void theme.updateTheme(mode);
 }
 
 let unlistenDownloadProgress: (() => void) | null = null;
@@ -394,14 +408,20 @@ watch(
           aria-hidden="true"
           class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary"
         />
-        <span class="sr-only">正在加载设置</span>
+        <span class="sr-only">{{ t("settings.loading") }}</span>
       </section>
     </div>
     <div v-else class="space-y-4">
       <div v-if="!dshState" class="text-muted-foreground text-sm">
-        无法加载设置
+        {{ t("settings.loadFailed") }}
       </div>
       <template v-else>
+        <SettingsAppearanceCard
+          :mode="theme.mode"
+          :disabled="theme.initializing || theme.saving"
+          :error="theme.error"
+          @change="handleThemeChange"
+        />
         <SettingsEnvironmentCard
           :dsh-state="dshState"
           :node-version="props.nodeVersion"
@@ -453,12 +473,9 @@ watch(
         @pointer-down-outside.prevent
       >
         <DialogHeader>
-          <DialogTitle>需要升级 Node</DialogTitle>
+          <DialogTitle>{{ t("update.nodeRequired") }}</DialogTitle>
           <DialogDescription v-if="nodeUpgrade">
-            dsh {{ nodeUpgrade.dsh_version }} 需要 Node
-            {{ nodeUpgrade.engines_node }}，当前为
-            {{ nodeUpgrade.current_node }}。确认后将下载 Node
-            {{ nodeUpgrade.suggested_node }} 并继续更新。
+            {{ t("settings.nodeUpgradeDescription", { dshVersion: nodeUpgrade.dsh_version, requiredVersion: nodeUpgrade.engines_node, currentVersion: nodeUpgrade.current_node, targetVersion: nodeUpgrade.suggested_node }) }}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-2">
@@ -467,10 +484,10 @@ watch(
             :disabled="upgrading"
             @click="cancelNodeUpgrade"
           >
-            取消更新
+            {{ t("update.cancel") }}
           </Button>
           <Button :disabled="upgrading" @click="confirmNodeUpgrade">
-            {{ upgrading ? "升级中…" : "确认升级并继续" }}
+            {{ upgrading ? t("settings.upgrading") : t("update.confirm") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -483,11 +500,9 @@ watch(
         @pointer-down-outside.prevent
       >
         <DialogHeader>
-          <DialogTitle>更新 Node.js</DialogTitle>
+          <DialogTitle>{{ t("settings.nodeUpdateTitle") }}</DialogTitle>
           <DialogDescription v-if="manualNodeTarget">
-            将从 {{ manualNodeTarget.current_version }} 更新至
-            {{ manualNodeTarget.target_version }}。该操作只更新
-            Node.js，不安装或切换 dsh， 运行中的 dsh 会继续使用当前进程。
+            {{ t("settings.nodeUpdateDescription", { currentVersion: manualNodeTarget.current_version, targetVersion: manualNodeTarget.target_version }) }}
           </DialogDescription>
         </DialogHeader>
         <div
@@ -495,13 +510,13 @@ watch(
           class="rounded-md border bg-muted/30 px-3 py-2 text-sm"
         >
           <template v-if="manualNodeTarget.engines_node">
-            <span class="text-muted-foreground">兼容要求：</span>
+            <span class="text-muted-foreground">{{ t("settings.compatibility") }}</span>
             <span class="font-mono text-xs">{{
               manualNodeTarget.engines_node
             }}</span>
           </template>
           <span v-else class="text-xs text-muted-foreground">
-            当前 dsh 未声明 Node.js 兼容范围，将使用 launcher 已验证的版本。
+            {{ t("settings.noCompatibility") }}
           </span>
         </div>
         <div v-if="updatingNode" class="space-y-2">
@@ -523,10 +538,10 @@ watch(
         </p>
         <DialogFooter class="gap-2 sm:gap-2">
           <Button variant="outline" @click="cancelManualNodeUpdate">
-            {{ updatingNode ? "取消下载" : "取消" }}
+            {{ updatingNode ? t("settings.cancelDownload") : t("common.cancel") }}
           </Button>
           <Button :disabled="updatingNode" @click="confirmManualNodeUpdate">
-            {{ updatingNode ? "更新中…" : nodeUpdateActionLabel }}
+            {{ updatingNode ? t("settings.updating") : nodeUpdateActionLabel }}
           </Button>
         </DialogFooter>
       </DialogContent>

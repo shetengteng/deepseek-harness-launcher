@@ -1,28 +1,32 @@
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vitest";
 import SettingsPage from "@/components/SettingsPage.vue";
+import { ResizablePanelGroup } from "@/components/ui/resizable";
 
 function button(wrapper: ReturnType<typeof mount>, label: string) {
   return wrapper.findAll("button").find((item) => item.text().includes(label))!;
 }
 
-test("switches between settings and the plugin placeholder", async () => {
+test("switches between settings and the plugin marketplace", async () => {
   const wrapper = mount(SettingsPage, {
     global: {
       stubs: {
         SettingsView: { template: "<div>设置内容</div>" },
+        SettingsMarketplace: { template: "<div>插件市场内容</div>" },
       },
     },
   });
 
   expect(wrapper.text()).toContain("设置内容");
+  expect(wrapper.findComponent(ResizablePanelGroup).exists()).toBe(true);
+  expect(wrapper.get("section").classes()).toContain("overflow-hidden");
+  expect(wrapper.get("aside").classes()).toContain("overflow-hidden");
+  expect(wrapper.get("aside").find(".border-t").exists()).toBe(false);
   expect(wrapper.get('[aria-current="page"]').text()).toContain("设置");
 
   await button(wrapper, "插件").trigger("click");
 
-  expect(wrapper.text()).toContain(
-    "插件市场和已安装插件管理将在后续版本提供。",
-  );
+  expect(wrapper.text()).toContain("插件市场内容");
   expect(wrapper.get('[aria-current="page"]').text()).toContain("插件");
 });
 
@@ -32,15 +36,14 @@ test("shows the requested section when it changes", async () => {
     global: {
       stubs: {
         SettingsView: { template: "<div>设置内容</div>" },
+        SettingsMarketplace: { template: "<div>插件市场内容</div>" },
       },
     },
   });
 
   await wrapper.setProps({ section: "plugins" });
 
-  expect(wrapper.text()).toContain(
-    "插件市场和已安装插件管理将在后续版本提供。",
-  );
+  expect(wrapper.text()).toContain("插件市场内容");
 });
 
 test("returns to the launcher when requested", async () => {
@@ -48,6 +51,7 @@ test("returns to the launcher when requested", async () => {
     global: {
       stubs: {
         SettingsView: { template: "<div />" },
+        SettingsMarketplace: { template: "<div />" },
       },
     },
   });

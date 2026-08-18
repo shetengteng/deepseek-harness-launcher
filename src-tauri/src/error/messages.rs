@@ -58,6 +58,18 @@ pub fn user_message(error: &LauncherError) -> String {
         LauncherError::DshCli(_) => {
             "无法安装 dsh 命令。请检查用户目录写权限后重试。".to_string()
         }
+        LauncherError::Theme(_) => "主题设置无效。请选择浅色或黑白主题。".to_string(),
+        LauncherError::Marketplace(message)
+            if message.contains("catalog unavailable") || message.contains("connect") || message.contains("timeout") =>
+        {
+            "无法加载插件目录。请检查网络后重试。".to_string()
+        }
+        LauncherError::Marketplace(message) if message.contains("profile") => {
+            "无法确认此 profile 的插件状态，未执行任何更改。请重试或查看日志。".to_string()
+        }
+        LauncherError::Marketplace(_) => {
+            "插件市场操作失败。请重试；若持续失败请导出诊断信息。".to_string()
+        }
         LauncherError::DshNotInstalled { .. } => "dsh 尚未安装。请完成首次启动向导。".to_string(),
         LauncherError::NodeNotInstalled { .. } => {
             "Node 运行时尚未安装。请完成首次启动向导。".to_string()

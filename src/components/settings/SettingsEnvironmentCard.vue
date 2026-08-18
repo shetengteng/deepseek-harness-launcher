@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DshStateSnapshot, LatestDshVersion } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 const props = defineProps<{
   dshState: DshStateSnapshot;
@@ -17,6 +18,7 @@ const props = defineProps<{
   nodeUpdateLoading: boolean;
   nodeUpdateError: string | null;
 }>();
+const { t } = useI18n();
 
 defineEmits<{ refresh: []; install: []; updateNode: [] }>();
 
@@ -38,29 +40,29 @@ const hostAddress = computed(() => {
 
 <template>
   <Card>
-    <CardHeader><CardTitle class="text-base">运行环境</CardTitle></CardHeader>
+    <CardHeader><CardTitle class="text-base">{{ t("environment.title") }}</CardTitle></CardHeader>
     <CardContent class="space-y-3">
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <div class="text-sm">正在使用的 DeepSeek Harness 版本</div>
+          <div class="text-sm">{{ t("environment.dshVersion") }}</div>
           <p
             class="min-h-5 text-xs text-muted-foreground"
             data-testid="dsh-update-status"
           >
             <span v-if="error" class="text-destructive">{{ error }}</span>
             <template v-else-if="updateAvailable">
-              可更新版本：<span class="font-mono">{{
+              {{ t("environment.updateAvailable") }}<span class="font-mono">{{
                 latestVersion?.latest_version
               }}</span></template
             >
-            <span v-else role="status">已是最新版本</span>
+            <span v-else role="status">{{ t("environment.upToDate") }}</span>
           </p>
         </div>
         <div class="flex shrink-0 items-center gap-2">
           <Badge v-if="dshState.current" variant="default">{{
             dshState.current
           }}</Badge
-          ><span v-else class="text-sm text-muted-foreground">尚未安装</span>
+          ><span v-else class="text-sm text-muted-foreground">{{ t("environment.notInstalled") }}</span>
           <Button
             :variant="updateAvailable ? 'default' : 'outline'"
             size="xs"
@@ -72,18 +74,18 @@ const hostAddress = computed(() => {
             />{{
               updateAvailable
                 ? upgrading
-                  ? "安装中…"
-                  : "安装新版本"
+                  ? t("environment.installing")
+                  : t("environment.installUpdate")
                 : refreshing
-                  ? "刷新中…"
-                  : "刷新"
+                  ? t("environment.refreshing")
+                  : t("environment.refresh")
             }}</Button
           >
         </div>
       </div>
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <div class="text-sm">Node.js 版本</div>
+          <div class="text-sm">{{ t("environment.nodeVersion") }}</div>
           <div
             class="text-xs text-muted-foreground"
             data-testid="node-update-status"
@@ -91,11 +93,11 @@ const hostAddress = computed(() => {
             <span v-if="nodeUpdateError" class="text-destructive">{{
               nodeUpdateError
             }}</span>
-            <span v-else>仅更新 Node.js；运行中的 dsh 不会重启</span>
+            <span v-else>{{ t("environment.nodeHint") }}</span>
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          <span class="font-mono text-sm">{{ nodeVersion ?? "尚未安装" }}</span>
+          <span class="font-mono text-sm">{{ nodeVersion ?? t("environment.notInstalled") }}</span>
           <Button
             variant="outline"
             size="xs"
@@ -103,18 +105,18 @@ const hostAddress = computed(() => {
             @click="$emit('updateNode')"
           >
             <Download class="mr-2 h-4 w-4" />
-            {{ nodeUpdateLoading ? "准备中…" : "更新 Node" }}
+            {{ nodeUpdateLoading ? t("environment.preparing") : t("environment.updateNode") }}
           </Button>
         </div>
       </div>
       <div class="flex items-center justify-between gap-4">
         <div>
-          <div class="text-sm">运行 IP 与端口</div>
+          <div class="text-sm">{{ t("environment.hostAddress") }}</div>
           <div class="text-xs text-muted-foreground">
-            DeepSeek Harness 当前服务地址
+            {{ t("environment.hostDescription") }}
           </div>
         </div>
-        <span class="font-mono text-sm">{{ hostAddress ?? "尚未运行" }}</span>
+        <span class="font-mono text-sm">{{ hostAddress ?? t("environment.notRunning") }}</span>
       </div>
     </CardContent>
   </Card>

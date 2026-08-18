@@ -8,6 +8,7 @@ import {
   type DshInstallProgressEvent,
   type ProgressEvent,
 } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 import {
   isDshInstallCancelled,
   isNodeInstallCancelled,
@@ -32,6 +33,7 @@ export function createBootstrapActions({
   refreshStatus,
   startHost,
 }: BootstrapDependencies) {
+  const { t } = useI18n();
   let activeBootstrap: Promise<void> | null = null;
   let activeNodeInstall: Promise<boolean> | null = null;
   let activeDshInstall: Promise<void> | null = null;
@@ -62,7 +64,7 @@ export function createBootstrapActions({
       resetProgress();
       try {
         const mirror = state.selectedMirror.value;
-        if (!mirror) throw new Error("未选择镜像源");
+        if (!mirror) throw new Error(t("bootstrap.noMirror"));
         const plan =
           state.bootstrapPlan.value ?? (await resolveBootstrapPlan());
         state.bootstrapPlan.value = plan;

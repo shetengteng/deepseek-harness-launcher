@@ -2,9 +2,11 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { useLauncherStore } from "@/stores/launcher";
 import type { DshInstallProgressEvent, ProgressEvent } from "@/lib/tauri";
+import { useI18n } from "@/lib/i18n";
 
 export function useFirstRunWizard() {
   const store = useLauncherStore();
+  const { t } = useI18n();
   let unlistenDownload: (() => void) | null = null;
   let unlistenExtract: (() => void) | null = null;
   let unlistenDsh: (() => void) | null = null;
@@ -15,33 +17,35 @@ export function useFirstRunWizard() {
   );
   const nodeMessage = computed(() =>
     nodeDone.value
-      ? "SHA-256 已校验"
+      ? t("firstRun.nodeVerified")
       : store.wizardStep === "resolving"
-        ? "正在确认 DeepSeek Harness 版本与 Node.js 要求…"
+        ? t("firstRun.nodeResolving")
         : store.wizardStep === "extracting"
-          ? "正在解压并原子切换…"
-          : "正在下载并校验运行时…",
+          ? t("firstRun.nodeExtracting")
+          : t("firstRun.nodeDownloading"),
   );
   const dshDone = computed(() => store.dshVersion !== null);
   const dshMessage = computed(() =>
     dshDone.value
-      ? "完整性已校验"
+      ? t("firstRun.dshVerified")
       : store.installingDsh
         ? {
-            resolving: "正在准备依赖…",
-            downloading: `npm install 进行中，已处理 ${store.dshInstallActivity} 个包…`,
-            installing: "正在运行安装脚本…",
-            verifying: "正在校验安装结果…",
+            resolving: t("firstRun.dshResolving"),
+            downloading: t("firstRun.dshDownloading", {
+              count: store.dshInstallActivity,
+            }),
+            installing: t("firstRun.dshInstalling"),
+            verifying: t("firstRun.dshVerifying"),
           }[store.dshInstallStage]
         : nodeDone.value
-          ? "即将自动安装…"
-          : "等待 Node.js 运行时…",
+          ? t("firstRun.dshNext")
+          : t("firstRun.dshWaiting"),
   );
   const nodeStatus = computed(() =>
-    nodeDone.value ? "✓ 已完成" : nodeMessage.value,
+    nodeDone.value ? t("firstRun.statusComplete") : nodeMessage.value,
   );
   const dshStatus = computed(() =>
-    dshDone.value ? "✓ 已完成" : dshMessage.value,
+    dshDone.value ? t("firstRun.statusComplete") : dshMessage.value,
   );
   const restartingDownload = ref(false);
   const canRestartDownload = computed(

@@ -15,12 +15,14 @@ import SettingsPage from "@/components/SettingsPage.vue";
 import AboutDialog from "@/components/AboutDialog.vue";
 import { useDshExternalLinks } from "@/composables/useDshExternalLinks";
 import { useTrayEvents } from "@/composables/useTrayEvents";
+import { useI18n } from "@/lib/i18n";
 import { useLauncherStore } from "@/stores/launcher";
 
 type SettingsSection = "settings" | "plugins";
 
 const store = useLauncherStore();
 const { dshFrame } = useDshExternalLinks();
+const { t } = useI18n();
 
 const showSettingsPage = ref(false);
 const settingsSection = ref<SettingsSection>("settings");
@@ -112,12 +114,12 @@ onMounted(async () => {
           </CardHeader>
           <CardContent class="flex flex-col gap-3 text-sm">
             <div class="flex justify-between">
-              <span class="text-muted-foreground">DeepSeek Harness 版本</span>
-              <span>{{ store.dshVersion ?? "未安装" }}</span>
+              <span class="text-muted-foreground">{{ t("main.dshVersion") }}</span>
+              <span>{{ store.dshVersion ?? t("main.notInstalled") }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-muted-foreground">Node 版本</span>
-              <span>{{ store.nodeVersion ?? "未托管" }}</span>
+              <span class="text-muted-foreground">{{ t("main.nodeVersion") }}</span>
+              <span>{{ store.nodeVersion ?? t("main.notManaged") }}</span>
             </div>
 
             <!-- dsh 未装：显示"安装 DeepSeek Harness"按钮 -->
@@ -127,7 +129,7 @@ onMounted(async () => {
               @click="store.installDsh()"
             >
               <Download class="h-4 w-4 mr-2" />
-              {{ store.installingDsh ? "安装中…" : "安装 DeepSeek Harness" }}
+              {{ store.installingDsh ? t("main.installing") : t("main.installDsh") }}
             </Button>
 
             <!-- dsh 已装：显示"启动 DeepSeek Harness"按钮 -->
@@ -137,7 +139,7 @@ onMounted(async () => {
               @click="store.startHost()"
             >
               <Play class="h-4 w-4 mr-2" />
-              {{ store.starting ? "启动中…" : "启动 DeepSeek Harness" }}
+              {{ store.starting ? t("main.starting") : t("main.startDsh") }}
             </Button>
           </CardContent>
         </Card>
@@ -150,8 +152,7 @@ onMounted(async () => {
           class="flex items-center px-3 py-1 border-b bg-background"
         >
           <span class="text-xs text-muted-foreground">
-            DeepSeek Harness 曾意外退出，已自动恢复（第
-            {{ store.autoRestartedAttempt }} 次）
+            {{ t("main.recovered", { attempt: store.autoRestartedAttempt }) }}
           </span>
         </div>
         <iframe

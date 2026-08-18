@@ -14,6 +14,10 @@ pub(crate) mod node_install;
 pub(crate) mod recovery;
 pub(crate) mod settings;
 
+pub use crate::marketplace::{
+    marketplace_install, marketplace_install_custom, marketplace_parse_custom_install,
+    marketplace_query, marketplace_refresh, marketplace_remove,
+};
 pub use about::{get_about_info, AboutInfo};
 pub use bootstrap::{
     check_dsh_update_command, get_latest_dsh_version_command, list_mirrors, probe_mirrors_command,
@@ -37,6 +41,6 @@ pub use recovery::{
     decide_after_crash, spawn_crash_recovery, CrashAction, CrashLimitPayload, HostRestartedPayload,
 };
 pub use settings::{
-    get_dsh_state, set_node_mirror_command, set_registry_command, DshStateSnapshot,
-    InstalledDshInfo,
+    get_dsh_state, get_theme_command, set_node_mirror_command, set_registry_command,
+    set_theme_command, DshStateSnapshot, InstalledDshInfo,
 };

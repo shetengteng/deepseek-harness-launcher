@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { getAboutInfo, type AboutInfo } from "@/lib/tauri";
 import LauncherIcon from "@/components/LauncherIcon.vue";
+import { useI18n } from "@/lib/i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -22,9 +23,10 @@ const emit = defineEmits<{
 
 const aboutInfo = ref<AboutInfo | null>(null);
 const error = ref<string | null>(null);
+const { t } = useI18n();
 
 const endpoint = computed(() => {
-  if (!props.hostOrigin) return "未运行";
+  if (!props.hostOrigin) return t("about.notRunning");
   try {
     return new URL(props.hostOrigin).host;
   } catch {
@@ -38,7 +40,7 @@ async function loadAboutInfo(): Promise<void> {
     aboutInfo.value = await getAboutInfo();
   } catch {
     aboutInfo.value = null;
-    error.value = "无法读取运行时信息。";
+    error.value = t("about.loadFailed");
   }
 }
 
@@ -72,25 +74,25 @@ watch(
         class="overflow-hidden rounded-md border text-sm divide-y divide-border"
       >
         <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
-          <dt class="text-muted-foreground">启动器版本</dt>
-          <dd class="font-mono">{{ aboutInfo?.launcher_version ?? "读取中…" }}</dd>
+          <dt class="text-muted-foreground">{{ t("about.launcherVersion") }}</dt>
+          <dd class="font-mono">{{ aboutInfo?.launcher_version ?? t("about.loading") }}</dd>
         </div>
         <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
-          <dt class="text-muted-foreground">DeepSeek Harness 版本</dt>
-          <dd class="font-mono">{{ aboutInfo?.dsh_version ?? "尚未安装" }}</dd>
+          <dt class="text-muted-foreground">{{ t("about.dshVersion") }}</dt>
+          <dd class="font-mono">{{ aboutInfo?.dsh_version ?? t("environment.notInstalled") }}</dd>
         </div>
         <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
-          <dt class="text-muted-foreground">Node.js 版本</dt>
-          <dd class="font-mono">{{ aboutInfo?.node_version ?? "尚未安装" }}</dd>
+          <dt class="text-muted-foreground">{{ t("about.nodeVersion") }}</dt>
+          <dd class="font-mono">{{ aboutInfo?.node_version ?? t("environment.notInstalled") }}</dd>
         </div>
         <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
-          <dt class="text-muted-foreground">数据目录</dt>
+          <dt class="text-muted-foreground">{{ t("about.dataDirectory") }}</dt>
           <dd class="min-w-0 break-all font-mono text-xs">
-            {{ aboutInfo?.data_directory ?? "读取中…" }}
+            {{ aboutInfo?.data_directory ?? t("about.loading") }}
           </dd>
         </div>
         <div class="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-3 py-2.5">
-          <dt class="text-muted-foreground">DeepSeek Harness 端点</dt>
+          <dt class="text-muted-foreground">{{ t("about.endpoint") }}</dt>
           <dd class="font-mono">{{ endpoint }}</dd>
         </div>
       </dl>
