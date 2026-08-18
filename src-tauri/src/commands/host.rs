@@ -8,7 +8,7 @@ mod test_support;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::{LauncherError, Result};
 use crate::host::{HostSupervisor, HostSupervisorConfig, HostSupervisorError};
@@ -55,10 +55,20 @@ pub struct DshUpgradeRestartResult {
 }
 
 #[tauri::command]
-pub async fn start_host(state: State<'_, SharedState>) -> Result<String> {
-    let origin = start_with_one_known_good_fallback(|| start_host_inner(&state.supervisor)).await?;
-    state.navigation.activate_dsh_origin(&origin);
-    Ok(origin)
+pub async fn start_host(app: AppHandle, state: State<'_, SharedState>) -> Result<String> {
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Starting);
+    let result = start_with_one_known_good_fallback(|| start_host_inner(&state.supervisor)).await;
+    match result {
+        Ok(origin) => {
+            state.navigation.activate_dsh_origin(&origin);
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Running);
+            Ok(origin)
+        }
+        Err(error) => {
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Failed);
+            Err(error)
+        }
+    }
 }
 
 async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
@@ -80,55 +90,81 @@ pub async fn restart_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<Stri
 }
 
 #[tauri::command]
-pub async fn restart_host(state: State<'_, SharedState>) -> Result<String> {
+pub async fn restart_host(app: AppHandle, state: State<'_, SharedState>) -> Result<String> {
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Restarting);
     state.navigation.clear_dsh_origin();
-    let origin =
-        start_with_one_known_good_fallback(|| restart_host_inner(&state.supervisor)).await?;
-    state.navigation.activate_dsh_origin(&origin);
-    Ok(origin)
-}
-
-#[tauri::command]
-pub async fn restart_host_after_dsh_update(
-    state: State<'_, SharedState>,
-) -> Result<DshUpgradeRestartResult> {
-    state.navigation.clear_dsh_origin();
-    let active_version = current_dsh_version()?;
-    match restart_host_inner(&state.supervisor).await {
+    let result = start_with_one_known_good_fallback(|| restart_host_inner(&state.supervisor)).await;
+    match result {
         Ok(origin) => {
             state.navigation.activate_dsh_origin(&origin);
-            Ok(DshUpgradeRestartResult {
-                origin,
-                active_version,
-                rolled_back: false,
-            })
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Running);
+            Ok(origin)
         }
-        Err(restart_error) => {
-            let restart_error = restart_error.to_string();
-            let active_version = rollback_failed_dsh_update()?;
-            let origin = restart_host_inner(&state.supervisor)
-                .await
-                .map_err(|rollback_error| {
-                    LauncherError::Host(format!(
-                        "dsh update restart failed: {restart_error}; rollback restart failed: {rollback_error}"
-                    ))
-                })?;
-            state.navigation.activate_dsh_origin(&origin);
-            tracing::warn!(%restart_error, %active_version, "dsh update failed to start; restored known-good version");
-            Ok(DshUpgradeRestartResult {
-                origin,
-                active_version,
-                rolled_back: true,
-            })
+        Err(error) => {
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Failed);
+            Err(error)
         }
     }
 }
 
 #[tauri::command]
-pub async fn shutdown_host(state: State<'_, SharedState>) -> Result<()> {
+pub async fn restart_host_after_dsh_update(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<DshUpgradeRestartResult> {
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Restarting);
+    state.navigation.clear_dsh_origin();
+    let result = async {
+        let active_version = current_dsh_version()?;
+        match restart_host_inner(&state.supervisor).await {
+            Ok(origin) => {
+                state.navigation.activate_dsh_origin(&origin);
+                Ok(DshUpgradeRestartResult {
+                    origin,
+                    active_version,
+                    rolled_back: false,
+                })
+            }
+            Err(restart_error) => {
+                let restart_error = restart_error.to_string();
+                let active_version = rollback_failed_dsh_update()?;
+                let origin = restart_host_inner(&state.supervisor)
+                    .await
+                    .map_err(|rollback_error| {
+                        LauncherError::Host(format!(
+                            "dsh update restart failed: {restart_error}; rollback restart failed: {rollback_error}"
+                        ))
+                    })?;
+                state.navigation.activate_dsh_origin(&origin);
+                tracing::warn!(%restart_error, %active_version, "dsh update failed to start; restored known-good version");
+                Ok(DshUpgradeRestartResult {
+                    origin,
+                    active_version,
+                    rolled_back: true,
+                })
+            }
+        }
+    }
+    .await;
+    match result {
+        Ok(result) => {
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Running);
+            Ok(result)
+        }
+        Err(error) => {
+            crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Failed);
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn shutdown_host(app: AppHandle, state: State<'_, SharedState>) -> Result<()> {
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Stopping);
     state.navigation.clear_dsh_origin();
     let shutdown = state.supervisor.shutdown().await;
     shutdown.await_completion().await;
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Stopped);
     Ok(())
 }
 

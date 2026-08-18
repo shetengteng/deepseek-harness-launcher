@@ -49,9 +49,9 @@ const hostAddress = computed(() => {
           >
             <span v-if="error" class="text-destructive">{{ error }}</span>
             <template v-else-if="updateAvailable">
-            可更新版本：<span class="font-mono">{{
-              latestVersion?.latest_version
-            }}</span></template
+              可更新版本：<span class="font-mono">{{
+                latestVersion?.latest_version
+              }}</span></template
             >
             <span v-else role="status">已是最新版本</span>
           </p>
@@ -84,8 +84,13 @@ const hostAddress = computed(() => {
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <div class="text-sm">Node.js 版本</div>
-          <div class="text-xs text-muted-foreground" data-testid="node-update-status">
-            <span v-if="nodeUpdateError" class="text-destructive">{{ nodeUpdateError }}</span>
+          <div
+            class="text-xs text-muted-foreground"
+            data-testid="node-update-status"
+          >
+            <span v-if="nodeUpdateError" class="text-destructive">{{
+              nodeUpdateError
+            }}</span>
             <span v-else>仅更新 Node.js；运行中的 dsh 不会重启</span>
           </div>
         </div>

@@ -14,7 +14,7 @@ pub mod version;
 
 pub use download::{
     download_archive, download_with_retry, fetch_shasums, find_sha_in_shasums, parse_shasums_line,
-    verify_sha256, NodeDownloadOperations, ProgressEvent, PROGRESS_CHUNK_BYTES,
+    verify_sha256, DownloadRequest, NodeDownloadOperations, ProgressEvent, PROGRESS_CHUNK_BYTES,
 };
 pub(crate) use download::{download_with_retry_cancellable, remove_archive};
 pub use install::{

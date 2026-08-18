@@ -33,7 +33,7 @@ pub async fn install_node_command(
 ) -> Result<String> {
     use crate::node::{
         cleanup_cancelled_install, download_with_retry_cancellable, install_node_to_cancellable,
-        remove_archive,
+        remove_archive, DownloadRequest,
     };
 
     let InstallNodeArgs {
@@ -79,13 +79,15 @@ pub async fn install_node_command(
             .build()
             .map_err(|error| LauncherError::NodeDownload(error.to_string()))?;
         let archive_path = download_with_retry_cancellable(
-            &client,
-            &mirror,
-            &version,
-            &archive_filename,
-            &staging_download_dir,
-            Some(&tx),
-            2,
+            DownloadRequest {
+                client: &client,
+                mirror: &mirror,
+                version: &version,
+                archive_filename: &archive_filename,
+                dest_dir: &staging_download_dir,
+                progress_tx: Some(&tx),
+                max_retries: 2,
+            },
             &cancellation,
         )
         .await?;
@@ -108,7 +110,7 @@ pub async fn install_node_command(
     let installed = match lifecycle_result {
         Ok(installed) => {
             if let Err(error) = cancellation.check() {
-                cleanup_cancelled_install(&runtime_dir, &installed);
+                let cleanup_result = cleanup_cancelled_install(&runtime_dir, &installed);
                 remove_cancelled_artifacts(
                     &staging_download_dir,
                     &archive_filename,
@@ -116,6 +118,7 @@ pub async fn install_node_command(
                     &version,
                 )
                 .await;
+                cleanup_result?;
                 return Err(error);
             }
             installed

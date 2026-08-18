@@ -707,6 +707,87 @@
         line-height: 1.68;
       }
 
+      .command-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 0.86fr);
+        gap: 38px;
+        margin-top: 14px;
+        padding: clamp(28px, 5vw, 58px);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+      }
+
+      .command-card h2 {
+        max-width: 600px;
+        margin: 12px 0 0;
+      }
+
+      .command-card p {
+        max-width: 560px;
+        margin: 18px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.75;
+      }
+
+      .command-list {
+        display: grid;
+        gap: 12px;
+        margin: 25px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .command-list li {
+        position: relative;
+        padding-left: 22px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .command-list li::before {
+        position: absolute;
+        top: 0.5em;
+        left: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        content: "";
+        background: var(--green-strong);
+      }
+
+      .terminal {
+        align-self: center;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        background: #080d13;
+        box-shadow: 0 20px 45px rgb(0 0 0 / 22%);
+      }
+
+      .terminal-bar {
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--subtle);
+        font-size: 12px;
+      }
+
+      .terminal pre {
+        margin: 0;
+        padding: 18px;
+        color: #d8fbe5;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.9;
+        white-space: pre-wrap;
+      }
+
+      .terminal code {
+        color: inherit;
+      }
+
       .closing {
         display: flex;
         align-items: flex-end;
@@ -758,7 +839,8 @@
 
       @media (max-width: 920px) {
         .hero,
-        .section-heading {
+        .section-heading,
+        .command-card {
           grid-template-columns: 1fr;
         }
 
@@ -868,6 +950,11 @@
           padding: 40px 24px;
         }
 
+        .command-card {
+          gap: 26px;
+          padding: 34px 24px;
+        }
+
         .steps {
           gap: 23px;
           margin-top: 36px;
@@ -915,6 +1002,7 @@
         </a>
         <nav class="nav-actions" aria-label="页面导航">
           <a class="text-link" href="#how-it-works">工作方式</a>
+          <a class="text-link" href="#command-line">命令行</a>
           <a
             class="github-link"
             href="https://github.com/shetengteng/deepseek-harness-launcher"
@@ -1116,6 +1204,33 @@
                 <h3>直接进入 Harness</h3>
                 <p>本地服务就绪后，主窗口直接承载 DeepSeek Harness。</p>
               </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="command-line" aria-labelledby="command-title">
+          <div class="command-card">
+            <div>
+              <p class="section-label">Terminal, when you need it</p>
+              <h2 id="command-title">也可以在终端直接使用 <code>dsh</code>。</h2>
+              <p>
+                完成首次启动后，在 Launcher 的「设置」→「命令行」中点击「安装
+                <code>dsh</code> 命令」。它会创建一个稳定入口，始终指向 Launcher
+                托管的 Node.js 和当前 dsh 版本，无需 <code>npm install -g</code>。
+              </p>
+              <ul class="command-list">
+                <li>macOS/Linux：安装到 <code>~/.local/bin/dsh</code>。</li>
+                <li>首次安装后将该目录加入 <code>PATH</code>，再重新打开终端。</li>
+                <li>以后升级或回滚 dsh，不需要重新安装这个命令。</li>
+              </ul>
+            </div>
+            <div class="terminal" aria-label="macOS 终端配置示例">
+              <div class="terminal-bar">macOS Terminal</div>
+              <pre><code># 首次安装后，在 ~/.zprofile 加入
+export PATH="$HOME/.local/bin:$PATH"
+
+# 关闭并重新打开终端后验证
+dsh --help</code></pre>
             </div>
           </div>
         </section>

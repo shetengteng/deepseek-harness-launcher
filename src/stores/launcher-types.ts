@@ -18,4 +18,4 @@ export type LastAction =
   | "shutdownHost"
   | null;
 
-export const DEFAULT_NODE_VERSION = "22.19.0";
+export const DEFAULT_NODE_VERSION = "24.18.1";

@@ -32,23 +32,34 @@ pub struct ProgressEvent {
 /// 进度触发阈值。每 64KB 推一次，避免 channel 过载。
 pub const PROGRESS_CHUNK_BYTES: u64 = 64 * 1024;
 
+pub struct DownloadRequest<'a> {
+    pub client: &'a Client,
+    pub mirror: &'a Mirror,
+    pub version: &'a str,
+    pub archive_filename: &'a str,
+    pub dest_dir: &'a Path,
+    pub progress_tx: Option<&'a mpsc::Sender<ProgressEvent>>,
+    pub max_retries: u32,
+}
+
 /// 下载单个镜像源 + 校验。失败重试 `max_retries` 次。
 ///
 /// 测试设计 §PR-007 用例：5xx 重试 3 次后 Err。
 pub async fn download_with_retry(
-    client: &Client,
-    mirror: &Mirror,
-    version: &str,
-    archive_filename: &str,
-    dest_dir: &Path,
-    progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
-    max_retries: u32,
+    request: DownloadRequest<'_>,
     operations: &NodeDownloadOperations,
     operation_id: &str,
 ) -> Result<PathBuf> {
     let active = operations.register(operation_id)?;
     let cancellation = active.cancellation();
-    download_with_retry_cancellable(
+    download_with_retry_cancellable(request, &cancellation).await
+}
+
+pub(crate) async fn download_with_retry_cancellable(
+    request: DownloadRequest<'_>,
+    cancellation: &DownloadCancellation,
+) -> Result<PathBuf> {
+    let DownloadRequest {
         client,
         mirror,
         version,
@@ -56,21 +67,7 @@ pub async fn download_with_retry(
         dest_dir,
         progress_tx,
         max_retries,
-        &cancellation,
-    )
-    .await
-}
-
-pub(crate) async fn download_with_retry_cancellable(
-    client: &Client,
-    mirror: &Mirror,
-    version: &str,
-    archive_filename: &str,
-    dest_dir: &Path,
-    progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
-    max_retries: u32,
-    cancellation: &DownloadCancellation,
-) -> Result<PathBuf> {
+    } = request;
     let archive_url = format!(
         "{}/v{version}/{archive_filename}",
         mirror.base_url.trim_end_matches('/')

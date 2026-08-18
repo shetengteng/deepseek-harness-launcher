@@ -77,7 +77,9 @@ const manualNodeTarget = ref<NodeUpdateTarget | null>(null);
 const preparingNodeUpdate = ref(false);
 const updatingNode = ref(false);
 const manualNodeUpdateError = ref<string | null>(null);
-const nodeUpdateStage = ref<"downloading" | "extracting" | "complete">("downloading");
+const nodeUpdateStage = ref<"downloading" | "extracting" | "complete">(
+  "downloading",
+);
 const nodeDownloadProgress = ref<{ bytes: number; total: number | null }>({
   bytes: 0,
   total: null,
@@ -96,12 +98,15 @@ const nodeUpdateProgress = computed(() => {
   if (nodeUpdateStage.value === "complete") return 100;
   if (nodeUpdateStage.value === "extracting") return 92;
   const { bytes, total } = nodeDownloadProgress.value;
-  return total && total > 0 ? Math.min(90, Math.round((bytes / total) * 90)) : 8;
+  return total && total > 0
+    ? Math.min(90, Math.round((bytes / total) * 90))
+    : 8;
 });
 
 const nodeUpdateMessage = computed(() => {
   if (nodeUpdateStage.value === "complete") return "已完成原子切换";
-  if (nodeUpdateStage.value === "extracting") return "正在解压、校验并切换 Node.js…";
+  if (nodeUpdateStage.value === "extracting")
+    return "正在解压、校验并切换 Node.js…";
   return "正在下载并校验 Node.js 运行时…";
 });
 
@@ -187,7 +192,8 @@ function cancelNodeUpgrade(): void {
 }
 
 async function prepareNodeUpdate(): Promise<void> {
-  if (preparingNodeUpdate.value || updatingNode.value || upgrading.value) return;
+  if (preparingNodeUpdate.value || updatingNode.value || upgrading.value)
+    return;
   preparingNodeUpdate.value = true;
   manualNodeUpdateError.value = null;
   try {
@@ -200,8 +206,17 @@ async function prepareNodeUpdate(): Promise<void> {
   }
 }
 
-function cancelManualNodeUpdate(): void {
-  if (updatingNode.value) return;
+async function cancelManualNodeUpdate(): Promise<void> {
+  if (updatingNode.value) {
+    const operationId = nodeUpdateOperationId.value;
+    if (!operationId) return;
+    try {
+      await cancelNodeInstall(operationId);
+    } catch (error) {
+      manualNodeUpdateError.value = messageOf(error);
+    }
+    return;
+  }
   manualNodeTarget.value = null;
   manualNodeUpdateError.value = null;
 }
@@ -318,7 +333,41 @@ async function handleInstallDshCli(): Promise<void> {
   }
 }
 
-onMounted(loadDshState);
+let unlistenDownloadProgress: (() => void) | null = null;
+let unlistenExtractProgress: (() => void) | null = null;
+
+onMounted(() => {
+  void loadDshState();
+  void (async () => {
+    try {
+      unlistenDownloadProgress = await listen<ProgressEvent>(
+        "download-progress",
+        (event) => {
+          if (!updatingNode.value || event.payload.stage !== "download") return;
+          nodeUpdateStage.value = "downloading";
+          nodeDownloadProgress.value = {
+            bytes: event.payload.bytes,
+            total: event.payload.total,
+          };
+        },
+      );
+      unlistenExtractProgress = await listen<ProgressEvent>(
+        "extract-progress",
+        () => {
+          if (updatingNode.value) nodeUpdateStage.value = "extracting";
+        },
+      );
+    } catch (error) {
+      console.warn("Tauri event listen failed:", error);
+    }
+  })();
+});
+
+onUnmounted(() => {
+  unlistenDownloadProgress?.();
+  unlistenExtractProgress?.();
+});
+
 watch(
   () => props.exportDiagnosticsRequest,
   (request, previous) => {
@@ -337,7 +386,10 @@ watch(
       role="status"
     >
       <section class="flex flex-col items-center gap-[18px]">
-        <LauncherIcon aria-hidden="true" class="size-16 shrink-0 animate-none" />
+        <LauncherIcon
+          aria-hidden="true"
+          class="size-16 shrink-0 animate-none"
+        />
         <span
           aria-hidden="true"
           class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary"
@@ -358,7 +410,9 @@ watch(
           :refreshing="versionsLoading"
           :upgrading="upgrading"
           :error="upgradeError"
-          :node-update-loading="preparingNodeUpdate || updatingNode || upgrading"
+          :node-update-loading="
+            preparingNodeUpdate || updatingNode || upgrading
+          "
           :node-update-error="manualNodeUpdateError"
           @refresh="refreshLatestDshVersion"
           @install="installLatestDsh"
@@ -408,7 +462,11 @@ watch(
           </DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="outline" :disabled="upgrading" @click="cancelNodeUpgrade">
+          <Button
+            variant="outline"
+            :disabled="upgrading"
+            @click="cancelNodeUpgrade"
+          >
             取消更新
           </Button>
           <Button :disabled="upgrading" @click="confirmNodeUpgrade">
@@ -428,23 +486,47 @@ watch(
           <DialogTitle>更新 Node.js</DialogTitle>
           <DialogDescription v-if="manualNodeTarget">
             将从 {{ manualNodeTarget.current_version }} 更新至
-            {{ manualNodeTarget.target_version }}。该操作只更新 Node.js，不安装或切换 dsh，
-            运行中的 dsh 会继续使用当前进程。
+            {{ manualNodeTarget.target_version }}。该操作只更新
+            Node.js，不安装或切换 dsh， 运行中的 dsh 会继续使用当前进程。
           </DialogDescription>
         </DialogHeader>
         <div
           v-if="manualNodeTarget"
           class="rounded-md border bg-muted/30 px-3 py-2 text-sm"
         >
-          <span class="text-muted-foreground">兼容要求：</span>
-          <span class="font-mono text-xs">{{ manualNodeTarget.engines_node }}</span>
+          <template v-if="manualNodeTarget.engines_node">
+            <span class="text-muted-foreground">兼容要求：</span>
+            <span class="font-mono text-xs">{{
+              manualNodeTarget.engines_node
+            }}</span>
+          </template>
+          <span v-else class="text-xs text-muted-foreground">
+            当前 dsh 未声明 Node.js 兼容范围，将使用 launcher 已验证的版本。
+          </span>
         </div>
+        <div v-if="updatingNode" class="space-y-2">
+          <Progress :model-value="nodeUpdateProgress" class="h-2" />
+          <div
+            class="flex justify-between text-xs text-muted-foreground"
+            role="status"
+          >
+            <span>{{ nodeUpdateMessage }}</span>
+            <span>{{ nodeUpdateProgress }}%</span>
+          </div>
+        </div>
+        <p
+          v-if="manualNodeUpdateError"
+          class="text-sm text-destructive"
+          role="alert"
+        >
+          {{ manualNodeUpdateError }}
+        </p>
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="outline" :disabled="updatingNode" @click="cancelManualNodeUpdate">
-            取消
+          <Button variant="outline" @click="cancelManualNodeUpdate">
+            {{ updatingNode ? "取消下载" : "取消" }}
           </Button>
           <Button :disabled="updatingNode" @click="confirmManualNodeUpdate">
-            {{ updatingNode ? "更新中…" : "仅更新 Node" }}
+            {{ updatingNode ? "更新中…" : nodeUpdateActionLabel }}
           </Button>
         </DialogFooter>
       </DialogContent>

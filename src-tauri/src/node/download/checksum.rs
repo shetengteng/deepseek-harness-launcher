@@ -10,7 +10,7 @@ use super::DownloadCancellation;
 
 /// SHASUMS256.txt 中的一行：`<hash>  <filename>`。
 pub fn parse_shasums_line(line: &str) -> Option<(String, String)> {
-    let mut parts = line.trim().split_whitespace();
+    let mut parts = line.split_whitespace();
     let hash = parts.next()?.to_string();
     let filename = parts.next()?.to_string();
     (hash.len() == 64 && hash.chars().all(|character| character.is_ascii_hexdigit()))

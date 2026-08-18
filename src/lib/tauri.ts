@@ -35,7 +35,8 @@ export function parseNodeUpgradeRequired(
   const currentNode = String(payload.data.current_node ?? "");
   const enginesNode = String(payload.data.engines_node ?? "");
   const suggestedNode = String(payload.data.suggested_node ?? "");
-  if (!dshVersion || !currentNode || !enginesNode || !suggestedNode) return null;
+  if (!dshVersion || !currentNode || !enginesNode || !suggestedNode)
+    return null;
   return {
     dsh_version: dshVersion,
     current_node: currentNode,

@@ -10,7 +10,7 @@ use crate::error::{LauncherError, Result};
 
 /// 默认目标 Node 版本。与 dsh `package.json.engines.node` 对齐。
 /// 每发布前确认（设计 §M2.4）。
-pub const DEFAULT_NODE_VERSION: &str = "22.19.0";
+pub const DEFAULT_NODE_VERSION: &str = "24.18.1";
 
 /// 解析 Node 版本字符串。接受以下形式：
 /// - `22.19.0`
@@ -297,7 +297,8 @@ mod tests {
     #[test]
     fn default_node_version_is_parseable_and_satisfies_engines() {
         let v = parse_node_version(DEFAULT_NODE_VERSION).unwrap();
+        assert_eq!(v, Version::parse("24.18.1").unwrap());
         assert!(satisfies_engines(&v, ">=22.0.0").unwrap());
-        assert!(satisfies_engines(&v, "^22.19.0").unwrap());
+        assert!(satisfies_engines(&v, "^24.18.0").unwrap());
     }
 }

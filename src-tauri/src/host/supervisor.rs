@@ -16,7 +16,7 @@ use tokio::process::Child;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
-use self::monitor::spawn_exit_monitor;
+use self::monitor::{spawn_exit_monitor, ExitMonitorContext};
 use self::reader::start_output_tasks;
 pub use config::{
     HostSupervisorConfig, LogCallback, DEFAULT_READINESS_TIMEOUT, DEFAULT_SHUTDOWN_TIMEOUT,
@@ -145,12 +145,14 @@ impl HostSupervisor {
             inner.generation
         };
         spawn_exit_monitor(
-            Arc::clone(&self.inner),
-            Arc::clone(&self.origin_cache),
-            Arc::clone(&self.shutdown_flag),
-            Arc::clone(&self.intentional_restart_generation),
-            Arc::clone(&self.exit_handler),
-            self.config.on_unexpected_exit.clone(),
+            ExitMonitorContext {
+                inner: Arc::clone(&self.inner),
+                origin_cache: Arc::clone(&self.origin_cache),
+                shutdown_flag: Arc::clone(&self.shutdown_flag),
+                intentional_restart_generation: Arc::clone(&self.intentional_restart_generation),
+                exit_handler: Arc::clone(&self.exit_handler),
+                configured_handler: self.config.on_unexpected_exit.clone(),
+            },
             generation,
             stdout_task,
             stderr_task,

@@ -4,7 +4,12 @@ mod extract;
 mod paths;
 mod verify;
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use tokio::sync::mpsc;
 
@@ -70,6 +75,9 @@ pub(crate) struct InstalledNode {
     previous_version: Option<Vec<u8>>,
     version: String,
 }
+
+const VERSION_FILE_NAME: &str = "VERSION";
+static VERSION_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// 安装 Node 到指定 `runtime_dir`：解压 archive 到 `runtime_dir/node-v{version}/`，更新 VERSION。
 ///
@@ -159,13 +167,23 @@ pub(crate) async fn install_node_to_cancellable(
                     &target_dir,
                     version,
                     previous_version.as_deref(),
-                );
+                )?;
             }
             return Err(error);
         }
     }
 
-    cancellation.check()?;
+    if let Err(error) = cancellation.check() {
+        if created {
+            cleanup_created_runtime(
+                runtime_dir,
+                &target_dir,
+                version,
+                previous_version.as_deref(),
+            )?;
+        }
+        return Err(error);
+    }
     if let Err(error) =
         activate_installed_node(runtime_dir, version, &target_dir, progress_tx).await
     {
@@ -175,7 +193,7 @@ pub(crate) async fn install_node_to_cancellable(
                 &target_dir,
                 version,
                 previous_version.as_deref(),
-            );
+            )?;
         }
         return Err(error);
     }
@@ -186,22 +204,26 @@ pub(crate) async fn install_node_to_cancellable(
         version: version.to_string(),
     };
     if let Err(error) = cancellation.check() {
-        cleanup_cancelled_install(runtime_dir, &installed);
+        cleanup_cancelled_install(runtime_dir, &installed)?;
         return Err(error);
     }
     tracing::info!(version, target = %installed.target.display(), "node installed");
     Ok(installed)
 }
 
-pub(crate) fn cleanup_cancelled_install(runtime_dir: &Path, installed: &InstalledNode) {
+pub(crate) fn cleanup_cancelled_install(
+    runtime_dir: &Path,
+    installed: &InstalledNode,
+) -> Result<()> {
     restore_previous_selection(
         runtime_dir,
         &installed.version,
         installed.previous_version.as_deref(),
-    );
+    )?;
     if installed.created {
-        let _ = std::fs::remove_dir_all(&installed.target);
+        std::fs::remove_dir_all(&installed.target).map_err(LauncherError::Io)?;
     }
+    Ok(())
 }
 
 fn cleanup_created_runtime(
@@ -209,26 +231,73 @@ fn cleanup_created_runtime(
     target_dir: &Path,
     version: &str,
     previous_version: Option<&[u8]>,
-) {
-    restore_previous_selection(runtime_dir, version, previous_version);
-    let _ = std::fs::remove_dir_all(target_dir);
+) -> Result<()> {
+    restore_previous_selection(runtime_dir, version, previous_version)?;
+    std::fs::remove_dir_all(target_dir).map_err(LauncherError::Io)
 }
 
-fn restore_previous_selection(runtime_dir: &Path, version: &str, previous_version: Option<&[u8]>) {
-    let version_path = runtime_dir.join("VERSION");
-    if std::fs::read(&version_path)
-        .ok()
-        .is_some_and(|current| current == version.as_bytes())
-    {
-        match previous_version {
-            Some(previous_version) => {
-                let _ = std::fs::write(&version_path, previous_version);
-            }
-            None => {
-                let _ = std::fs::remove_file(&version_path);
+fn restore_previous_selection(
+    runtime_dir: &Path,
+    version: &str,
+    previous_version: Option<&[u8]>,
+) -> Result<()> {
+    let version_path = runtime_dir.join(VERSION_FILE_NAME);
+    let current = match std::fs::read(&version_path) {
+        Ok(current) => current,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(LauncherError::Io(error)),
+    };
+    if current != version.as_bytes() {
+        return Ok(());
+    }
+    match previous_version {
+        Some(previous_version) => write_version_pointer(runtime_dir, previous_version),
+        None => match std::fs::remove_file(version_path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(LauncherError::Io(error)),
+        },
+    }
+}
+
+fn write_version_pointer(runtime_dir: &Path, version: &[u8]) -> Result<()> {
+    let version_path = runtime_dir.join(VERSION_FILE_NAME);
+    let (temporary_path, mut temporary_file) = create_version_temporary_file(runtime_dir)?;
+    let write_result = (|| -> std::io::Result<()> {
+        temporary_file.write_all(version)?;
+        temporary_file.sync_all()?;
+        drop(temporary_file);
+        std::fs::rename(&temporary_path, version_path)
+    })();
+    if let Err(error) = write_result {
+        if let Err(cleanup_error) = std::fs::remove_file(&temporary_path) {
+            if cleanup_error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(path = %temporary_path.display(), %cleanup_error, "failed to remove incomplete Node version pointer");
             }
         }
+        return Err(LauncherError::Io(error));
     }
+    Ok(())
+}
+
+fn create_version_temporary_file(runtime_dir: &Path) -> Result<(PathBuf, File)> {
+    for _ in 0..16 {
+        let sequence = VERSION_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = runtime_dir.join(format!(
+            ".{VERSION_FILE_NAME}.{}.{}.tmp",
+            std::process::id(),
+            sequence
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => return Ok((path, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(LauncherError::Io(error)),
+        }
+    }
+    Err(LauncherError::Io(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not allocate a temporary Node version pointer",
+    )))
 }
 
 /// 安装 Node 到默认 `<data>/node-runtime/`。
@@ -255,7 +324,7 @@ async fn activate_installed_node(
     progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
 ) -> Result<()> {
     verify_node_binary(target_dir, version).await?;
-    std::fs::write(runtime_dir.join("VERSION"), version).map_err(LauncherError::Io)?;
+    write_version_pointer(runtime_dir, version.as_bytes())?;
     send_extract_progress(progress_tx, Some(0));
     Ok(())
 }
@@ -314,6 +383,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn version_pointer_replaces_the_previous_selection_without_temp_files() {
+        let runtime = tempfile::tempdir().unwrap();
+        let version_path = runtime.path().join(VERSION_FILE_NAME);
+        std::fs::write(&version_path, "22.19.0").unwrap();
+
+        write_version_pointer(runtime.path(), b"24.0.0").unwrap();
+
+        assert_eq!(std::fs::read_to_string(version_path).unwrap(), "24.0.0");
+        let temporary_files = std::fs::read_dir(runtime.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".VERSION."))
+            .count();
+        assert_eq!(temporary_files, 0);
+    }
+
     #[tokio::test]
     async fn cancellation_cleans_staging_and_preserves_the_active_runtime() {
         let runtime = tempfile::tempdir().unwrap();
@@ -365,7 +451,8 @@ mod tests {
                 previous_version: Some(b"20.0.0".to_vec()),
                 version: "22.0.0".to_string(),
             },
-        );
+        )
+        .unwrap();
 
         assert!(existing.exists());
         assert!(!created.exists());
@@ -392,7 +479,8 @@ mod tests {
                 previous_version: Some(b"20.0.0".to_vec()),
                 version: "22.0.0".to_string(),
             },
-        );
+        )
+        .unwrap();
 
         assert!(existing.exists());
         assert!(selected.exists());

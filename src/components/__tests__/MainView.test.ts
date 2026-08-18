@@ -29,6 +29,17 @@ const opener = vi.hoisted(() => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+const tray = vi.hoisted(() => ({
+  handlers: null as {
+    openSettings: () => void;
+    openPlugins: () => void;
+    checkDshUpdate: () => void;
+    exportDiagnostics: () => void;
+    openAbout: () => void;
+    hostRestarted: () => void;
+  } | null,
+}));
+
 const store = vi.hoisted(() => ({
   phase: "ready",
   displayPhase: "ready",
@@ -63,7 +74,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
 }));
 vi.mock("@/stores/launcher", () => ({ useLauncherStore: () => store }));
-vi.mock("@/composables/useTrayEvents", () => ({ useTrayEvents: vi.fn() }));
+vi.mock("@/composables/useTrayEvents", () => ({
+  useTrayEvents: vi.fn((handlers) => {
+    tray.handlers = handlers;
+  }),
+}));
 
 import MainView from "@/components/MainView.vue";
 
@@ -74,6 +89,7 @@ beforeEach(() => {
   store.starting = false;
   store.crashRecovering = false;
   store.origin = "http://127.0.0.1:1337/";
+  tray.handlers = null;
   api.checkDshUpdate.mockResolvedValue({
     current_version: "0.1.0-rc.6",
     latest_version: "0.1.0-rc.7",
@@ -85,6 +101,25 @@ beforeEach(() => {
     active_version: "0.1.0-rc.7",
     rolled_back: false,
   });
+});
+
+test("opens settings as a page from the tray", async () => {
+  const wrapper = shallowMount(MainView);
+  tray.handlers?.openSettings();
+  await flushPromises();
+
+  expect(wrapper.findComponent({ name: "SettingsPage" }).exists()).toBe(true);
+  expect(wrapper.find("iframe").exists()).toBe(false);
+});
+
+test("opens the plugin tab from the tray", async () => {
+  const wrapper = shallowMount(MainView);
+  tray.handlers?.openPlugins();
+  await flushPromises();
+
+  expect(wrapper.findComponent({ name: "SettingsPage" }).props("section")).toBe(
+    "plugins",
+  );
 });
 
 test("opens the update dialog, then installs and restarts when the toast action is clicked", async () => {
@@ -196,7 +231,9 @@ test("opens a verified dsh external link in the system browser", async () => {
   );
   await flushPromises();
 
-  expect(opener.openUrl).toHaveBeenCalledWith("https://docs.deepseek.com/guide");
+  expect(opener.openUrl).toHaveBeenCalledWith(
+    "https://docs.deepseek.com/guide",
+  );
 });
 
 test("rejects external-link messages not sent by the active dsh iframe", async () => {

@@ -80,6 +80,7 @@ pub async fn decide_after_crash(
 }
 
 pub fn spawn_crash_recovery(app: tauri::AppHandle, detail: HostExitDetail) {
+    crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Recovering);
     tokio::spawn(async move {
         use tauri::{Emitter, Manager};
         let state = app.state::<SharedState>();
@@ -90,9 +91,11 @@ pub fn spawn_crash_recovery(app: tauri::AppHandle, detail: HostExitDetail) {
                 app.state::<SharedState>()
                     .navigation
                     .activate_dsh_origin(&origin);
+                crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Running);
                 let _ = app.emit("host-restarted", &HostRestartedPayload { attempt, origin });
             }
             CrashAction::PromptUser(payload) => {
+                crate::tray::set_host_status(&app, crate::tray::HostTrayStatus::Crashed);
                 let _ = app.emit("host-crash-limit", &payload);
             }
         }

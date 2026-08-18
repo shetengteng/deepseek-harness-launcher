@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted } from "vue";
 
 interface TrayEventHandlers {
   openSettings: () => void;
+  openPlugins: () => void;
   checkDshUpdate: () => void;
   exportDiagnostics: () => void;
   openAbout: () => void;
@@ -23,6 +24,7 @@ export function useTrayEvents(handlers: TrayEventHandlers): void {
     const { listen } = await import("@tauri-apps/api/event");
     const listeners = await Promise.all([
       listen("tray-open-settings", handlers.openSettings),
+      listen("tray-open-plugins", handlers.openPlugins),
       listen("tray-check-dsh-update", handlers.checkDshUpdate),
       listen("tray-export-diagnostics", handlers.exportDiagnostics),
       listen("tray-open-about", handlers.openAbout),

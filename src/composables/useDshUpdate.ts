@@ -44,6 +44,7 @@ export function useDshUpdate() {
   const updateError = ref<string | null>(null);
   const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
   const updateStage = ref<DshInstallProgressEvent["stage"]>("resolving");
+  const updateInstallActivity = ref(0);
   let unlistenUpdateProgress: (() => void) | null = null;
 
   const updateDialogOpen = computed(() => updateDialogState.value !== "idle");
@@ -79,7 +80,7 @@ export function useDshUpdate() {
     }
     return {
       resolving: "正在从当前下载源获取最新版本…",
-      downloading: "正在下载依赖…",
+      downloading: `npm install 进行中，已处理 ${updateInstallActivity.value} 个包…`,
       installing: "正在安装依赖…",
       verifying: "正在校验安装结果…",
     }[updateStage.value];
@@ -165,6 +166,7 @@ export function useDshUpdate() {
     updateError.value = null;
     nodeUpgrade.value = null;
     updateStage.value = "resolving";
+    updateInstallActivity.value = 0;
     updateDialogState.value = "installing";
     void installDisplayedUpdate();
   }
@@ -284,6 +286,9 @@ export function useDshUpdate() {
         (event) => {
           if (updateDialogState.value === "installing") {
             updateStage.value = event.payload.stage;
+            if (event.payload.stage === "downloading") {
+              updateInstallActivity.value += 1;
+            }
           }
         },
       );
@@ -310,6 +315,7 @@ export function useDshUpdate() {
     updateInProgress,
     updateProgress,
     updateStageMessage,
+    updateInstallActivity,
     updateCurrentVersion,
     updateTargetVersion,
     updateError,

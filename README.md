@@ -4,8 +4,9 @@ DeepSeek Harness（dsh）的 Tauri 桌面壳子。它在用户数据目录托管
 
 ## 当前状态
 
-- 已实现：首启安装、Node 下载与 SHA-256 校验、dsh 安装、版本指针与回滚、崩溃恢复、托盘、错误提示和诊断导出。
-- 尚未达到公开发布标准：更新必须改为“展示版本后显式确认、`pending` 安装和确认重启”；dsh 子进程文件日志、CI、签名/公证和跨平台安装包仍在计划中。
+- 已实现：首启安装、Node 下载与 SHA-256 校验、dsh 安装、版本指针与回滚、崩溃恢复、托盘、错误提示、诊断导出和可选的 `dsh` 终端命令。
+- 当前可通过 GitHub Actions 创建 arm64/x64 的 macOS 测试草稿包。它使用 ad-hoc 签名、未公证，仅限受控测试；正式公开分发仍需要 Apple Developer Program 的 Developer ID 签名与公证。
+- CI 会在 macOS、Windows 和 Linux 上执行测试与基础打包验证。壳子自动更新、正式签名/公证和公开发布仍未启用。
 
 首次启动需要联网下载 Node 和 dsh。当前 dsh 版本由 npm registry 在运行时解析，仓库不写死 `latest`。
 

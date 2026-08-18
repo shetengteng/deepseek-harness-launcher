@@ -104,9 +104,9 @@ async fn managed_node_is_usable(state: &AppState, node_runtime_dir: &Path) -> bo
     let Ok(node_dir) = crate::node::install::current_node_dir_in(node_runtime_dir) else {
         return false;
     };
-    if !node_dir
+    if node_dir
         .file_name()
-        .is_some_and(|name| name == std::ffi::OsStr::new(&format!("node-v{}", node_state.version)))
+        .is_none_or(|name| name != std::ffi::OsStr::new(&format!("node-v{}", node_state.version)))
     {
         return false;
     }

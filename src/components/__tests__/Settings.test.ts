@@ -19,11 +19,34 @@ const api = vi.hoisted(() =>
     ].map((name) => [name, vi.fn()]),
   ),
 );
+const eventListeners = vi.hoisted(
+  () =>
+    new Map<
+      string,
+      (event: {
+        payload: { stage: string; bytes: number; total: number | null };
+      }) => void
+    >(),
+);
 
 vi.mock("@/lib/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/tauri")>();
   return { ...actual, ...api };
 });
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (
+      event: string,
+      handler: (event: {
+        payload: { stage: string; bytes: number; total: number | null };
+      }) => void,
+    ) => {
+      eventListeners.set(event, handler);
+      return Promise.resolve(vi.fn());
+    },
+  ),
+}));
 
 import Settings from "@/components/Settings.vue";
 
@@ -45,6 +68,7 @@ function state(current: string | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eventListeners.clear();
   api.getDshState.mockResolvedValue(state("0.0.9"));
   api.listMirrors.mockResolvedValue([]);
   api.getLatestDshVersion.mockResolvedValue({ latest_version: "0.1.0" });
@@ -119,6 +143,7 @@ test("updates only Node after the manual confirmation", async () => {
     current_version: "22.19.0",
     target_version: "24.4.0",
     engines_node: ">=22.0.0",
+    target_source: "dsh-engines",
     update_available: true,
   });
   api.upgradeNode.mockResolvedValue("24.4.0");
@@ -151,21 +176,76 @@ test("updates only Node after the manual confirmation", async () => {
   wrapper.unmount();
 });
 
-test("does not offer a manual Node install when the compatible target is current", async () => {
+test("shows download progress while manually updating Node", async () => {
   api.getNodeUpdateTarget.mockResolvedValue({
-    current_version: "24.4.0",
+    current_version: "22.19.0",
     target_version: "24.4.0",
     engines_node: ">=22.0.0",
-    update_available: false,
+    target_source: "dsh-engines",
+    update_available: true,
   });
-  const wrapper = mount(Settings, { props: { nodeVersion: "24.4.0" } });
+  let finishUpgrade: ((version: string) => void) | undefined;
+  api.upgradeNode.mockImplementation(
+    () => new Promise<string>((resolve) => (finishUpgrade = resolve)),
+  );
+  const wrapper = mount(Settings, {
+    attachTo: document.body,
+    props: { nodeVersion: "22.19.0" },
+  });
+  await flushPromises();
+
+  await button(wrapper, "更新 Node").trigger("click");
+  await flushPromises();
+  [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.trim() === "仅更新 Node")
+    ?.click();
+  await flushPromises();
+
+  eventListeners.get("download-progress")?.({
+    payload: { stage: "download", bytes: 50, total: 100 },
+  });
+  await flushPromises();
+
+  expect(document.body.textContent).toContain("正在下载并校验 Node.js 运行时");
+  expect(document.body.textContent).toContain("45%");
+
+  finishUpgrade?.("24.4.0");
+  await flushPromises();
+  wrapper.unmount();
+});
+
+test("allows a verified fallback Node runtime to be reinstalled", async () => {
+  api.getNodeUpdateTarget.mockResolvedValue({
+    current_version: "22.19.0",
+    target_version: "24.18.1",
+    engines_node: null,
+    target_source: "launcher-verified-fallback",
+    update_available: true,
+  });
+  api.upgradeNode.mockResolvedValue("24.18.1");
+  const wrapper = mount(Settings, {
+    attachTo: document.body,
+    props: { nodeVersion: "22.19.0" },
+  });
   await flushPromises();
 
   await button(wrapper, "更新 Node").trigger("click");
   await flushPromises();
 
-  expect(wrapper.text()).toContain("已是 dsh 兼容范围内的最新版本");
-  expect(api.upgradeNode).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("launcher 已验证的版本");
+  expect(document.body.textContent).toContain("仅更新 Node");
+
+  [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.trim() === "仅更新 Node")
+    ?.click();
+  await flushPromises();
+
+  expect(api.upgradeNode).toHaveBeenCalledWith({
+    version: "24.18.1",
+    operationId: expect.any(String),
+  });
+  expect(api.installDsh).not.toHaveBeenCalled();
+  wrapper.unmount();
 });
 
 test("installs the dsh command and shows the PATH instructions", async () => {
@@ -284,7 +364,9 @@ test("upgrades Node after confirmation and then installs the displayed dsh", asy
     version: "24.4.0",
     operationId: expect.any(String),
   });
-  expect(api.installDsh).toHaveBeenNthCalledWith(2, { expectedVersion: "0.1.0" });
+  expect(api.installDsh).toHaveBeenNthCalledWith(2, {
+    expectedVersion: "0.1.0",
+  });
   expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
   expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([
     "http://127.0.0.1:1337/",

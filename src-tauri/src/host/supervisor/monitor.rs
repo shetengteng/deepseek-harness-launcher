@@ -7,13 +7,17 @@ use tokio::task::JoinHandle;
 use super::{HostExitDetail, SupervisorInner, SupervisorState, UnexpectedExitCallback};
 use crate::host::Origin;
 
+pub(super) struct ExitMonitorContext {
+    pub(super) inner: Arc<Mutex<SupervisorInner>>,
+    pub(super) origin_cache: Arc<Mutex<Option<Origin>>>,
+    pub(super) shutdown_flag: Arc<AtomicBool>,
+    pub(super) intentional_restart_generation: Arc<AtomicU64>,
+    pub(super) exit_handler: Arc<RwLock<Option<UnexpectedExitCallback>>>,
+    pub(super) configured_handler: Option<UnexpectedExitCallback>,
+}
+
 pub(super) fn spawn_exit_monitor(
-    inner: Arc<Mutex<SupervisorInner>>,
-    origin_cache: Arc<Mutex<Option<Origin>>>,
-    shutdown_flag: Arc<AtomicBool>,
-    intentional_restart_generation: Arc<AtomicU64>,
-    exit_handler: Arc<RwLock<Option<UnexpectedExitCallback>>>,
-    configured_handler: Option<UnexpectedExitCallback>,
+    context: ExitMonitorContext,
     generation: u64,
     stdout_join: JoinHandle<()>,
     stderr_join: JoinHandle<()>,
@@ -21,18 +25,24 @@ pub(super) fn spawn_exit_monitor(
     tokio::spawn(async move {
         let _ = stdout_join.await;
         let _ = stderr_join.await;
-        let exit = wait_for_exit(&inner, generation).await;
-        if shutdown_flag.load(Ordering::Acquire)
-            || intentional_restart_generation
+        let exit = wait_for_exit(&context.inner, generation).await;
+        if context.shutdown_flag.load(Ordering::Acquire)
+            || context
+                .intentional_restart_generation
                 .compare_exchange(generation, 0, Ordering::AcqRel, Ordering::Acquire)
                 .is_ok()
         {
             return;
         }
 
-        *origin_cache.lock().await = None;
-        inner.lock().await.state = SupervisorState::Starting;
-        let handler = exit_handler.read().unwrap().clone().or(configured_handler);
+        *context.origin_cache.lock().await = None;
+        context.inner.lock().await.state = SupervisorState::Starting;
+        let handler = context
+            .exit_handler
+            .read()
+            .unwrap()
+            .clone()
+            .or(context.configured_handler);
         if let Some(callback) = handler {
             callback(exit);
         }

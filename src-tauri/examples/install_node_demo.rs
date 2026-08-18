@@ -11,7 +11,7 @@
 use std::time::Instant;
 
 use deepseek_harness_launcher_lib::node::{
-    download_with_retry, install_node_to, node_archive_filename, NodeArchiveKind,
+    download_with_retry, install_node_to, node_archive_filename, DownloadRequest, NodeArchiveKind,
     NodeDownloadOperations, BUILTIN_MIRRORS,
 };
 
@@ -63,13 +63,15 @@ async fn main() {
     println!(">>> 步骤 1: download_with_retry");
     let t0 = Instant::now();
     let archive_path = download_with_retry(
-        &client,
-        mirror,
-        version,
-        &archive_filename,
-        &download_dir,
-        None,
-        2,
+        DownloadRequest {
+            client: &client,
+            mirror,
+            version,
+            archive_filename: &archive_filename,
+            dest_dir: &download_dir,
+            progress_tx: None,
+            max_retries: 2,
+        },
         &operations,
         operation_id,
     )

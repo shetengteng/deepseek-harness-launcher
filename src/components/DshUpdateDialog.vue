@@ -133,7 +133,7 @@ function openUpdateSettings(): void {
 
         <Progress :model-value="updateProgress" class="h-2 [&>div]:bg-info" />
         <div
-          class="-mt-2 flex items-center justify-between gap-4 text-xs text-muted-foreground"
+          class="-mt-2 flex items-center justify-between gap-4 font-mono text-[11px] text-muted-foreground"
           aria-live="polite"
           role="status"
         >

@@ -11,6 +11,10 @@ const api = vi.hoisted(() => ({
   upgradeNode: vi.fn(),
 }));
 
+const eventListeners = vi.hoisted(
+  () => new Map<string, (event: { payload: { stage: string } }) => void>(),
+);
+
 vi.mock("@/lib/tauri", async () => {
   const actual = await vi.importActual<typeof import("@/lib/tauri")>(
     "@/lib/tauri",
@@ -19,7 +23,10 @@ vi.mock("@/lib/tauri", async () => {
 });
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(vi.fn()),
+  listen: vi.fn((eventName: string, listener) => {
+    eventListeners.set(eventName, listener);
+    return Promise.resolve(vi.fn());
+  }),
 }));
 
 vi.mock("@/components/ui/toast", () => ({
@@ -61,6 +68,7 @@ function nodeUpgradeError() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eventListeners.clear();
   store.displayPhase = "ready";
   store.dshVersion = "0.1.0";
   store.nodeVersion = "22.19.0";
@@ -120,4 +128,35 @@ test("upgrades Node after confirmation then installs and restarts dsh", async ()
   expect(store.nodeVersion).toBe("24.4.0");
   expect(store.setHostReady).toHaveBeenCalledWith("http://127.0.0.1:1337/");
   expect(wrapper.vm.updateDialogState).toBe("idle");
+});
+
+test("reports npm package activity while downloading an update", async () => {
+  let finishInstall: (version: string) => void = () => undefined;
+  api.installDsh.mockImplementationOnce(
+    () =>
+      new Promise<string>((resolve) => {
+        finishInstall = resolve;
+      }),
+  );
+  const wrapper = mount(Harness);
+  await flushPromises();
+
+  wrapper.vm.startDshUpdate();
+  await flushPromises();
+
+  eventListeners.get("dsh-install-progress")?.({
+    payload: { stage: "downloading" },
+  });
+  eventListeners.get("dsh-install-progress")?.({
+    payload: { stage: "downloading" },
+  });
+
+  expect(wrapper.vm.updateInstallActivity).toBe(2);
+  expect(wrapper.vm.updateStageMessage).toBe(
+    "npm install 进行中，已处理 2 个包…",
+  );
+
+  finishInstall("0.2.0");
+  await flushPromises();
+  wrapper.unmount();
 });
