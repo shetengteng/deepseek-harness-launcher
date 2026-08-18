@@ -53,7 +53,7 @@ watch(
         >
           <button
             type="button"
-            class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="flex h-9 w-full items-center gap-2 rounded-full px-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             :aria-label="t('settings.backAria')"
             @click="emit('close')"
           >
@@ -63,7 +63,7 @@ watch(
           <nav class="space-y-1">
             <button
               type="button"
-              class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+              class="flex h-9 w-full items-center gap-2 rounded-full px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
               :class="
                 activeSection === 'settings'
                   ? 'bg-background font-medium text-foreground shadow-sm ring-1 ring-border'
@@ -77,7 +77,7 @@ watch(
             </button>
             <button
               type="button"
-              class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+              class="flex h-9 w-full items-center gap-2 rounded-full px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
               :class="
                 activeSection === 'plugins'
                   ? 'bg-background font-medium text-foreground shadow-sm ring-1 ring-border'

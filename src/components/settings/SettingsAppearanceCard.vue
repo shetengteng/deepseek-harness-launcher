@@ -63,6 +63,7 @@ function changeTheme(enabled: boolean): void {
         <Button
           type="button"
           variant="outline"
+          class="rounded-full"
           size="xs"
           :aria-label="t('language.switchTo', { language: t(alternateLocale === 'zh-CN' ? 'language.zh' : 'language.en') })"
           data-testid="language-toggle"

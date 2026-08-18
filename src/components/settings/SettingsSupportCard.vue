@@ -35,6 +35,7 @@ const { t } = useI18n();
         <Button
           variant="outline"
           size="xs"
+          class="rounded-full"
           :disabled="exporting"
           @click="$emit('export')"
           ><FileArchive class="mr-2 h-4 w-4" />{{
@@ -62,6 +63,7 @@ const { t } = useI18n();
           v-if="!confirmingUninstall"
           variant="destructive"
           size="xs"
+          class="rounded-full"
           @click="$emit('confirmUninstall')"
           ><RefreshCw class="mr-2 h-4 w-4" />{{ t("uninstall.action") }}</Button
         >
@@ -77,12 +79,14 @@ const { t } = useI18n();
           <Button
             variant="outline"
             size="xs"
+            class="rounded-full"
             :disabled="uninstalling"
             @click="$emit('cancelUninstall')"
             >{{ t("common.cancel") }}</Button
           ><Button
             variant="destructive"
             size="xs"
+            class="rounded-full"
             :disabled="uninstalling"
             @click="$emit('uninstall')"
             ><RefreshCw class="mr-2 h-4 w-4" />{{

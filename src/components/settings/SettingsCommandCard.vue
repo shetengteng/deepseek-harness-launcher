@@ -29,6 +29,7 @@ const { t } = useI18n();
         <Button
           variant="outline"
           size="xs"
+          class="rounded-full"
           :disabled="installing"
           @click="$emit('install')"
         >

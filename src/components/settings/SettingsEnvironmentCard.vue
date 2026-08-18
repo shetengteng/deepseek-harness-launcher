@@ -66,6 +66,7 @@ const hostAddress = computed(() => {
           <Button
             :variant="updateAvailable ? 'default' : 'outline'"
             size="xs"
+            class="rounded-full"
             :disabled="refreshing || upgrading"
             @click="updateAvailable ? $emit('install') : $emit('refresh')"
             ><Download v-if="updateAvailable" class="mr-2 h-4 w-4" /><RefreshCw
@@ -101,6 +102,7 @@ const hostAddress = computed(() => {
           <Button
             variant="outline"
             size="xs"
+            class="rounded-full"
             :disabled="nodeVersion === null || nodeUpdateLoading"
             @click="$emit('updateNode')"
           >

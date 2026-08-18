@@ -481,12 +481,13 @@ watch(
         <DialogFooter class="gap-2 sm:gap-2">
           <Button
             variant="outline"
+            class="rounded-full"
             :disabled="upgrading"
             @click="cancelNodeUpgrade"
           >
             {{ t("update.cancel") }}
           </Button>
-          <Button :disabled="upgrading" @click="confirmNodeUpgrade">
+          <Button class="rounded-full" :disabled="upgrading" @click="confirmNodeUpgrade">
             {{ upgrading ? t("settings.upgrading") : t("update.confirm") }}
           </Button>
         </DialogFooter>
@@ -537,10 +538,10 @@ watch(
           {{ manualNodeUpdateError }}
         </p>
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="outline" @click="cancelManualNodeUpdate">
+          <Button variant="outline" class="rounded-full" @click="cancelManualNodeUpdate">
             {{ updatingNode ? t("settings.cancelDownload") : t("common.cancel") }}
           </Button>
-          <Button :disabled="updatingNode" @click="confirmManualNodeUpdate">
+          <Button class="rounded-full" :disabled="updatingNode" @click="confirmManualNodeUpdate">
             {{ updatingNode ? t("settings.updating") : nodeUpdateActionLabel }}
           </Button>
         </DialogFooter>

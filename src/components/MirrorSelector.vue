@@ -100,7 +100,7 @@ watch(
       <button
         v-if="!customMode"
         type="button"
-        class="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-full px-2 py-1 text-xs text-muted-foreground underline-offset-4 hover:bg-accent hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="store.wizardStep === 'probing'"
         @click="store.autoPickMirror()"
       >
