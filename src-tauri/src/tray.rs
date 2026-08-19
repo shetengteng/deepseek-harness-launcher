@@ -17,7 +17,6 @@ const TRAY_OPEN_DSH_IN_BROWSER_ID: &str = "open-dsh-in-browser";
 const TRAY_RESTART_HOST_ID: &str = "restart-dsh";
 const TRAY_CHECK_UPDATES_ID: &str = "check-latest-dsh-version";
 const TRAY_OPEN_SETTINGS_ID: &str = "open-settings";
-const TRAY_OPEN_PLUGINS_ID: &str = "open-plugins";
 const TRAY_ABOUT_ID: &str = "about";
 const TRAY_EXPORT_DIAGNOSTICS_ID: &str = "export-diagnostics";
 const TRAY_QUIT_ID: &str = "quit";
@@ -86,7 +85,6 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(app, TRAY_OPEN_SETTINGS_ID, "设置…", true, None::<&str>)?;
-    let plugins = MenuItem::with_id(app, TRAY_OPEN_PLUGINS_ID, "插件…", true, None::<&str>)?;
     let about = MenuItem::with_id(
         app,
         TRAY_ABOUT_ID,
@@ -114,7 +112,6 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
             &check_updates,
             &PredefinedMenuItem::separator(app)?,
             &settings,
-            &plugins,
             &about,
             &diagnostics,
             &PredefinedMenuItem::separator(app)?,
@@ -132,7 +129,6 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
             TRAY_RESTART_HOST_ID => restart_host_from_tray(app.clone()),
             TRAY_CHECK_UPDATES_ID => emit_event(app, "tray-check-dsh-update"),
             TRAY_OPEN_SETTINGS_ID => emit_event(app, "tray-open-settings"),
-            TRAY_OPEN_PLUGINS_ID => emit_event(app, "tray-open-plugins"),
             TRAY_ABOUT_ID => emit_event(app, "tray-open-about"),
             TRAY_EXPORT_DIAGNOSTICS_ID => emit_event(app, "tray-export-diagnostics"),
             TRAY_QUIT_ID => request_exit(app.clone()),

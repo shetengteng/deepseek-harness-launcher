@@ -11,12 +11,14 @@ function button(wrapper: ReturnType<typeof mount>, label: string) {
   return wrapper.findAll("button").find((item) => item.text().includes(label))!;
 }
 
-test("switches between settings and the plugin marketplace", async () => {
+test("switches between settings and the plugin command input", async () => {
   const wrapper = mount(SettingsPage, {
     global: {
       stubs: {
         SettingsView: { template: "<div>设置内容</div>" },
-        SettingsMarketplace: { template: "<div>插件市场内容</div>" },
+        SettingsPluginCommand: {
+          template: '<div><input aria-label="插件安装命令" /></div>',
+        },
       },
     },
   });
@@ -33,7 +35,7 @@ test("switches between settings and the plugin marketplace", async () => {
 
   await button(wrapper, "插件").trigger("click");
 
-  expect(wrapper.text()).toContain("插件市场内容");
+  expect(wrapper.find('input[aria-label="插件安装命令"]').exists()).toBe(true);
   expect(wrapper.get('[aria-current="page"]').text()).toContain("插件");
 });
 
@@ -43,14 +45,16 @@ test("shows the requested section when it changes", async () => {
     global: {
       stubs: {
         SettingsView: { template: "<div>设置内容</div>" },
-        SettingsMarketplace: { template: "<div>插件市场内容</div>" },
+        SettingsPluginCommand: {
+          template: '<div><input aria-label="插件安装命令" /></div>',
+        },
       },
     },
   });
 
   await wrapper.setProps({ section: "plugins" });
 
-  expect(wrapper.text()).toContain("插件市场内容");
+  expect(wrapper.find('input[aria-label="插件安装命令"]').exists()).toBe(true);
 });
 
 test("returns to the launcher when requested", async () => {
@@ -58,7 +62,7 @@ test("returns to the launcher when requested", async () => {
     global: {
       stubs: {
         SettingsView: { template: "<div />" },
-        SettingsMarketplace: { template: "<div />" },
+        SettingsPluginCommand: { template: "<div />" },
       },
     },
   });

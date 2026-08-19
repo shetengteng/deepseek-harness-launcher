@@ -32,7 +32,6 @@ const opener = vi.hoisted(() => ({
 const tray = vi.hoisted(() => ({
   handlers: null as {
     openSettings: () => void;
-    openPlugins: () => void;
     checkDshUpdate: () => void;
     exportDiagnostics: () => void;
     openAbout: () => void;
@@ -110,16 +109,6 @@ test("opens settings as a page from the tray", async () => {
 
   expect(wrapper.findComponent({ name: "SettingsPage" }).exists()).toBe(true);
   expect(wrapper.find("iframe").exists()).toBe(false);
-});
-
-test("opens the plugin tab from the tray", async () => {
-  const wrapper = shallowMount(MainView);
-  tray.handlers?.openPlugins();
-  await flushPromises();
-
-  expect(wrapper.findComponent({ name: "SettingsPage" }).props("section")).toBe(
-    "plugins",
-  );
 });
 
 test("opens the update dialog, then installs and restarts when the toast action is clicked", async () => {

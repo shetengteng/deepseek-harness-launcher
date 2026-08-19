@@ -14,10 +14,6 @@ pub(crate) mod node_install;
 pub(crate) mod recovery;
 pub(crate) mod settings;
 
-pub use crate::marketplace::{
-    marketplace_install, marketplace_install_custom, marketplace_parse_custom_install,
-    marketplace_query, marketplace_refresh, marketplace_remove,
-};
 pub use about::{get_about_info, AboutInfo};
 pub use bootstrap::{
     check_dsh_update_command, get_latest_dsh_version_command, list_mirrors, probe_mirrors_command,

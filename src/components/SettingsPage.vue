@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 import { ArrowLeft, Puzzle, Settings } from "lucide-vue-next";
 import SettingsView from "@/components/Settings.vue";
-import SettingsMarketplace from "@/components/settings/SettingsMarketplace.vue";
+import SettingsPluginCommand from "@/components/settings/SettingsPluginCommand.vue";
 import { useI18n } from "@/lib/i18n";
 import {
   SidebarMenu,
@@ -111,7 +111,7 @@ watch(
             />
           </template>
 
-          <SettingsMarketplace v-else />
+          <SettingsPluginCommand v-else />
         </div>
       </ResizablePanel>
     </ResizablePanelGroup>

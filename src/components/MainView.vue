@@ -48,9 +48,6 @@ useTrayEvents({
   openSettings: () => {
     openSettingsPage("settings");
   },
-  openPlugins: () => {
-    openSettingsPage("plugins");
-  },
   checkDshUpdate: () => {
     openSettingsPage("settings");
   },

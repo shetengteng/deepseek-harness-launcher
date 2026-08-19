@@ -43,7 +43,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::SharedState::new())
         .manage(crate::dsh::DshInstallOperations::default())
-        .manage(crate::marketplace::MarketplaceOperations::default())
         .manage(NodeDownloadOperations::default())
         .manage(ExitCoordinator {
             requested: AtomicBool::new(false),
@@ -100,12 +99,6 @@ pub fn run() {
             commands::maintenance::rollback_dsh_command,
             commands::diagnostics::export_diagnostics,
             commands::maintenance::uninstall_managed_runtime,
-            crate::marketplace::marketplace_query,
-            crate::marketplace::marketplace_refresh,
-            crate::marketplace::marketplace_parse_custom_install,
-            crate::marketplace::marketplace_install,
-            crate::marketplace::marketplace_install_custom,
-            crate::marketplace::marketplace_remove,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

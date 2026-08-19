@@ -59,27 +59,6 @@ pub fn user_message(error: &LauncherError) -> String {
             "无法安装 dsh 命令。请检查用户目录写权限后重试。".to_string()
         }
         LauncherError::Theme(_) => "主题设置无效。请选择浅色或黑白主题。".to_string(),
-        LauncherError::Marketplace(message)
-            if message.contains("catalog unavailable") || message.contains("connect") || message.contains("timeout") =>
-        {
-            "无法加载插件目录。请检查网络后重试。".to_string()
-        }
-        LauncherError::Marketplace(message)
-            if message.contains("dsh plugin manifests are unavailable") =>
-        {
-            "无法完成 dsh 插件结构校验。请检查网络后刷新目录。".to_string()
-        }
-        LauncherError::Marketplace(message)
-            if message.contains("not present in the verified catalog") =>
-        {
-            "该插件未通过 dsh 结构校验，已阻止安装。请刷新插件目录后重试。".to_string()
-        }
-        LauncherError::Marketplace(message) if message.contains("profile") => {
-            "无法确认此 profile 的插件状态，未执行任何更改。请重试或查看日志。".to_string()
-        }
-        LauncherError::Marketplace(_) => {
-            "插件市场操作失败。请重试；若持续失败请导出诊断信息。".to_string()
-        }
         LauncherError::DshNotInstalled { .. } => "dsh 尚未安装。请完成首次启动向导。".to_string(),
         LauncherError::NodeNotInstalled { .. } => {
             "Node 运行时尚未安装。请完成首次启动向导。".to_string()
@@ -172,13 +151,5 @@ mod tests {
             user_message(&LauncherError::Host("readiness timed out".to_string()))
                 .contains("启动超时")
         );
-    }
-
-    #[test]
-    fn unvalidated_marketplace_plugins_are_explained_to_the_user() {
-        assert!(user_message(&LauncherError::Marketplace(
-            "plugin is not present in the verified catalog".to_string(),
-        ))
-        .contains("未通过 dsh 结构校验"));
     }
 }
