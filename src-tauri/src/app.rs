@@ -2,7 +2,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
-use crate::{commands, logging, navigation, node::NodeDownloadOperations, paths, platform, tray};
+use crate::{commands, logging, navigation, node::NodeDownloadOperations, paths, tray};
+
+#[cfg(target_os = "macos")]
+use crate::platform;
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
