@@ -355,9 +355,44 @@ export interface DshCliInstallResult {
   path_instruction: string;
 }
 
+export interface DshCliStatus {
+  state: "installed" | "not_installed" | "conflict";
+  command_path: string;
+  path_instruction: string;
+}
+
+export interface DshCliUninstallResult {
+  command_path: string;
+  removed: boolean;
+}
+
 /** 安装解析启动器托管运行时的稳定 `dsh` 命令。 */
 export function installDshCli(): Promise<DshCliInstallResult> {
   return invokeCommand<DshCliInstallResult>("install_dsh_cli_command");
+}
+
+/** 读取启动器创建的稳定 `dsh` 命令状态。 */
+export function getDshCliStatus(): Promise<DshCliStatus> {
+  return invokeCommand<DshCliStatus>("get_dsh_cli_status");
+}
+
+/** 仅移除启动器创建的稳定 `dsh` 命令。 */
+export function uninstallDshCli(): Promise<DshCliUninstallResult> {
+  return invokeCommand<DshCliUninstallResult>("uninstall_dsh_cli_command");
+}
+
+export interface PluginCommandResult {
+  action: "add" | "remove";
+  profile: string;
+  source: string;
+  summary: string;
+}
+
+/** 使用 launcher 托管的 dsh 执行单条、经过校验的插件安装或卸载命令。 */
+export function runPluginCommand(
+  command: string,
+): Promise<PluginCommandResult> {
+  return invokeCommand<PluginCommandResult>("run_plugin_command", { command });
 }
 
 // ─── PR-019: 诊断导出 ───

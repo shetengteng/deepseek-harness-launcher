@@ -15,7 +15,9 @@ const api = vi.hoisted(() =>
       "setRegistry",
       "listMirrors",
       "exportDiagnostics",
+      "getDshCliStatus",
       "uninstallManagedRuntime",
+      "uninstallDshCli",
     ].map((name) => [name, vi.fn()]),
   ),
 );
@@ -75,6 +77,16 @@ function state(current: string | null) {
   };
 }
 
+function dshCliStatus(
+  state: "installed" | "not_installed" | "conflict" = "not_installed",
+) {
+  return {
+    state,
+    command_path: "/Users/test/.local/bin/dsh",
+    path_instruction: "关闭并重新打开 Terminal。",
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   eventListeners.clear();
@@ -86,10 +98,36 @@ beforeEach(() => {
     active_version: "0.1.0",
     rolled_back: false,
   });
+  api.getDshCliStatus.mockResolvedValue(dshCliStatus());
   theme.mode = "dark";
   theme.initializing = false;
   theme.saving = false;
   theme.error = null;
+});
+
+test("uses the same horizontal gutters as plugin commands", async () => {
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.get(".settings-panel").classes()).toEqual(
+    expect.arrayContaining([
+      "px-8",
+      "max-sm:px-[18px]",
+      "pt-[clamp(32px,8vh,88px)]",
+      "max-sm:pt-7",
+    ]),
+  );
+  expect(wrapper.find(".settings-panel-content").exists()).toBe(true);
+});
+
+test("introduces the settings workspace before its controls", async () => {
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.get(".settings-panel-heading").text()).toContain("设置");
+  expect(wrapper.get(".settings-panel-heading").text()).toContain(
+    "管理 DeepSeek Harness 的运行时",
+  );
 });
 
 test("changes the launcher theme from settings", async () => {
@@ -286,6 +324,25 @@ test("installs the dsh command and shows the PATH instructions", async () => {
   expect(api.installDshCli).toHaveBeenCalledOnce();
   expect(wrapper.text()).toContain("/Users/test/.local/bin/dsh");
   expect(wrapper.text()).toContain("关闭并重新打开 Terminal。");
+});
+
+test("removes only the launcher-managed dsh command", async () => {
+  api.getDshCliStatus
+    .mockResolvedValueOnce(dshCliStatus("installed"))
+    .mockResolvedValueOnce(dshCliStatus());
+  api.uninstallDshCli.mockResolvedValue({
+    command_path: "/Users/test/.local/bin/dsh",
+    removed: true,
+  });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("dsh 命令已安装");
+  await button(wrapper, "移除命令").trigger("click");
+  await flushPromises();
+
+  expect(api.uninstallDshCli).toHaveBeenCalledOnce();
+  expect(wrapper.text()).toContain("安装 dsh 命令");
 });
 
 test("shows an actionable error when the dsh command cannot be installed", async () => {

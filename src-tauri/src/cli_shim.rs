@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use directories::BaseDirs;
 
-use crate::commands::DshCliInstallResult;
+use crate::commands::{
+    DshCliInstallResult, DshCliStatus, DshCliStatusState, DshCliUninstallResult,
+};
 use crate::dsh::read_current_pointer;
 use crate::error::{LauncherError, Result};
 use crate::node::install::{current_node_dir_in, current_node_version_in, node_bin_path};
@@ -13,6 +15,18 @@ const MANAGED_BIN_DIR: &str = "bin";
 const DSH_ENTRY_REL: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
 
 pub fn install_default() -> Result<DshCliInstallResult> {
+    install_in(&crate::paths::data_dir()?, &default_command_dir()?)
+}
+
+pub fn status_default() -> Result<DshCliStatus> {
+    status_in(&default_command_dir()?)
+}
+
+pub fn uninstall_default() -> Result<DshCliUninstallResult> {
+    uninstall_in(&default_command_dir()?)
+}
+
+fn default_command_dir() -> Result<PathBuf> {
     let home = BaseDirs::new()
         .ok_or_else(|| LauncherError::PathResolve {
             what: "home",
@@ -20,7 +34,7 @@ pub fn install_default() -> Result<DshCliInstallResult> {
         })?
         .home_dir()
         .to_path_buf();
-    install_in(&crate::paths::data_dir()?, &home.join(".local").join("bin"))
+    Ok(home.join(".local").join("bin"))
 }
 
 fn install_in(data_dir: &Path, command_dir: &Path) -> Result<DshCliInstallResult> {
@@ -35,6 +49,45 @@ fn install_in(data_dir: &Path, command_dir: &Path) -> Result<DshCliInstallResult
     Ok(DshCliInstallResult {
         command_path: command_path.to_string_lossy().into_owned(),
         path_instruction: path_instruction(command_dir),
+    })
+}
+
+fn status_in(command_dir: &Path) -> Result<DshCliStatus> {
+    let command_path = command_dir.join(command_name());
+    let state = match std::fs::read_to_string(&command_path) {
+        Ok(content) if content.contains(SHIM_MARKER) => DshCliStatusState::Installed,
+        Ok(_) => DshCliStatusState::Conflict,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            DshCliStatusState::NotInstalled
+        }
+        Err(error) => return Err(LauncherError::Io(error)),
+    };
+    Ok(DshCliStatus {
+        state,
+        command_path: command_path.to_string_lossy().into_owned(),
+        path_instruction: path_instruction(command_dir),
+    })
+}
+
+fn uninstall_in(command_dir: &Path) -> Result<DshCliUninstallResult> {
+    let command_path = command_dir.join(command_name());
+    let removed = match std::fs::read_to_string(&command_path) {
+        Ok(content) if content.contains(SHIM_MARKER) => {
+            std::fs::remove_file(&command_path)?;
+            true
+        }
+        Ok(_) => {
+            return Err(LauncherError::DshCli(format!(
+                "{} is not managed by this launcher",
+                command_path.display()
+            )))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(LauncherError::Io(error)),
+    };
+    Ok(DshCliUninstallResult {
+        command_path: command_path.to_string_lossy().into_owned(),
+        removed,
     })
 }
 
@@ -343,6 +396,48 @@ mod tests {
             install_in(temp.path(), &temp.path().join("bin")).expect_err("runtime required");
 
         assert!(matches!(error, LauncherError::NodeNotInstalled { .. }));
+    }
+
+    #[test]
+    fn removes_only_the_command_shim_created_by_the_launcher() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data = temp.path().join("data");
+        let commands = temp.path().join("bin");
+        write_runtime(&data);
+        let installed = install_in(&data, &commands).expect("install shim");
+
+        assert_eq!(
+            status_in(&commands).expect("status").state,
+            DshCliStatusState::Installed
+        );
+        let removed = uninstall_in(&commands).expect("remove shim");
+
+        assert!(removed.removed);
+        assert!(!Path::new(&installed.command_path).exists());
+        assert!(helper_path(&data).is_file());
+        assert!(data.join("bin").join(package_manager_name()).is_file());
+        assert_eq!(
+            status_in(&commands).expect("status").state,
+            DshCliStatusState::NotInstalled
+        );
+    }
+
+    #[test]
+    fn never_removes_a_foreign_dsh_command() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let commands = temp.path().join("bin");
+        std::fs::create_dir_all(&commands).expect("command directory");
+        let command = commands.join(command_name());
+        std::fs::write(&command, "#!/bin/sh\necho other dsh\n").expect("foreign command");
+
+        let error = uninstall_in(&commands).expect_err("must not remove foreign command");
+
+        assert!(matches!(error, LauncherError::DshCli(message) if message.contains("not managed")));
+        assert!(command.is_file());
+        assert_eq!(
+            status_in(&commands).expect("status").state,
+            DshCliStatusState::Conflict
+        );
     }
 
     #[test]

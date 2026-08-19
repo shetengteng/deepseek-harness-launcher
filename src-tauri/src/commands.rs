@@ -11,6 +11,7 @@ pub(crate) mod dsh_install;
 pub(crate) mod host;
 pub(crate) mod maintenance;
 pub(crate) mod node_install;
+pub(crate) mod plugin_command;
 pub(crate) mod recovery;
 pub(crate) mod settings;
 
@@ -20,7 +21,10 @@ pub use bootstrap::{
     resolve_bootstrap_plan_command, validate_custom_mirror_command, BootstrapPlanInfo,
     DshUpdateInfo, LatestDshVersion, MirrorInfo,
 };
-pub use cli_shim::{install_dsh_cli_command, DshCliInstallResult};
+pub use cli_shim::{
+    get_dsh_cli_status, install_dsh_cli_command, uninstall_dsh_cli_command, DshCliInstallResult,
+    DshCliStatus, DshCliStatusState, DshCliUninstallResult,
+};
 pub use diagnostics::{export_diagnostics, export_diagnostics_to};
 pub use dsh_install::{cancel_dsh_install_command, install_dsh_command, DshInstallProgressPayload};
 pub use host::{
@@ -33,6 +37,7 @@ pub use node_install::{
     cancel_node_install_command, get_node_update_target_command, install_node_command,
     upgrade_node_command, InstallNodeArgs, NodeUpdateTarget,
 };
+pub use plugin_command::{run_plugin_command, PluginCommandResult};
 pub use recovery::{
     decide_after_crash, spawn_crash_recovery, CrashAction, CrashLimitPayload, HostRestartedPayload,
 };

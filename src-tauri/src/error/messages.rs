@@ -58,6 +58,16 @@ pub fn user_message(error: &LauncherError) -> String {
         LauncherError::DshCli(_) => {
             "无法安装 dsh 命令。请检查用户目录写权限后重试。".to_string()
         }
+        LauncherError::DshPlugin(message) if message.contains("expected:") => {
+            "仅支持单条安装或卸载命令：dsh plugin --profile <profile> add|remove <source>。"
+                .to_string()
+        }
+        LauncherError::DshPlugin(message) if message.contains("timed out") => {
+            "插件操作超时。请检查网络后重试，或在 dsh 中确认当前状态。".to_string()
+        }
+        LauncherError::DshPlugin(_) => {
+            "插件操作失败。请检查来源与 profile 后重试；详情已写入应用日志。".to_string()
+        }
         LauncherError::Theme(_) => "主题设置无效。请选择浅色或黑白主题。".to_string(),
         LauncherError::DshNotInstalled { .. } => "dsh 尚未安装。请完成首次启动向导。".to_string(),
         LauncherError::NodeNotInstalled { .. } => {

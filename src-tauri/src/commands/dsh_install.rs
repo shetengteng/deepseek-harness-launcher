@@ -120,6 +120,9 @@ pub async fn install_dsh_command(
     promote_to_current(&mut state, &dsh_dir, &version)?;
     state.bootstrap_plan = None;
     state.save()?;
+    if let Err(error) = crate::cli_shim::install_default() {
+        tracing::warn!(%error, "dsh installed but the managed command shim could not be installed automatically");
+    }
     Ok(version)
 }
 

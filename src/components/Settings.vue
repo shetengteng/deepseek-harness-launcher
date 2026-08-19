@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { Settings2 } from "lucide-vue-next";
 import LauncherIcon from "@/components/LauncherIcon.vue";
 import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
 import SettingsAppearanceCard from "@/components/settings/SettingsAppearanceCard.vue";
@@ -8,6 +9,7 @@ import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCa
 import SettingsSourcesCard from "@/components/settings/SettingsSourcesCard.vue";
 import SettingsSupportCard from "@/components/settings/SettingsSupportCard.vue";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useThemeStore } from "@/stores/theme";
 import { useI18n } from "@/lib/i18n";
@@ -22,6 +24,7 @@ import {
 import {
   cancelNodeInstall,
   exportDiagnostics,
+  getDshCliStatus,
   getDshState,
   getLatestDshVersion,
   getNodeUpdateTarget,
@@ -32,10 +35,11 @@ import {
   restartHostAfterDshUpdate,
   setNodeMirror,
   setRegistry,
+  uninstallDshCli,
   uninstallManagedRuntime,
   upgradeNode,
   type DshStateSnapshot,
-  type DshCliInstallResult,
+  type DshCliStatus,
   type LatestDshVersion,
   type MirrorInfo,
   type NodeUpdateTarget,
@@ -91,8 +95,9 @@ const nodeDownloadProgress = ref<{ bytes: number; total: number | null }>({
 });
 const nodeUpdateOperationId = ref<string | null>(null);
 const installingDshCli = ref(false);
-const dshCliInstall = ref<DshCliInstallResult | null>(null);
+const dshCliStatus = ref<DshCliStatus | null>(null);
 const dshCliError = ref<string | null>(null);
+const uninstallingDshCli = ref(false);
 
 const messageOf = (error: unknown) =>
   typeof error === "object" && error !== null && "message" in error
@@ -134,6 +139,7 @@ async function loadDshState(): Promise<void> {
     nodeMirrors.value = mirrors;
     nodeMirrorDraft.value = state.node_mirror;
     registryDraft.value = state.registry;
+    await loadDshCliStatus();
   } catch {
     dshState.value = null;
   } finally {
@@ -257,7 +263,9 @@ async function finishLatestInstall(): Promise<void> {
   const restart = await restartHostAfterDshUpdate();
   await loadDshState();
   if (restart.rolled_back) {
-    upgradeError.value = t("settings.rollback", { version: restart.active_version });
+    upgradeError.value = t("settings.rollback", {
+      version: restart.active_version,
+    });
   }
   emit("upgradeReady", restart.origin);
 }
@@ -335,11 +343,39 @@ async function handleInstallDshCli(): Promise<void> {
   installingDshCli.value = true;
   dshCliError.value = null;
   try {
-    dshCliInstall.value = await installDshCli();
+    const result = await installDshCli();
+    dshCliStatus.value = {
+      state: "installed",
+      command_path: result.command_path,
+      path_instruction: result.path_instruction,
+    };
   } catch (error) {
     dshCliError.value = messageOf(error);
   } finally {
     installingDshCli.value = false;
+  }
+}
+
+async function loadDshCliStatus(): Promise<void> {
+  try {
+    dshCliStatus.value = await getDshCliStatus();
+  } catch (error) {
+    dshCliStatus.value = null;
+    dshCliError.value = messageOf(error);
+  }
+}
+
+async function handleUninstallDshCli(): Promise<void> {
+  if (uninstallingDshCli.value) return;
+  uninstallingDshCli.value = true;
+  dshCliError.value = null;
+  try {
+    await uninstallDshCli();
+    await loadDshCliStatus();
+  } catch (error) {
+    dshCliError.value = messageOf(error);
+  } finally {
+    uninstallingDshCli.value = false;
   }
 }
 
@@ -392,7 +428,7 @@ watch(
 
 <template>
   <div
-    class="settings-panel relative flex min-h-0 flex-1 flex-col overflow-y-auto px-7 py-6"
+    class="settings-panel relative flex min-h-0 flex-1 flex-col overflow-y-auto px-8 pb-12 pt-[clamp(32px,8vh,88px)] max-sm:px-[18px] max-sm:pb-9 max-sm:pt-7"
   >
     <div
       v-if="loading"
@@ -411,11 +447,24 @@ watch(
         <span class="sr-only">{{ t("settings.loading") }}</span>
       </section>
     </div>
-    <div v-else class="space-y-4">
+    <div v-else class="settings-panel-content">
+      <header class="settings-panel-heading">
+        <div class="settings-panel-mark" aria-hidden="true">
+          <Settings2 />
+        </div>
+        <div>
+          <div class="mb-2 flex items-center gap-2">
+            <h1>{{ t("settings.title") }}</h1>
+            <Badge variant="outline">{{ t("settings.launcher") }}</Badge>
+          </div>
+          <p>{{ t("settings.description") }}</p>
+        </div>
+      </header>
+
       <div v-if="!dshState" class="text-muted-foreground text-sm">
         {{ t("settings.loadFailed") }}
       </div>
-      <template v-else>
+      <div v-else class="settings-panel-cards space-y-4">
         <SettingsAppearanceCard
           :mode="theme.mode"
           :disabled="theme.initializing || theme.saving"
@@ -439,10 +488,12 @@ watch(
           @update-node="prepareNodeUpdate"
         />
         <SettingsCommandCard
+          :status="dshCliStatus"
           :installing="installingDshCli"
-          :result="dshCliInstall"
+          :uninstalling="uninstallingDshCli"
           :error="dshCliError"
           @install="handleInstallDshCli"
+          @uninstall="handleUninstallDshCli"
         />
         <SettingsSourcesCard
           :node-mirrors="nodeMirrors"
@@ -463,7 +514,7 @@ watch(
           @cancel-uninstall="confirmingUninstall = false"
           @uninstall="handleUninstallManagedRuntime"
         />
-      </template>
+      </div>
     </div>
 
     <Dialog :open="nodeUpgrade !== null">
@@ -475,7 +526,14 @@ watch(
         <DialogHeader>
           <DialogTitle>{{ t("update.nodeRequired") }}</DialogTitle>
           <DialogDescription v-if="nodeUpgrade">
-            {{ t("settings.nodeUpgradeDescription", { dshVersion: nodeUpgrade.dsh_version, requiredVersion: nodeUpgrade.engines_node, currentVersion: nodeUpgrade.current_node, targetVersion: nodeUpgrade.suggested_node }) }}
+            {{
+              t("settings.nodeUpgradeDescription", {
+                dshVersion: nodeUpgrade.dsh_version,
+                requiredVersion: nodeUpgrade.engines_node,
+                currentVersion: nodeUpgrade.current_node,
+                targetVersion: nodeUpgrade.suggested_node,
+              })
+            }}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-2">
@@ -487,7 +545,11 @@ watch(
           >
             {{ t("update.cancel") }}
           </Button>
-          <Button class="rounded-full" :disabled="upgrading" @click="confirmNodeUpgrade">
+          <Button
+            class="rounded-full"
+            :disabled="upgrading"
+            @click="confirmNodeUpgrade"
+          >
             {{ upgrading ? t("settings.upgrading") : t("update.confirm") }}
           </Button>
         </DialogFooter>
@@ -503,7 +565,12 @@ watch(
         <DialogHeader>
           <DialogTitle>{{ t("settings.nodeUpdateTitle") }}</DialogTitle>
           <DialogDescription v-if="manualNodeTarget">
-            {{ t("settings.nodeUpdateDescription", { currentVersion: manualNodeTarget.current_version, targetVersion: manualNodeTarget.target_version }) }}
+            {{
+              t("settings.nodeUpdateDescription", {
+                currentVersion: manualNodeTarget.current_version,
+                targetVersion: manualNodeTarget.target_version,
+              })
+            }}
           </DialogDescription>
         </DialogHeader>
         <div
@@ -511,7 +578,9 @@ watch(
           class="rounded-md border bg-muted/30 px-3 py-2 text-sm"
         >
           <template v-if="manualNodeTarget.engines_node">
-            <span class="text-muted-foreground">{{ t("settings.compatibility") }}</span>
+            <span class="text-muted-foreground">{{
+              t("settings.compatibility")
+            }}</span>
             <span class="font-mono text-xs">{{
               manualNodeTarget.engines_node
             }}</span>
@@ -538,10 +607,20 @@ watch(
           {{ manualNodeUpdateError }}
         </p>
         <DialogFooter class="gap-2 sm:gap-2">
-          <Button variant="outline" class="rounded-full" @click="cancelManualNodeUpdate">
-            {{ updatingNode ? t("settings.cancelDownload") : t("common.cancel") }}
+          <Button
+            variant="outline"
+            class="rounded-full"
+            @click="cancelManualNodeUpdate"
+          >
+            {{
+              updatingNode ? t("settings.cancelDownload") : t("common.cancel")
+            }}
           </Button>
-          <Button class="rounded-full" :disabled="updatingNode" @click="confirmManualNodeUpdate">
+          <Button
+            class="rounded-full"
+            :disabled="updatingNode"
+            @click="confirmManualNodeUpdate"
+          >
             {{ updatingNode ? t("settings.updating") : nodeUpdateActionLabel }}
           </Button>
         </DialogFooter>
@@ -551,6 +630,53 @@ watch(
 </template>
 
 <style scoped>
+.settings-panel-content {
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.settings-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.settings-panel-heading h1 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.settings-panel-heading p {
+  max-width: 56ch;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+}
+
+.settings-panel-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.45);
+}
+
+.settings-panel-mark :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 640px) {
+  .settings-panel-heading {
+    margin-bottom: 24px;
+  }
+}
+
 .settings-panel :deep(.rounded-lg.border.bg-card) {
   border: 0;
   border-bottom: 1px solid hsl(var(--border));
