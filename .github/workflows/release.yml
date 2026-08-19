@@ -1,0 +1,235 @@
+# Release 流水线
+#
+# 触发方式（二选一）：
+#   1. push tag → 创建 GitHub Release 草稿（永久产物）
+#      git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0
+#      tag 必须与 src-tauri/tauri.conf.json 的 version 一致（不含 v 前缀）
+#   2. workflow_dispatch → 日常调试/内部分发，只产 Artifact（30 天，不创建 Release）
+#      GitHub → Actions → Release → Run workflow
+#
+# 产物去向：
+#   - tag 触发  → GitHub Releases 草稿 + Artifact
+#   - 手动触发 → 只有 Artifact（对应 run 的 Summary 页）
+#
+# 平台矩阵：
+#   - macOS Apple Silicon (.dmg)
+#   - macOS Intel         (.dmg)
+#   - Windows x64         (NSIS .exe)
+#   - Linux x64           (.AppImage + .deb)
+#
+# 已知限制：
+#   - macOS 使用 ad-hoc 签名、未公证 → 安装后需执行 xattr 或右键打开
+#   - Windows 未做 Authenticode → SmartScreen 会提示未知发布者
+#   - Linux 未签名
+#   - 未集成 tauri-plugin-updater，用户需自行从 Release / Artifact 下载
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Read app version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: meta
+        name: Resolve and validate version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "${TAG}" != "${VERSION}" ]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match tauri.conf.json version ${VERSION}" >&2
+              exit 1
+            fi
+          fi
+
+  verify:
+    name: Smoke gate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend checks
+        run: |
+          pnpm test
+          pnpm lint
+          pnpm build
+
+      - name: Run Rust checks
+        working-directory: src-tauri
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --quiet
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs:
+      - metadata
+      - verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64
+            name: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - id: macos-x64
+            name: macOS x64
+            os: macos-13
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - id: windows-x64
+            name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - id: linux-x64
+            name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    env:
+      APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.id, 'macos-') && '-' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned bundle
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Collect bundle files
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find src-tauri/target -path '*/release/bundle/*' -type f \( \
+            -name '*.dmg' -o \
+            -name '*.exe' -o \
+            -name '*.nsis.zip' -o \
+            -name '*.AppImage' -o \
+            -name '*.deb' \
+          \) -exec cp {} release-assets/ \;
+          test -n "$(find release-assets -type f -print -quit)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.id }}-${{ github.event_name == 'push' && github.ref_name || github.sha }}
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish draft release
+    if: github.event_name == 'push'
+    needs:
+      - metadata
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: launcher-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_NOTES: |
+            Test-only unsigned build. Do not use for public distribution.
+
+            - macOS: ad-hoc signed, not notarized. After moving the app to Applications, run `xattr -cr /Applications/deepseek-harness-launcher.app`.
+            - Windows: unsigned. SmartScreen may show an unknown publisher warning.
+            - Linux: unsigned AppImage and deb.
+
+            Keep Gatekeeper and SmartScreen enabled.
+        shell: bash
+        run: |
+          tag="v${VERSION}"
+          printf '%s\n' "$RELEASE_NOTES" > /tmp/release-notes.md
+          gh release create "$tag" release-assets/* \
+            --draft \
+            --prerelease \
+            --verify-tag \
+            --title "DeepSeek Harness Launcher v${VERSION}" \
+            --notes-file /tmp/release-notes.md
