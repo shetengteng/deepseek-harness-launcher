@@ -374,7 +374,7 @@ export function uninstallManagedRuntime(): Promise<void> {
 
 // ─── 插件市场 ───
 
-export type MarketplaceSort = "relevance" | "updated" | "popularity";
+export type MarketplaceSort = "relevance" | "updated" | "stars";
 export type MarketplacePluginStatus =
   | "available"
   | "installed"
@@ -387,6 +387,7 @@ export interface MarketplaceInstallSpec {
   repository: string;
   subdirectory: string | null;
   reference: string | null;
+  source: string;
 }
 
 export interface MarketplacePopularity {
@@ -403,6 +404,7 @@ export interface MarketplacePlugin {
   install_spec: MarketplaceInstallSpec | null;
   description: string;
   category: string | null;
+  category_id: string | null;
   tags: string[];
   source_updated_at: string | null;
   validated_at: string | null;
@@ -415,8 +417,11 @@ export interface MarketplacePlugin {
 
 export interface MarketplaceSource {
   label: string;
+  url: string;
   fetched_at: string | null;
   stale: boolean;
+  catalog_updated_at: string | null;
+  catalog_count: number | null;
 }
 
 export interface MarketplaceSnapshot {

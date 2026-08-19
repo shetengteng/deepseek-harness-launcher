@@ -9,13 +9,13 @@
 ### 目标
 
 - 在一个完整的设置页内完成查找、目录安装、自定义安装和卸载，不要求用户理解 npm、Git URL 或 dsh profile 的内部文件结构。
-- 默认使用可缓存的公开目录 API；断网时仍可浏览上次成功同步的目录并准确展示其过期状态。
+- 默认使用可缓存的公开 curated registry；断网时仍可浏览上次成功同步的目录并准确展示其过期状态。
 - 所有安装和卸载都由 Launcher 使用托管的 dsh 运行时执行，且由本地 profile 的真实状态决定最终结果。
 - 让用户在执行前看清仓库、固定引用、目标 profile 和 dsh 将运行的动作。
 
 ### 非目标
 
-- 不在第一期维护自有的 GitHub 爬虫、Cloudflare D1 或安装统计服务。
+- 不在第一期维护自有的 GitHub 爬虫、Cloudflare D1 或安装统计服务；运行时也不调用 GitHub Search 做候选发现。
 - 不将目录中的静态格式校验视为代码审计、恶意代码检测或来源担保。
 - 不安装 Node 依赖、不执行目录中的 shell 命令，也不解析或运行插件仓库代码来获得详情。
 - 不把“自定义安装”做成任意 shell 或可复制粘贴脚本的执行入口；输入中的 source 始终作为单个 dsh 参数传递。
@@ -26,23 +26,22 @@
 
 ### 2.1 市场的位置
 
-设置页保留简洁的左侧导航：以“设置”作为设置域标题，当前只展示一个可用子页“插件”。不提前放入“运行时”“诊断”等未完成页面。右侧为插件市场的固定双栏工作区：
+设置页沿用现有 `SettingsPage.vue` 的可调整宽度左侧导航，保留“返回 dsh”“设置”“插件”三个入口；插件页右侧为双栏工作区：
 
 ```text
 Launcher 主界面
 ├── dsh Web UI
 └── 全屏设置页
-    ├── 顶部栏：产品标识、当前 dsh 版本、返回 dsh
     └── 设置工作区
-        ├── 左侧导航：设置 / 插件（当前）
+        ├── 左侧导航：返回 dsh / 设置 / 插件（当前）
         └── 插件页
-            ├── 市场顶部栏：标题、目录新鲜度、市场 / 已安装 Tabs
-            └── 双栏：搜索、筛选、其下的自定义安装文本按钮与目录结果列表 / 选中插件或自定义命令的详情与操作区
+            ├── 市场顶部栏：发现 / 已安装 Tabs
+            └── 双栏：目录同步状态与来源链接、搜索、分类 chips、排序与刷新、自定义安装文本按钮、富卡片结果列表 / 选中插件或自定义命令的详情与操作区
 ```
 
 设置通过主界面路由切换，不创建第二个 WebviewWindow、不使用系统对话框，也不从 dsh Web UI 上叠抽屉。用户打开设置时是在做维护工作，因此检索、来源判断和确认安装应在同一处完成。
 
-顶部栏的“返回 dsh”是明确的一级操作：它回到当前已运行的 dsh Web UI，不会终止 dsh 子进程。返回前保持当前市场的搜索条件、列表滚动位置和选中插件；再次进入设置时恢复这些上下文。浏览器历史 Back 不参与该行为，避免与 dsh Web UI 内部导航混淆。
+左侧导航的“返回 dsh”是明确的一级操作：它回到当前已运行的 dsh Web UI，不会终止 dsh 子进程。返回前保持当前市场的搜索条件、列表滚动位置和选中插件；再次进入设置时恢复这些上下文。浏览器历史 Back 不参与该行为，避免与 dsh Web UI 内部导航混淆。
 
 安装和卸载的确认也在详情区**内联展开**，不叠加二次模态框。这样操作上下文、目标 profile 与仓库信息始终可见。
 
@@ -50,9 +49,11 @@ Launcher 主界面
 
 ### 2.2 默认目录提供方
 
-第一期通过 `MarketplaceProvider` 接入公开目录 API。默认实现为 DSH 1024Store 兼容适配器，访问其公开检索和目录快照端点；实现不得让 UI、状态管理或安装逻辑依赖某一家 API 的响应形状。
+第一期固定使用 `https://awesome-dsh-plugin.com/plugins.json` 作为公开目录端点。它对应上游策展仓库 `https://github.com/awesome-dsh-plugin/awesome-dsh-plugin`：上游以 README 和 `data/plugins/*.yml` 维护条目，再由 GitHub Actions 定时构建静态 JSON；NPM 包名、GitHub Stars 和描述等信息由上游构建流程补齐。Launcher 只消费这份已经策展和生成的 registry，不在运行时调用 GitHub Search，也不拉取插件仓库代码或执行仓库中的脚本。
 
-Provider 只可返回标准化的目录记录，不能返回可执行命令：
+该端点的响应包含 `source`、`updated`、`count`、`categories` 和 `plugins`。每个插件记录可能包含 `name`、`owner`、`url`、`page`、`category`、中英文 `description`、`npm`、`stars`、`install`、`added` 和 `screenshots`。这些字段是外部格式，必须在 provider 边界转换为内部目录模型；UI、状态管理和安装逻辑不直接依赖 JSON 的响应形状。
+
+Provider 只可返回标准化的目录记录，不能把上游 `install` 字段原样作为命令返回：
 
 ```ts
 type CatalogPlugin = {
@@ -64,14 +65,16 @@ type CatalogPlugin = {
     repository: string
     subdirectory?: string
     ref?: string
+    source: string // 经过校验的单个 dsh source，例如 npm 包或 github:...
   }
   description: string
-  category: string | null
+  category: string | null // categories[category].zh，回退到 en
+  categoryId: string | null
   tags: string[]
-  sourceUpdatedAt: string | null
+  sourceUpdatedAt: string | null // 上游 added
   validatedAt: string | null
   popularity: {
-    marketplaceRank: number | null // provider 排名，1 为最高；无数据时为 null
+    marketplaceRank: number | null // registry 不提供显式排名，固定为 null
     rankingUpdatedAt: string | null
     githubStars: number | null
     starsFetchedAt: string | null
@@ -79,15 +82,23 @@ type CatalogPlugin = {
 }
 ```
 
-适配器要对外部数据再验证一次：ID、GitHub owner/repository、可选子目录和 ref 均使用严格的长度与字符集限制；`repositoryUrl` 必须由 `installSpec` 自行构造。展示文案为纯文本，绝不渲染为 HTML。
+适配器要对外部数据再验证一次：ID、GitHub owner/repository、可选子目录和 ref 均使用严格的长度与字符集限制；`repositoryUrl` 必须由安全解析后的仓库地址自行构造。`description`、分类和截图只作为展示数据，展示文案为纯文本，绝不渲染为 HTML。
 
-`marketplaceRank` 与 `githubStars` 是不同口径：前者是 provider 公布的市场榜单名次，后者是 GitHub 仓库 Star 快照。UI 必须分别标注，不能用某个未经说明的“热度分数”替代二者。Provider 不提供排名或 Star 时，返回 `null` 并在界面显示“目录未提供”，不猜测或从缓存的旧值补写为实时数据。
+安装来源的解析顺序固定为：
 
-接口默认地址属于构建时常量和 allowlist，不放在普通设置中。若将来提供自建市场，只允许通过编译配置或受控企业策略替换 provider，避免用户把 Launcher 变成任意远程安装器。
+1. 有效的 `npm` 字段优先生成单个 NPM source；
+2. 否则从上游 `install` 的固定 `dsh plugin ... add <source>` 结构中提取最后一个 source，并只接受一个无空白、无控制字符的安全参数；
+3. 没有可验证 source 的条目进入目录展示，但 `installSpec` 为空，禁止安装。
+
+对于 GitHub source，provider 同时解析 owner、repository 和可选 subdirectory；对于其他 source，只保存经过字符集校验的 `source`，不把它伪装成 GitHub 仓库。前端显示的安装来源始终来自后端结构化字段，绝不执行或拼接上游命令文本。
+
+`marketplaceRank` 与 `githubStars` 是不同口径；当前 registry 不提供显式市场排名，因此 `marketplaceRank` 固定为 `null`，列表顺序只表示上游策展顺序。UI 不能把列表顺序或 Stars 伪装成排名。Provider 不提供 Stars 时返回 `null`，界面显示“Stars 未提供”，不从旧缓存补写实时数据。
+
+目录地址固定在后端 provider 常量中，不从普通设置、持久化状态或用户输入读取，避免把 Launcher 变成任意远程安装器。缓存读取前必须校验 `provider_id`；旧 provider（例如历史 GitHub Search 目录）的缓存不得直接展示或用于安装，必须忽略其查询结果并重新同步当前 curated registry。
 
 ### 2.3 缓存与目录新鲜度
 
-目录缓存写入 `<data_dir>/marketplace/catalog-cache-v1.json`，而不是新增数据库。缓存包含 provider 标识、ETag（如果有）、成功获取时间、原始响应版本和规范化条目；失败响应及不完整响应不覆盖缓存。
+目录缓存写入 `<data_dir>/marketplace/catalog-cache-v1.json`，而不是新增数据库。缓存包含 provider 标识、ETag（如果有）、成功获取时间、上游 `updated`/`count` 和规范化条目；失败响应及不完整响应不覆盖缓存。
 
 | 场景 | 行为 |
 | --- | --- |
@@ -105,30 +116,29 @@ type CatalogPlugin = {
 
 搜索框支持名称、仓库 ID、描述、标签的本地过滤；目录服务提供搜索时可同时请求服务端结果，但界面不依赖网络往返才能过滤已缓存项目。搜索为空时显示推荐排序，非空时显示匹配排序。
 
-全屏设置页顶部采用与 IntelliJ IDEA 插件页一致的两项 `Tabs`，控制下方整个双栏工作区的内容范围：
+全屏设置页顶部采用两项范围 `Tabs`，控制下方整个双栏工作区的内容范围：
 
-- **市场**：默认页，展示目录中的全部插件，并保留“已安装”状态；
+- **发现**：默认页，展示 curated registry 中可安装的插件，并保留“已安装”状态；
 - **已安装**：只展示当前 profile 的本地 inventory，标签显示已安装数量。即使插件已不在当前目录中，也要以“本地插件”条目展示，避免用户失去卸载入口。
 
-Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类、排名范围、Star 门槛和排序条件；空的“已安装”页说明当前 profile 没有已安装插件。
+Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类和排序条件；空的“已安装”页说明当前 profile 没有已安装插件。
 
 可见过滤项：
 
-- 分类下拉框，默认“全部分类”；
-- 榜单范围，默认“全部排名”，可过滤“Top 100”或“Top 500”；
-- GitHub Stars 门槛，默认“不限”，可过滤“100+”或“250+”；
-- 排序，默认“市场排名”，可选择“相关性”“GitHub Stars”或“最近更新”；
+- 横向分类 chips，默认“全部”，其余分类来自 registry 的 `categories` 映射；
+- 排序，默认“推荐”，可选择“最近加入”或“GitHub Stars”；
+- 目录区标题位置只显示“目录已同步”和 registry 来源链接；刷新按钮与其并列，结果数量放在下方工具栏；
 - 当前 dsh profile，下拉框默认 `web`。
 
-分类、排序、榜单范围与 GitHub Stars 门槛在桌面宽度下固定为同一行的四个等宽控件；宽度不足时才折为两列，避免压缩标签或点击目标。
+搜索与分类 chips 使用大点击目标；分类很多时横向滚动，不将每个分类压缩成难以点击的等宽下拉框。排序和 profile 作为紧凑控件放在结果工具栏。
 
 “已安装” Tab 的判断来自本地 profile 的真实依赖状态，不来自目录服务。目录中不存在但已经安装的插件，在该 Tab 中仍应出现为“本地插件”，并提示它未被当前目录收录。
 
 ### 3.2 结果列表
 
-每项只展示支持快速判断的内容：市场排名、名称、仓库 ID、简短描述、GitHub Star 数、分类、最近更新时间和本地状态。排名使用 `#8` 这类清晰数字，放在名称前的 `Badge` 中；Star 使用图标加文字（例如“★ 312 Stars”），放在底部元信息中且紧邻更新时间之前。两者均不能只靠颜色表达。
+结果使用参考仓库的富卡片，而不是密集的单行结果：卡片展示插件图标或首字母、名称、仓库/作者、简短描述、分类 chip、安装来源类型、GitHub Stars、加入日期和本地状态；底部元信息左右分组，左侧放分类与来源标签，右侧放 Stars 与加入日期；右侧保留明确的“安装/已安装”操作状态。卡片之间保持足够留白，选中态用边框和背景表达，不用大面积高饱和色。
 
-未排名的条目保留在“全部排名”结果中，在排名位置显示“未上榜”；当用户启用 Top 范围过滤时，未排名条目不显示。Star 缺失的条目不满足任何 Star 门槛，但仍可在“不限”时显示。
+registry 不提供显式市场排名，因此不把列表顺序伪装成排名，也不再提供 Top 范围或排名门槛过滤。Star 缺失时显示“Stars 未提供”，仍可在推荐和分类结果中浏览。排序“推荐”保留 registry 的策展顺序，“最近加入”和“GitHub Stars”使用上游 `added`/`stars` 字段。
 
 | 本地状态 | 文案 | 含义 |
 | --- | --- | --- |
@@ -142,15 +152,15 @@ Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类、�
 
 ### 3.3 详情与安装
 
-详情区固定展示：描述、GitHub 仓库链接、目录分类与标签、目录最后更新时间、静态校验时间（若 provider 提供）、目标 profile 和安装来源。信息不足时直说“目录未提供”。
+详情区固定展示：描述、GitHub 仓库链接（若有）、目录分类与标签、上游加入日期、目录同步时间、目标 profile 和安装来源。信息不足时直说“目录未提供”。
 
-目录信息中另外显示“市场排名”和“GitHub Stars”，各自附带数据更新时间。排名用于浏览目录，不能影响安装安全判断，也不作为推荐或安全等级的暗示。
+目录信息中另外显示“GitHub Stars”和来源类型，各自附带数据更新时间。registry 没有显式市场排名，界面不制造排名数字；Stars 只帮助浏览，不能作为安装安全等级的暗示。
 
 首次点“安装”后，详情底部展开确认区：
 
 ```text
 将安装到 profile：web
-来源：github:owner/repository#path:optional/subdir
+来源：<source>
 执行者：Launcher 托管的 dsh <version>
 
 [取消]  [确认安装]
@@ -158,17 +168,17 @@ Tab 是范围切换，不是复选框筛选。切换后保留搜索、分类、�
 
 确认后执行过程在同一区域展示为“准备中 → 正在安装 → 正在核验 → 已安装/失败”。成功时重新读取 profile，只有读取结果匹配预期 spec 才将状态写为“已安装”。失败时保留 dsh 的已净化错误摘要、日志文件位置和“重试”按钮；不得猜测安装是否成功。
 
-安装指令由 Rust 后端从经过验证的 `installSpec` 生成，前端不拼接 shell 字符串。语义等价于：
+安装指令由 Rust 后端从经过验证的 `installSpec.source` 生成，前端不拼接 shell 字符串。语义等价于：
 
 ```text
-<managed dsh> plugin --profile <profile> add github:<owner>/<repository>[#path:<subdirectory>]
+<managed dsh> plugin --profile <profile> add <source>
 ```
 
 具体命令参数由当前 dsh 版本的受控适配器生成。Launcher 将其 stdout/stderr 写入自身 dsh 子进程日志，UI 只读取长度受限、去除控制字符的进度摘要。
 
 ### 3.4 自定义安装
 
-“市场”Tab 的筛选器下方提供默认收起的 `+ 自定义安装` 文本按钮。它面向低频的已知来源安装，不与搜索和常用筛选争夺视觉权重；点击后才在原位展开命令输入和“继续”按钮。展开状态由用户保留到离开市场 Tab，正在解析、确认、安装或显示错误时不得自动收起。输入框显示受支持格式的占位示例：
+“发现”Tab 的分类 chips 和结果工具栏下方提供默认收起的 `+ 自定义安装` 文本按钮。它面向低频的已知来源安装，不与搜索和常用筛选争夺视觉权重；点击后才在原位展开命令输入和“继续”按钮。展开状态由用户保留到离开发现 Tab，正在解析、确认、安装或显示错误时不得自动收起。输入框显示受支持格式的占位示例：
 
 ```text
 dsh plugin --profile web add <source>
@@ -215,8 +225,7 @@ dsh plugin --profile web add <source>
 ```text
 src-tauri/src/marketplace/
 ├── mod.rs                 命令与模块导出
-├── provider.rs            MarketplaceProvider trait、响应规范化和 allowlist
-├── dsh1024_provider.rs    默认公开目录 API 适配器
+├── provider.rs            curated registry、响应规范化和缓存条件请求
 ├── cache.rs               原子缓存读写、ETag 与过期策略
 ├── catalog.rs             查询、排序、目录与本地状态合并
 ├── install.rs             目录 spec / 自定义命令解析、受控 dsh 调用、结果核验
@@ -233,12 +242,19 @@ type MarketplaceQuery = {
   query?: string
   category?: string
   installedOnly?: boolean
-  sort: 'relevance' | 'updated' | 'popularity'
+  sort: 'relevance' | 'updated' | 'stars'
   profile: string
 }
 
 type MarketplaceSnapshot = {
-  source: { label: string; fetchedAt: string | null; stale: boolean }
+  source: {
+    label: string
+    url: string
+    fetchedAt: string | null
+    catalogUpdatedAt: string | null
+    catalogCount: number | null
+    stale: boolean
+  }
   plugins: MarketplacePlugin[]
   profiles: string[]
 }
@@ -339,12 +355,11 @@ stateDiagram-v2
 
 ```text
 src/components/settings/
-├── SettingsMarketplace.vue            设置内的三栏容器
-├── MarketplaceToolbar.vue             搜索、筛选、刷新、profile
-├── MarketplaceCustomInstall.vue       受控命令输入、格式提示与内联确认预览
-├── MarketplaceResultList.vue          可访问的结果列表和骨架屏
-├── MarketplacePluginDetail.vue        详情、内联确认与操作状态
-├── MarketplaceSourceStatus.vue        数据新鲜度与错误状态
+├── SettingsMarketplace.vue              设置内的双栏容器、目录状态和范围 Tabs
+├── MarketplaceCatalogPane.vue           搜索、分类 chips、排序、刷新和卡片列表
+├── MarketplacePluginCard.vue            单个富卡片及本地状态
+├── MarketplaceDetailPane.vue            详情、内联确认与操作状态
+├── MarketplaceOperationErrorDialog.vue  操作失败后的可访问错误恢复
 └── __tests__/
     └── SettingsMarketplace.test.ts
 src/stores/marketplace.ts               目录、过滤条件、选中项和操作状态
@@ -353,7 +368,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 
 `SettingsMarketplace.vue` 在全屏设置页中用 CSS grid 管理目录与详情两栏。宽度低于 900px 时，结果列表与详情改为单栏切换，不缩小可点击目标或让两栏横向挤压。焦点在切换布局时保留在搜索框或当前详情标题。
 
-使用 shadcn-vue 的 `Input`、`Select`、`Tabs`、`Button`、`Badge`、`Skeleton`、`ScrollArea`、`Tooltip` 和 `Collapsible`。`MarketplaceCustomInstall.vue` 在筛选器下方默认以 `Button ghost` 文本按钮作为可收起触发器，并用 `aria-expanded`、`aria-controls` 标明展开状态。展开后，命令输入与“继续”按钮组成单一 form，Enter 提交，校验错误通过 `aria-describedby` 和 `role="alert"` 关联到输入框。它只在“市场”Tab 中显示，输入值与当前详情保留到用户取消或确认结束。无需以 `Dialog` 承载安装确认，因为全屏设置页本身已经提供了维护操作的上下文。
+使用 shadcn-vue 的 `Input`、`Select`、`Tabs`、`Button`、`Badge`、`Skeleton`、`ScrollArea`、`Tooltip` 和 `Collapsible`。`MarketplaceCatalogPane.vue` 在分类 chips 和结果工具栏下方默认以 `Button ghost` 文本按钮作为可收起触发器，并用 `aria-expanded`、`aria-controls` 标明展开状态。展开后，命令输入与“继续”按钮组成单一 form，Enter 提交，校验错误通过 `aria-describedby` 和 `role="alert"` 关联到输入框。它只在“发现”Tab 中显示，输入值与当前详情保留到用户取消或确认结束。无需以 `Dialog` 承载安装确认，因为全屏设置页本身已经提供了维护操作的上下文。
 
 ### 7.1 shadcn-vue 视觉合约
 
@@ -366,8 +381,9 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 | 卸载、确认卸载 | `Button`，`destructive` |
 | 搜索 | `Input`，默认 `h-10`、`border-input`、`bg-background` 与 `ring` 焦点态 |
 | 自定义安装 | 筛选器下方默认收起的 `Collapsible` + `Button ghost` 文本按钮；展开后使用 `Input` + `Button default`，窄屏时按钮换至下一行 |
-| 分类、排序、排名与 Stars 过滤 | `Select` + `SelectTrigger`，默认 `h-10` |
-| 市场、已安装范围切换 | `Tabs` + `TabsList` + `TabsTrigger`，已安装数量作为标签内计数 |
+| 分类 | 横向 `Button`/`Badge` chips，选中态使用 `secondary`，支持横向滚动 |
+| 排序、profile | `Select` + `SelectTrigger`，默认 `h-10` |
+| 发现、已安装范围切换 | `Tabs` + `TabsList` + `TabsTrigger`，已安装数量作为标签内计数 |
 | 已安装、可安装、排名状态 | `Badge`，以 `secondary`/`outline` 为基调；成功和警告只用于语义状态 |
 | 目录和详情滚动区 | `ScrollArea` |
 | 首次加载 | `Skeleton`，不以居中 spinner 占据整个页面 |
@@ -379,7 +395,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 ### Rust
 
 - provider 对正常、缺失字段、恶意 URL、超长 ID、无效 subdirectory/ref 的规范化测试。
-- provider 对排名与 Star 的缺失、过期时间和口径字段测试；不得将其中一个字段映射为另一个字段。
+- provider 对 registry 的中英文描述、分类映射、NPM/GitHub source、Stars 缺失和上游更新时间测试；不得将 Stars 或列表顺序伪装成市场排名。
 - 缓存的原子写入、ETag、过期与失败不覆盖旧缓存测试。
 - 目录安装 spec 只能由有效目录记录构造，且不含 shell 可解释字段。
 - 自定义命令只接受固定的 dsh 添加结构；覆盖多种 dsh source 的原样传递测试，以及额外 flag、引号、重定向、管道和未知 profile 的拒绝测试。
@@ -388,7 +404,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 
 ### Vitest
 
-- 市场/已安装 Tab、搜索、分类、排名范围、Star 门槛、排序和 profile 切换。
+- 发现/已安装 Tab、搜索、分类 chips、排序和 profile 切换。
 - 结果列表的键盘导航、空状态、骨架屏、失焦恢复。
 - 首次点击只展开确认，取消不调用 Tauri 命令；确认后才调用。
 - 自定义安装默认收起，触发器的 `aria-expanded` 与内容可见性同步；展开后按 Enter 或“继续”只展示已解析预览，错误文本可被读屏读取，确认前不调用 Tauri 命令，取消后保留原始输入。
@@ -398,7 +414,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 ### 验收标准
 
 - 从设置页打开市场后，用户能在同一完整页面完成“搜索 → 查看来源 → 确认安装 → 看到已安装”，或“输入受支持命令 → 检查解析结果 → 确认安装 → 在已安装中看到本地插件”，并可通过顶部栏返回 dsh。
-- 列表始终可见市场排名与 GitHub Star 数；Top 与 Star 过滤能组合使用，且无排名/无 Star 的条目遵循保守的过滤规则。
+- 列表始终可见来源、分类、加入日期和 GitHub Star 数；无 Star 的条目明确显示“Stars 未提供”，不伪造排名。
 - 无网络时，已有缓存不会消失；无缓存时不会显示可安装的伪结果。
 - 目录安装时，UI 中任意可编辑文本都无法改变实际安装 spec；自定义安装时，只有后端成功解析出的结构化字段可以决定 spec。
 - 操作完成后必须重新读取 profile；不能仅凭 dsh 退出码把状态标为成功。
@@ -406,7 +422,7 @@ src/lib/tauri.ts                        受类型约束的 Marketplace invoke �
 
 ## 9. 分期落地
 
-1. **目录与只读 UI**：provider、缓存、设置三栏、搜索筛选、source freshness、inventory 状态。
+1. **目录与只读 UI**：provider、缓存、设置双栏、搜索、分类 chips、source freshness、inventory 状态。
 2. **受控安装**：后端 spec 构造、单操作锁、内联确认、事件进度、完成后核验与日志。
 3. **卸载与诊断**：安装记录匹配、卸载确认、失败恢复、诊断导出。
-4. **可选自建 provider**：仅在稳定了目录模型与安全约束后，评估 GitHub topic 自动发现、人工策展和静态校验流水线。
+4. **可选自建 provider**：仅在稳定了目录模型与安全约束后，评估镜像 curated registry、人工策展和静态校验流水线。

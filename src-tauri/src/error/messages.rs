@@ -64,6 +64,16 @@ pub fn user_message(error: &LauncherError) -> String {
         {
             "无法加载插件目录。请检查网络后重试。".to_string()
         }
+        LauncherError::Marketplace(message)
+            if message.contains("dsh plugin manifests are unavailable") =>
+        {
+            "无法完成 dsh 插件结构校验。请检查网络后刷新目录。".to_string()
+        }
+        LauncherError::Marketplace(message)
+            if message.contains("not present in the verified catalog") =>
+        {
+            "该插件未通过 dsh 结构校验，已阻止安装。请刷新插件目录后重试。".to_string()
+        }
         LauncherError::Marketplace(message) if message.contains("profile") => {
             "无法确认此 profile 的插件状态，未执行任何更改。请重试或查看日志。".to_string()
         }
@@ -162,5 +172,13 @@ mod tests {
             user_message(&LauncherError::Host("readiness timed out".to_string()))
                 .contains("启动超时")
         );
+    }
+
+    #[test]
+    fn unvalidated_marketplace_plugins_are_explained_to_the_user() {
+        assert!(user_message(&LauncherError::Marketplace(
+            "plugin is not present in the verified catalog".to_string(),
+        ))
+        .contains("未通过 dsh 结构校验"));
     }
 }

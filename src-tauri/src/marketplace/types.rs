@@ -10,10 +10,15 @@ pub struct InstallSpec {
     pub subdirectory: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
+    #[serde(default)]
+    pub source: String,
 }
 
 impl InstallSpec {
     pub fn source(&self) -> String {
+        if !self.source.is_empty() {
+            return self.source.clone();
+        }
         let mut source = format!("github:{}/{}", self.owner, self.repository);
         if let Some(subdirectory) = &self.subdirectory {
             source.push_str("#path:");
@@ -37,10 +42,11 @@ pub struct Popularity {
 pub struct CatalogPlugin {
     pub id: String,
     pub name: String,
-    pub repository_url: String,
-    pub install_spec: InstallSpec,
+    pub repository_url: Option<String>,
+    pub install_spec: Option<InstallSpec>,
     pub description: String,
     pub category: Option<String>,
+    pub category_id: Option<String>,
     pub tags: Vec<String>,
     pub source_updated_at: Option<String>,
     pub validated_at: Option<String>,
@@ -74,6 +80,7 @@ pub struct MarketplacePlugin {
     pub install_spec: Option<InstallSpec>,
     pub description: String,
     pub category: Option<String>,
+    pub category_id: Option<String>,
     pub tags: Vec<String>,
     pub source_updated_at: Option<String>,
     pub validated_at: Option<String>,
@@ -88,7 +95,10 @@ pub struct MarketplacePlugin {
 #[serde(rename_all = "snake_case")]
 pub struct MarketplaceSource {
     pub label: String,
+    pub url: String,
     pub fetched_at: Option<String>,
+    pub catalog_updated_at: Option<String>,
+    pub catalog_count: Option<u32>,
     pub stale: bool,
 }
 
@@ -112,7 +122,7 @@ pub struct MarketplaceQuery {
 }
 
 fn default_sort() -> MarketplaceSort {
-    MarketplaceSort::Popularity
+    MarketplaceSort::Relevance
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -120,7 +130,7 @@ fn default_sort() -> MarketplaceSort {
 pub enum MarketplaceSort {
     Relevance,
     Updated,
-    Popularity,
+    Stars,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -186,5 +196,7 @@ pub(crate) struct CatalogCache {
     pub etag: Option<String>,
     pub fetched_at: DateTime<Utc>,
     pub response_version: Option<String>,
+    pub catalog_updated_at: Option<String>,
+    pub catalog_count: Option<u32>,
     pub plugins: Vec<CatalogPlugin>,
 }

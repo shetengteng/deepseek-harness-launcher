@@ -1,8 +1,8 @@
 use std::cmp::Reverse;
 
 use super::types::{
-    CatalogPlugin, InventoryPlugin, MarketplacePlugin, MarketplaceQuery, MarketplaceSort,
-    PluginStatus, Popularity,
+    CatalogPlugin, InstallSpec, InventoryPlugin, MarketplacePlugin, MarketplaceQuery,
+    MarketplaceSort, PluginStatus, Popularity,
 };
 
 pub fn merge(catalog: &[CatalogPlugin], inventory: &[InventoryPlugin]) -> Vec<MarketplacePlugin> {
@@ -10,21 +10,24 @@ pub fn merge(catalog: &[CatalogPlugin], inventory: &[InventoryPlugin]) -> Vec<Ma
     let mut plugins = catalog
         .iter()
         .map(|plugin| {
-            let source = plugin.install_spec.source();
-            let installed = inventory
-                .iter()
-                .enumerate()
-                .find(|(_, item)| item.source == source);
+            let source = plugin.install_spec.as_ref().map(InstallSpec::source);
+            let installed = source.as_deref().and_then(|source| {
+                inventory
+                    .iter()
+                    .enumerate()
+                    .find(|(_, item)| item.source == source)
+            });
             if let Some((index, _)) = installed {
                 matched[index] = true;
             }
             MarketplacePlugin {
                 id: plugin.id.clone(),
                 name: plugin.name.clone(),
-                repository_url: Some(plugin.repository_url.clone()),
-                install_spec: Some(plugin.install_spec.clone()),
+                repository_url: plugin.repository_url.clone(),
+                install_spec: plugin.install_spec.clone(),
                 description: plugin.description.clone(),
                 category: plugin.category.clone(),
+                category_id: plugin.category_id.clone(),
                 tags: plugin.tags.clone(),
                 source_updated_at: plugin.source_updated_at.clone(),
                 validated_at: plugin.validated_at.clone(),
@@ -51,6 +54,7 @@ pub fn merge(catalog: &[CatalogPlugin], inventory: &[InventoryPlugin]) -> Vec<Ma
             install_spec: None,
             description: "此插件未被当前目录收录。".to_string(),
             category: None,
+            category_id: None,
             tags: vec![],
             source_updated_at: None,
             validated_at: None,
@@ -98,13 +102,12 @@ pub fn filter_and_sort(
         matches_query && matches_category && matches_installed
     });
     match query.sort {
-        MarketplaceSort::Popularity => {
-            plugins.sort_by_key(|plugin| plugin.popularity.marketplace_rank.unwrap_or(u32::MAX))
-        }
+        MarketplaceSort::Relevance => {}
         MarketplaceSort::Updated => {
             plugins.sort_by_key(|plugin| Reverse(plugin.source_updated_at.clone()))
         }
-        MarketplaceSort::Relevance => plugins.sort_by_key(|plugin| plugin.name.to_lowercase()),
+        MarketplaceSort::Stars => plugins
+            .sort_by_key(|plugin| Reverse(plugin.popularity.github_stars.unwrap_or_default())),
     }
     plugins
 }
@@ -118,15 +121,17 @@ mod tests {
         CatalogPlugin {
             id: "owner/repo".to_string(),
             name: "plugin".to_string(),
-            repository_url: "https://github.com/owner/repo".to_string(),
-            install_spec: InstallSpec {
+            repository_url: Some("https://github.com/owner/repo".to_string()),
+            install_spec: Some(InstallSpec {
                 owner: "owner".to_string(),
                 repository: "repo".to_string(),
                 subdirectory: None,
                 reference: None,
-            },
+                source: "github:owner/repo".to_string(),
+            }),
             description: "Test plugin".to_string(),
             category: None,
+            category_id: None,
             tags: vec![],
             source_updated_at: None,
             validated_at: None,
@@ -171,6 +176,45 @@ mod tests {
         assert_eq!(
             merge(&[catalog()], &inventory)[0].status,
             PluginStatus::Available
+        );
+    }
+
+    #[test]
+    fn sorts_plugins_by_github_stars_with_missing_values_last() {
+        let mut most_starred = catalog();
+        most_starred.id = "owner/most-starred".to_string();
+        most_starred.name = "most-starred".to_string();
+        most_starred.install_spec.as_mut().unwrap().repository = "most-starred".to_string();
+        most_starred.install_spec.as_mut().unwrap().source =
+            "github:owner/most-starred".to_string();
+        most_starred.repository_url = Some("https://github.com/owner/most-starred".to_string());
+        most_starred.popularity.github_stars = Some(100);
+
+        let mut unranked = catalog();
+        unranked.id = "owner/unranked".to_string();
+        unranked.name = "unranked".to_string();
+        unranked.install_spec.as_mut().unwrap().repository = "unranked".to_string();
+        unranked.install_spec.as_mut().unwrap().source = "github:owner/unranked".to_string();
+        unranked.repository_url = Some("https://github.com/owner/unranked".to_string());
+        unranked.popularity.github_stars = None;
+
+        let results = filter_and_sort(
+            merge(&[catalog(), most_starred, unranked], &[]),
+            &MarketplaceQuery {
+                query: None,
+                category: None,
+                installed_only: None,
+                sort: MarketplaceSort::Stars,
+                profile: "web".to_string(),
+            },
+        );
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|plugin| plugin.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["most-starred", "plugin", "unranked"]
         );
     }
 }

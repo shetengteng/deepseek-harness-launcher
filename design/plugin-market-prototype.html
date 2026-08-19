@@ -3,84 +3,47 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>deepseek-harness-launcher · 插件市场设置原型</title>
+  <title>DeepSeek Harness</title>
   <style>
     :root {
       color-scheme: dark;
-      --background: 240 10% 3.9%;
-      --foreground: 0 0% 98%;
-      --card: 240 10% 3.9%;
-      --card-foreground: 0 0% 98%;
-      --popover: 240 10% 3.9%;
-      --popover-foreground: 0 0% 98%;
-      --primary: 0 0% 98%;
-      --primary-foreground: 240 5.9% 10%;
-      --secondary: 240 3.7% 15.9%;
-      --secondary-foreground: 0 0% 98%;
-      --muted: 240 3.7% 15.9%;
-      --muted-foreground: 240 5% 64.9%;
-      --accent: 240 3.7% 15.9%;
-      --accent-foreground: 0 0% 98%;
-      --destructive: 0 62.8% 30.6%;
-      --destructive-foreground: 0 0% 98%;
-      --success: 142 71% 45%;
-      --warning: 38 92% 50%;
-      --border: 240 3.7% 15.9%;
-      --input: 240 3.7% 15.9%;
-      --ring: 240 4.9% 83.9%;
-      --canvas: hsl(var(--background));
-      --window: hsl(var(--background));
-      --surface: hsl(var(--secondary));
-      --surface-hover: hsl(240 3.7% 20%);
-      --surface-strong: hsl(240 3.7% 25%);
-      --text: hsl(var(--foreground));
-      --text-muted: hsl(var(--muted-foreground));
-      --text-faint: hsl(240 4% 54%);
-      --line: hsl(var(--border));
-      --control-primary: hsl(var(--primary));
-      --control-primary-foreground: hsl(var(--primary-foreground));
-      --accent-soft: hsl(var(--accent));
-      --accent-soft-foreground: hsl(var(--accent-foreground));
-      --danger: hsl(var(--destructive));
-      --danger-foreground: hsl(var(--destructive-foreground));
-      --focus: hsl(var(--ring));
-      --radius: .5rem;
-      --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+      --bg: hsl(240 10% 4%);
+      --panel: hsl(240 10% 5.8%);
+      --panel-raised: hsl(240 8% 8%);
+      --panel-hover: hsl(240 7% 11%);
+      --panel-active: hsl(240 7% 13%);
+      --text: hsl(0 0% 96%);
+      --text-muted: hsl(240 5% 64%);
+      --text-faint: hsl(240 4% 46%);
+      --line: hsl(240 5% 16%);
+      --line-strong: hsl(240 4% 23%);
+      --focus: hsl(0 0% 82%);
+      --danger: hsl(0 66% 60%);
+      --warning: hsl(38 80% 62%);
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --radius: 9px;
     }
 
     * { box-sizing: border-box; }
-
     body {
       margin: 0;
       min-width: 320px;
       min-height: 100vh;
-      padding: 0;
       color: var(--text);
-      background: var(--canvas);
-      font-family: var(--sans);
-      font-size: 13px;
-      line-height: 1.45;
+      background: var(--bg);
+      font: 13px/1.45 var(--sans);
       -webkit-font-smoothing: antialiased;
     }
-
     button, input, select { font: inherit; }
-    button { color: inherit; }
-    button, a, select, input { -webkit-tap-highlight-color: transparent; }
-
+    button, a, input, select { -webkit-tap-highlight-color: transparent; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
+    button { color: inherit; }
 
-    .app-page {
-      width: 100%;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      background: var(--window);
-    }
-
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
     .app-header {
       min-height: 58px;
       display: flex;
@@ -89,1158 +52,523 @@
       gap: 18px;
       padding: 0 22px;
       border-bottom: 1px solid var(--line);
+      background: var(--panel);
     }
-
-    .product-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .product-id,
+    .tabs, .catalog-heading, .toolbar, .toolbar-actions, .detail-eyebrow,
+    .detail-footer, .detail-actions, .card-heading, .card-meta, .card-action {
+      display: flex;
+      align-items: center;
+    }
+    .product-id { gap: 10px; min-width: 0; }
     .product-mark {
-      width: 27px;
-      height: 27px;
-      display: grid;
-      flex: 0 0 auto;
-      place-items: center;
-      border-radius: 7px;
-      background: var(--control-primary);
-      color: var(--control-primary-foreground);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 750;
+      width: 27px; height: 27px; display: grid; place-items: center;
+      flex: 0 0 auto; border-radius: 7px; background: var(--text); color: var(--bg);
+      font: 750 10px var(--mono);
     }
-    .product-title { min-width: 0; }
-    .product-name { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .product-name { color: var(--text); font-size: 12px; font-weight: 620; }
     .product-section { margin-top: 1px; color: var(--text-faint); font-size: 10px; }
-    .app-header-actions { display: flex; align-items: center; gap: 12px; }
-    .header-version {
-      color: var(--text-faint);
-      font-family: var(--mono);
-      font-size: 10px;
-    }
+    .header-actions { display: flex; align-items: center; gap: 14px; }
+    .header-version { color: var(--text-faint); font: 10px var(--mono); }
+    .header-link { color: var(--text-muted); font-size: 11px; text-decoration: none; }
+    .header-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 
-    .settings-shell {
-      display: grid;
-      flex: 1;
-      grid-template-columns: 204px minmax(0, 1fr);
-      min-height: 0;
-    }
-
+    .settings-shell { display: grid; flex: 1; grid-template-columns: 204px minmax(0, 1fr); min-height: 0; }
     .settings-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 16px 10px;
-      border-right: 1px solid var(--line);
-      background: hsl(var(--secondary));
+      display: flex; flex-direction: column; gap: 4px; padding: 16px 10px;
+      border-right: 1px solid var(--line); background: var(--panel);
     }
-
-    .settings-nav-label {
-      display: flex;
-      align-items: center;
-      height: 32px;
-      padding: 0 10px;
-      color: var(--text-faint);
-      font-size: 11px;
-      font-weight: 620;
+    .nav-label { height: 32px; display: flex; align-items: center; padding: 0 10px; color: var(--text-faint); font-size: 11px; font-weight: 620; }
+    .nav-item {
+      min-height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+      border: 1px solid transparent; border-radius: 7px; background: transparent;
+      color: var(--text-muted); cursor: pointer; font-size: 13px; text-align: left;
     }
+    .nav-item:hover { background: var(--panel-hover); color: var(--text); }
+    .nav-item[aria-current="page"] { border-color: var(--line-strong); background: var(--bg); color: var(--text); font-weight: 600; }
+    .nav-back { margin-bottom: 10px; }
+    .nav-icon { width: 16px; color: var(--text-muted); text-align: center; }
 
-    .settings-nav-item {
-      min-height: 36px;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 0 10px;
-      border: 1px solid transparent;
-      border-radius: calc(var(--radius) - 1px);
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 13px;
-      font-weight: 520;
+    .market-workspace { min-width: 0; display: flex; flex-direction: column; }
+    .market-topbar { padding: 0 26px; border-bottom: 1px solid var(--line); background: var(--bg); }
+
+    .tabs { gap: 4px; margin-top: 0; }
+    .tab {
+      min-height: 39px; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
     }
+    .tab:hover { color: var(--text); }
+    .tab[aria-selected="true"] { border-bottom-color: var(--text); color: var(--text); font-weight: 650; }
+    .tab-count { margin-left: 4px; color: var(--text-faint); font: 10px var(--mono); }
 
-    .settings-nav-item[aria-current="page"] {
-      border-color: hsl(var(--input));
-      background: hsl(var(--background));
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .nav-icon { width: 16px; height: 16px; flex: 0 0 auto; }
-
-    .market-workspace {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .market-topbar {
-      min-height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 10px 24px;
-      border-bottom: 1px solid var(--line);
-      background: hsl(var(--background));
-    }
-
-    .market-topbar-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .market-topbar-title h1 { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -.015em; }
-
-    .settings-layout {
-      display: grid;
-      flex: 1;
-      grid-template-columns: minmax(360px, .96fr) minmax(400px, 1.04fr);
-      min-height: 0;
-    }
-
-    .catalog-pane,
-    .detail-pane {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
+    .market-layout { display: grid; flex: 1; grid-template-columns: minmax(400px, .98fr) minmax(420px, 1.02fr); min-height: 0; overflow: hidden; }
+    .catalog-pane, .detail-pane { min-width: 0; display: flex; flex-direction: column; }
     .catalog-pane { border-right: 1px solid var(--line); }
-
-    .pane-head {
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .pane-title-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .pane-title {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 630;
-      letter-spacing: -.012em;
-    }
-
-    .catalog-tabs {
-      display: inline-flex;
-      height: 36px;
-      align-items: center;
-      gap: 2px;
-      margin: 0;
-      padding: 3px;
-      border-radius: var(--radius);
-      background: hsl(var(--muted));
-      color: var(--text-muted);
-    }
-
-    .catalog-tab {
-      min-height: 30px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 0 10px;
-      border: 0;
-      border-radius: calc(var(--radius) - 2px);
-      background: transparent;
-      color: inherit;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-    }
-
-    .catalog-tab[aria-selected="true"] { background: hsl(var(--background)); color: var(--text); box-shadow: 0 1px 2px hsl(240 10% 3.9% / .35); }
-    .catalog-tab-count { color: var(--text-faint); font-family: var(--mono); font-size: 10px; }
-    .catalog-tab[aria-selected="true"] .catalog-tab-count { color: var(--text-muted); }
-
-    .source-state {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--text-muted);
-      font-size: 11px;
-      white-space: nowrap;
-    }
-
-    .state-dot { width: 7px; height: 7px; border-radius: 50%; background: hsl(var(--success)); }
-    .state-dot.stale { background: hsl(var(--warning)); }
-
-    .toolbar { padding: 0; }
-
-    .custom-install {
-      margin: 7px 0 2px;
-    }
-
-    .custom-install[hidden] { display: none; }
-
-    .custom-install-trigger {
-      min-height: 28px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 0 2px;
-      border: 0;
-      border-radius: calc(var(--radius) - 2px);
-      background: transparent;
-      color: var(--text-muted);
-      text-align: left;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
-    }
-
-    .custom-install-trigger:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-    .custom-install-trigger:disabled { cursor: default; opacity: .55; }
-    .custom-install-trigger-copy { min-width: 0; display: flex; align-items: center; gap: 4px; }
-    .custom-install-trigger-prefix { color: var(--text-faint); font-family: var(--mono); font-size: 13px; }
-    .custom-install-chevron { width: 12px; height: 12px; flex: 0 0 auto; color: var(--text-faint); transition: transform 150ms ease-out; }
-    .custom-install-trigger[aria-expanded="true"] .custom-install-chevron { transform: rotate(180deg); }
-
-    .custom-install-content { margin-top: 6px; padding: 8px 0 3px; }
-    .custom-install-content[hidden] { display: none; }
-
-    .custom-install-title { color: inherit; font-size: 11px; font-weight: 500; }
-
-    .custom-command-form { display: flex; align-items: stretch; gap: 8px; }
-
-    .custom-command-input {
-      min-width: 0;
-      flex: 1;
-      height: 40px;
-      padding: 0 11px;
-      border: 1px solid hsl(var(--input));
-      border-radius: var(--radius);
-      background: hsl(var(--background));
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
-
-    .custom-command-input::placeholder { color: var(--text-faint); opacity: 1; }
-    .custom-command-input:hover { border-color: var(--surface-strong); }
-    .custom-command-input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus), 0 0 0 4px var(--window); outline: none; }
-    .custom-command-input[aria-invalid="true"] { border-color: hsl(var(--destructive)); }
-    .custom-command-feedback { margin: 0; color: var(--text-faint); font-size: 10px; line-height: 1.45; }
-    .custom-command-feedback:not(:empty) { margin-top: 6px; }
-    .custom-command-feedback.error { color: hsl(var(--destructive)); }
-    .custom-install-submit { flex: 0 0 auto; min-height: 40px; }
+    .catalog-head { padding: 20px 22px 15px; border-bottom: 1px solid var(--line); }
+    .catalog-heading { justify-content: space-between; gap: 12px; margin-bottom: 14px; align-items: center; }
+    .directory-source { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text-muted); font-size: 11px; }
+    .directory-status { color: var(--text); font-weight: 620; white-space: nowrap; }
+    .directory-link { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--text-muted); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+    .directory-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+    .external { color: var(--text-faint); font-size: 12px; }
 
     .search-wrap { position: relative; }
-    .search-icon {
-      position: absolute;
-      top: 50%;
-      left: 11px;
-      width: 16px;
-      height: 16px;
-      color: var(--text-faint);
-      transform: translateY(-50%);
-      pointer-events: none;
+    .search-icon { position: absolute; top: 50%; left: 12px; color: var(--text-muted); transform: translateY(-50%); pointer-events: none; }
+    .search-input {
+      width: 100%; height: 40px; padding: 0 60px 0 38px; border: 1px solid var(--line-strong);
+      border-radius: 9px; background: hsl(240 7% 8% / .8); color: var(--text); font-size: 13px;
     }
-
-    .search-input,
-    .select-control {
-      width: 100%;
-      height: 40px;
-      border: 1px solid hsl(var(--input));
-      border-radius: var(--radius);
-      background: hsl(var(--background));
-      color: var(--text);
-      font-size: 14px;
-    }
-
-    .search-input { padding: 0 12px 0 37px; }
     .search-input::placeholder { color: var(--text-faint); }
-    .search-input:hover, .select-control:hover { border-color: var(--surface-strong); }
-    .search-input:focus, .select-control:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus), 0 0 0 4px var(--window); outline: none; }
+    .search-input:hover { border-color: hsl(240 4% 30%); }
+    .search-input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px hsl(0 0% 82% / .14); outline: none; }
+    .shortcut { position: absolute; top: 50%; right: 10px; color: var(--text-faint); transform: translateY(-50%); font: 10px var(--mono); }
 
-    .filter-row {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 8px;
+    .category-bar { display: flex; gap: 6px; margin-top: 14px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+    .category-chip {
+      flex: 0 0 auto; min-height: 28px; padding: 5px 10px; border: 1px solid transparent;
+      border-radius: 999px; background: transparent; color: var(--text-muted); cursor: pointer;
+      font-size: 11px; white-space: nowrap;
     }
+    .category-chip:hover { background: var(--panel-raised); color: var(--text); }
+    .category-chip[aria-pressed="true"] { border-color: var(--line-strong); background: var(--panel-raised); color: var(--text); font-weight: 600; }
 
-    .select-control { padding: 0 7px; font-size: 12px; }
+    .custom-install { margin-top: 10px; }
+    .custom-toggle { min-height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 2px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; }
+    .custom-toggle:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+    .custom-toggle .plus { color: var(--text-faint); font: 13px var(--mono); }
+    .chevron { transition: transform 150ms ease; }
+    .custom-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .custom-content { margin-top: 7px; }
+    .custom-content[hidden] { display: none; }
+    .custom-form { display: flex; gap: 8px; }
+    .custom-input { min-width: 0; flex: 1; height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--bg); color: var(--text); font: 10px var(--mono); }
+    .custom-input::placeholder { color: var(--text-faint); }
+    .custom-feedback { margin: 6px 0 0; color: var(--danger); font-size: 10px; }
 
-    .catalog-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 39px;
-      padding: 0 20px;
-      border-bottom: 1px solid var(--line);
-      color: var(--text-faint);
-      font-size: 11px;
+    .toolbar { justify-content: space-between; gap: 12px; min-height: 45px; padding: 0 22px; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 11px; }
+    .result-count { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .result-count strong { color: var(--text); font-weight: 650; }
+    .count-muted { overflow: hidden; color: var(--text-faint); text-overflow: ellipsis; white-space: nowrap; }
+    .stale-label { color: var(--warning); }
+    .toolbar-actions { gap: 6px; }
+    .sort-select { height: 30px; min-width: 116px; padding: 0 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); font-size: 11px; }
+    .sort-select:hover { border-color: var(--line-strong); background: var(--panel-raised); color: var(--text); }
+
+    .result-list { flex: 1; overflow: auto; padding: 10px 12px 18px; outline: none; }
+    .result-list:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+    .card {
+      width: 100%; min-height: 132px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-raised);
+      color: inherit; cursor: pointer; text-align: left; transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
     }
+    .card + .card { margin-top: 8px; }
+    .card:hover { border-color: var(--line-strong); background: var(--panel-hover); }
+    .card:active { transform: translateY(1px); }
+    .card[aria-selected="true"] { border-color: hsl(0 0% 72% / .55); background: var(--panel-active); box-shadow: 0 0 0 1px hsl(0 0% 80% / .1); }
+    .card-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--panel); color: var(--text); font-size: 13px; font-weight: 700; }
+    .card-main { min-width: 0; }
+    .card-heading { gap: 8px; min-width: 0; }
+    .card-name { min-width: 0; overflow: hidden; color: var(--text); font-size: 14px; font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { display: inline-flex; align-items: center; min-height: 21px; padding: 2px 7px; border: 1px solid transparent; border-radius: 999px; color: var(--text-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+    .badge.outline { border-color: var(--line-strong); }
+    .badge.secondary { background: var(--panel); color: var(--text); }
+    .badge.local { color: var(--text-muted); }
+    .card-id { display: block; margin-top: 3px; overflow: hidden; color: var(--text-faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .card-description { display: -webkit-box; margin-top: 9px; overflow: hidden; color: var(--text-muted); font-size: 12px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .card-meta { justify-content: space-between; flex-wrap: nowrap; gap: 12px; margin-top: 11px; color: var(--text-muted); font-size: 10px; }
+    .card-meta-tags, .card-meta-facts { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .card-meta-tags { overflow: hidden; }
+    .card-meta-facts { flex: 0 0 auto; }
+    .meta-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 999px; background: var(--panel); white-space: nowrap; }
+    .source-chip { font-family: var(--mono); color: var(--text); }
+    .card-stars, .card-date { white-space: nowrap; }
+    .card-action { align-self: center; gap: 2px; color: var(--text); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .card-action.muted { color: var(--text-muted); }
+    .empty { padding: 54px 20px; color: var(--text-muted); text-align: center; }
+    .empty p { margin: 0 0 12px; }
+    .skeletons { display: grid; gap: 8px; padding: 2px; }
+    .skeleton { min-height: 132px; display: flex; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+    .skeleton-icon, .skeleton-line { background: var(--panel); animation: pulse 1.2s ease-in-out infinite alternate; }
+    .skeleton-icon { width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px; }
+    .skeleton-lines { flex: 1; padding-top: 2px; }
+    .skeleton-line { height: 9px; margin-bottom: 10px; border-radius: 4px; }
+    .skeleton-line.short { width: 38%; } .skeleton-line.medium { width: 78%; } .skeleton-line.long { width: 58%; }
+    @keyframes pulse { from { opacity: .45; } to { opacity: .9; } }
 
-    .result-list {
-      flex: 1;
-      overflow: auto;
-      padding: 5px 10px 12px;
-    }
-
-    .result-item {
-      width: 100%;
-      display: block;
-      padding: 12px 10px;
-      border: 1px solid transparent;
-      border-bottom-color: var(--line);
-      border-radius: 7px;
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-      text-align: left;
-    }
-
-    .result-item:hover { background: var(--surface); }
-    .result-item[aria-selected="true"] { border-color: hsl(var(--input)); background: var(--accent-soft); }
-
-    .rank-badge { flex: 0 0 auto; color: var(--text); font-family: var(--mono); font-size: 11px; }
-    .result-content { min-width: 0; }
-
-    .result-top,
-    .result-bottom {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 10px;
-    }
-
-    .result-name { min-width: 0; flex: 1; overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-    .result-badges { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; }
-    .result-id { margin-top: 2px; overflow: hidden; color: var(--text-faint); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-    .result-description { display: -webkit-box; margin: 7px 0 9px; overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .result-category { color: var(--text-faint); font-size: 10px; }
-    .star-count { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); font-family: var(--mono); font-size: 10px; }
-    .star-glyph { color: hsl(var(--warning)); font-family: var(--sans); font-size: 11px; }
-    .result-updated { margin-left: auto; }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 22px;
-      padding: 2px 9px;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      color: var(--text-muted);
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .badge.secondary { background: var(--surface); color: var(--text); }
-    .badge.outline { border-color: hsl(var(--input)); color: var(--text-muted); }
-    .badge.installed { border-color: hsl(var(--success) / .55); color: hsl(var(--success)); background: hsl(var(--success) / .12); }
-    .badge.update { border-color: hsl(var(--warning) / .55); color: hsl(var(--warning)); background: hsl(var(--warning) / .12); }
-    .badge.available { color: var(--text-faint); }
-    .badge.local { background: var(--surface); color: var(--text-muted); }
-
-    .empty-list { padding: 46px 20px; color: var(--text-muted); text-align: center; }
-    .empty-list p { margin: 0 0 14px; }
-
-    .detail-pane { background: hsl(var(--background)); }
-    .detail-body { flex: 1; overflow: auto; padding: 22px 24px; }
-
-    .detail-eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--text-faint); font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
-    .detail-heading { margin: 0; font-size: 18px; font-weight: 640; letter-spacing: -.022em; }
-    .detail-id { margin: 4px 0 17px; color: var(--text-faint); font-family: var(--mono); font-size: 11px; }
-    .detail-description { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.65; }
-
-    .detail-section { margin-top: 22px; }
-    .section-label { margin: 0 0 8px; color: var(--text-faint); font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+    .detail-pane { background: var(--bg); }
+    .detail-body { flex: 1; overflow: auto; padding: 25px 28px; }
+    .detail-eyebrow { flex-wrap: wrap; gap: 7px; margin-bottom: 9px; color: var(--text-faint); font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+    .detail-heading { margin: 0; font-size: 21px; font-weight: 680; letter-spacing: -.03em; }
+    .detail-id { margin: 5px 0 18px; color: var(--text-faint); font: 11px var(--mono); }
+    .detail-description { max-width: 620px; margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.7; }
+    .detail-section { margin-top: 25px; }
+    .section-label { margin: 0 0 9px; color: var(--text-faint); font-size: 10px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
     .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag { padding: 3px 7px; border-radius: 5px; background: var(--surface); color: var(--text-muted); font-size: 11px; }
-
+    .tag { padding: 4px 8px; border-radius: 6px; background: var(--panel-raised); color: var(--text-muted); font-size: 11px; }
     .detail-list { margin: 0; border-top: 1px solid var(--line); }
-    .detail-list > div { display: grid; grid-template-columns: 94px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .detail-list > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line); }
     .detail-list dt { color: var(--text-faint); font-size: 11px; }
-    .detail-list dd { min-width: 0; margin: 0; color: var(--text-muted); font-size: 11px; overflow-wrap: anywhere; }
-    .detail-list a { color: hsl(var(--primary)); text-decoration: none; }
-    .detail-list a:hover { color: var(--text); text-decoration: underline; }
+    .detail-list dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
+    .detail-list a { display: inline-flex; align-items: center; gap: 4px; color: var(--text); text-decoration: none; }
+    .detail-list a:hover { text-decoration: underline; text-underline-offset: 3px; }
     .mono { font-family: var(--mono); }
-
-    .risk-note {
-      margin-top: 20px;
-      padding: 11px 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      color: var(--text-muted);
-      font-size: 11px;
-      line-height: 1.6;
-    }
-
-    .risk-note strong { color: var(--text); font-weight: 600; }
-
-    .operation-panel {
-      margin-top: 18px;
-      padding: 13px;
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      background: var(--surface);
-    }
-
-    .operation-panel.confirm-install { border-color: hsl(var(--ring)); }
-    .operation-panel.confirm-remove { border-color: hsl(var(--destructive)); }
-    .operation-heading { margin: 0; color: var(--text); font-size: 12px; font-weight: 620; }
-    .operation-copy { margin: 5px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
-    .command-preview { display: block; margin-top: 10px; padding: 8px 9px; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: hsl(var(--background)); color: var(--text-muted); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
-
-    .action-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-
-    .button {
-      min-height: 40px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 0 16px;
-      border: 1px solid transparent;
-      border-radius: var(--radius);
-      background: transparent;
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .button.default { background: var(--control-primary); color: var(--control-primary-foreground); }
-    .button.default:hover { background: hsl(var(--primary) / .9); }
-    .button.outline { border-color: hsl(var(--input)); background: hsl(var(--background)); }
-    .button.outline:hover { background: var(--accent-soft); color: var(--accent-soft-foreground); }
-    .button.destructive { background: var(--danger); color: var(--danger-foreground); }
-    .button.destructive:hover { background: hsl(var(--destructive) / .9); }
+    .risk-note { margin-top: 22px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-raised); color: var(--text-muted); font-size: 11px; line-height: 1.65; }
+    .risk-note strong { color: var(--text); font-weight: 620; }
+    .operation-panel { margin-top: 19px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--panel-raised); }
+    .operation-panel.remove { border-color: hsl(0 66% 60% / .65); }
+    .operation-heading { margin: 0; color: var(--text); font-size: 12px; font-weight: 650; }
+    .operation-copy { margin: 5px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+    .command-preview { display: block; margin-top: 11px; padding: 9px 10px; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text-muted); font: 10px var(--mono); white-space: nowrap; }
+    .operation-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
+    .button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 550; white-space: nowrap; }
+    .button:hover { background: var(--panel-hover); }
+    .button.default { background: var(--text); color: var(--bg); }
+    .button.default:hover { background: hsl(0 0% 88%); }
+    .button.outline { border-color: var(--line-strong); background: var(--bg); }
+    .button.outline:hover { background: var(--panel-raised); }
+    .button.destructive { background: var(--danger); color: hsl(0 0% 100%); }
+    .button.destructive:hover { background: hsl(0 66% 54%); }
     .button.ghost { color: var(--text-muted); }
-    .button.ghost:hover { background: var(--accent-soft); color: var(--accent-soft-foreground); }
-    .button.sm { min-height: 36px; padding: 0 12px; font-size: 12px; }
-    .button.xs { min-height: 28px; padding: 0 8px; font-size: 12px; }
-    .button:disabled { opacity: .55; cursor: wait; }
-
-    .operation-running { display: flex; align-items: center; gap: 9px; margin-top: 12px; color: var(--text-muted); font-size: 11px; }
-    .progress-track { width: 100%; height: 4px; overflow: hidden; border-radius: 3px; background: var(--surface-strong); }
-    .progress-value { width: 62%; height: 100%; border-radius: inherit; background: var(--control-primary); animation: progress-slide 1.1s ease-in-out infinite alternate; }
-    @keyframes progress-slide { from { transform: translateX(-25%); } to { transform: translateX(55%); } }
-
-    .detail-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      min-height: 58px;
-      padding: 12px 24px;
-      border-top: 1px solid var(--line);
-      background: var(--window);
-    }
-
+    .button.xs { min-height: 28px; padding: 0 8px; font-size: 11px; }
+    .button.sm { min-height: 32px; padding: 0 10px; font-size: 11px; }
+    .button:disabled { cursor: wait; opacity: .55; }
+    .detail-empty { min-height: 260px; display: grid; place-items: center; color: var(--text-muted); font-size: 12px; }
+    .detail-footer { justify-content: space-between; gap: 12px; min-height: 62px; padding: 12px 28px; border-top: 1px solid var(--line); background: var(--panel); }
     .profile-line { color: var(--text-muted); font-size: 11px; }
-    .profile-line strong { color: var(--text); font-family: var(--mono); font-weight: 550; }
+    .profile-line strong { color: var(--text); font: 550 11px var(--mono); }
+    .status-line { margin-top: 14px; color: var(--text-muted); font-size: 11px; }
+    .status-line strong { color: var(--text); }
 
-    .refresh-status {
-      min-height: 21px;
-      margin: 0;
-      padding: 7px 22px;
-      border-top: 1px solid var(--line);
-      color: var(--text-faint);
-      font-size: 11px;
-    }
-
-    .refresh-status [role="status"] { color: var(--text-muted); }
+    .toast { position: fixed; right: 22px; bottom: 20px; max-width: 340px; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-active); color: var(--text-muted); box-shadow: 0 8px 30px hsl(240 10% 2% / .4); font-size: 11px; opacity: 0; pointer-events: none; transform: translateY(6px); transition: opacity 150ms ease, transform 150ms ease; }
+    .toast.is-visible { opacity: 1; transform: translateY(0); }
 
     @media (max-width: 1040px) {
-      .settings-layout { grid-template-columns: 1fr; }
+      .market-layout { grid-template-columns: minmax(350px, .9fr) minmax(370px, 1.1fr); }
+    }
+    @media (max-width: 860px) {
+      .market-layout { grid-template-columns: 1fr; overflow: visible; }
       .detail-pane { border-top: 1px solid var(--line); }
       .catalog-pane { border-right: 0; }
+      .detail-body { min-height: 500px; }
     }
-
     @media (max-width: 620px) {
-      .app-header { padding: 0 14px; }
-      .header-version { display: none; }
       .settings-shell { grid-template-columns: 1fr; }
-      .settings-nav {
-        flex-direction: row;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-      }
-      .settings-nav-label { width: auto; height: 32px; padding: 0; }
-      .settings-nav-item { min-height: 32px; }
-      .market-topbar { align-items: flex-start; flex-direction: column; gap: 8px; padding: 12px 14px; }
-      .settings-layout { grid-template-columns: 1fr; }
-      .catalog-pane { border-bottom: 1px solid var(--line); }
-      .detail-pane { min-height: 510px; }
-      .detail-list > div { grid-template-columns: 82px minmax(0, 1fr); }
-      .refresh-status { padding: 0 16px; }
-      .custom-command-form { flex-direction: column; }
-      .custom-install-submit { width: 100%; }
-      .filter-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+      .settings-nav { flex-direction: row; align-items: center; gap: 8px; padding: 8px 14px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .nav-label { width: auto; height: 32px; padding: 0; }
+      .nav-item { min-height: 32px; }
+      .market-topbar { padding: 0 14px; }
+      .catalog-head { padding-inline: 14px; }
+      .toolbar { padding-inline: 14px; }
+      .result-list { padding-inline: 8px; }
+      .card { grid-template-columns: 38px minmax(0, 1fr); padding: 13px; }
+      .card-icon { width: 38px; height: 38px; }
+      .card-action { display: none; }
+      .card-meta { align-items: flex-start; flex-wrap: wrap; }
+      .card-meta-facts { margin-left: auto; }
+      .detail-body { padding: 22px 16px; }
+      .detail-footer { padding-inline: 16px; }
     }
   </style>
 </head>
 <body>
-  <main class="app-page" aria-label="deepseek-harness-launcher 全屏设置页原型">
-    <header class="app-header">
-      <div class="product-id">
-        <span class="product-mark" aria-hidden="true">DSH</span>
-        <div class="product-title">
-          <div class="product-name">deepseek-harness-launcher</div>
-          <div class="product-section">设置 · 插件市场</div>
-        </div>
-      </div>
-      <div class="app-header-actions">
-        <span class="header-version">dsh 0.1.0-rc.6</span>
-        <button class="button outline sm" id="return-to-dsh" type="button" aria-label="返回正在运行的 dsh">← 返回 dsh</button>
-      </div>
-    </header>
+  <div class="app">
+    <main class="settings-shell">
+      <aside class="settings-nav" aria-label="设置导航">
+        <button class="nav-item nav-back" type="button"><span class="nav-icon">←</span>返回 dsh</button>
+        <div class="nav-label">设置</div>
+        <button class="nav-item" type="button"><span class="nav-icon">⚙</span>设置</button>
+        <button class="nav-item" type="button" aria-current="page"><span class="nav-icon">⊞</span>插件</button>
+      </aside>
 
-    <div class="settings-shell">
-      <nav class="settings-nav" aria-label="设置导航">
-        <div class="settings-nav-label">设置</div>
-        <div class="settings-nav-item" aria-current="page">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.64 5.64l2.12 2.12M16.24 16.24l2.12 2.12M18.36 5.64l-2.12 2.12M7.76 16.24l-2.12 2.12"/><circle cx="12" cy="12" r="4"/></svg>
-          <span>插件</span>
-        </div>
-      </nav>
-
-      <div class="market-workspace">
-        <section class="market-topbar" aria-labelledby="market-page-title">
-          <div class="market-topbar-title">
-            <h1 id="market-page-title">插件市场</h1>
-            <span class="source-state" id="source-state"><span class="state-dot"></span><span id="source-text">目录已同步</span></span>
-          </div>
-          <div class="catalog-tabs" role="tablist" aria-label="插件范围">
-            <button class="catalog-tab" id="market-tab" type="button" role="tab" aria-controls="result-list" aria-selected="true" data-market-tab="market">市场</button>
-            <button class="catalog-tab" id="installed-tab" type="button" role="tab" aria-controls="result-list" aria-selected="false" data-market-tab="installed">已安装 <span class="catalog-tab-count" id="installed-count">1</span></button>
-          </div>
-        </section>
-
-        <div class="settings-layout">
-      <section class="catalog-pane" aria-labelledby="market-page-title">
-        <header class="pane-head">
-          <div class="toolbar">
-            <div class="search-wrap">
-              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.35-4.35"/></svg>
-              <input class="search-input" id="search" type="search" autocomplete="off" placeholder="搜索名称、仓库或能力" aria-label="搜索插件">
-            </div>
-            <div class="filter-row" aria-label="插件筛选条件">
-              <select class="select-control" id="category" aria-label="按分类筛选">
-                <option value="all">全部分类</option>
-                <option value="界面增强">界面增强</option>
-                <option value="开发工具">开发工具</option>
-                <option value="记忆">记忆</option>
-                <option value="自动化">自动化</option>
-              </select>
-              <select class="select-control" id="sort" aria-label="排序方式">
-                <option value="rank">市场排名</option>
-                <option value="relevance">相关性</option>
-                <option value="stars">GitHub Stars</option>
-                <option value="updated">最近更新</option>
-              </select>
-              <select class="select-control" id="rank-filter" aria-label="榜单范围">
-                <option value="all">全部排名</option>
-                <option value="top100">Top 100</option>
-                <option value="top500">Top 500</option>
-              </select>
-              <select class="select-control" id="stars-filter" aria-label="GitHub Stars 门槛">
-                <option value="all">不限 Stars</option>
-                <option value="100">100+ Stars</option>
-                <option value="250">250+ Stars</option>
-              </select>
-            </div>
-            <section class="custom-install" id="custom-install-section" aria-labelledby="custom-install-title">
-              <button class="custom-install-trigger" id="custom-install-toggle" type="button" aria-expanded="false" aria-controls="custom-install-content">
-                <span class="custom-install-trigger-copy"><span class="custom-install-trigger-prefix" aria-hidden="true">+</span><span class="custom-install-title" id="custom-install-title">自定义安装</span></span>
-                <svg class="custom-install-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div class="custom-install-content" id="custom-install-content" hidden>
-                <form class="custom-command-form" id="custom-install-form">
-                  <input class="custom-command-input" id="custom-command" type="text" spellcheck="false" autocomplete="off" placeholder="dsh plugin --profile web add &lt;source&gt;" aria-describedby="custom-command-feedback" aria-label="自定义插件安装命令">
-                  <button class="button default sm custom-install-submit" type="submit">继续</button>
-                </form>
-                <p class="custom-command-feedback" id="custom-command-feedback" role="status" aria-live="polite"></p>
-              </div>
-            </section>
+      <section class="market-workspace" aria-label="插件市场">
+        <header class="market-topbar">
+          <div class="tabs" role="tablist" aria-label="插件范围">
+            <button class="tab" type="button" role="tab" aria-selected="true" data-tab="discover">发现</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab="installed">已安装 <span class="tab-count" id="installed-count">1</span></button>
           </div>
         </header>
-        <div class="catalog-meta">
-          <span id="result-count">6 个插件</span>
-          <button class="button ghost xs" id="clear-filters" type="button">清除筛选</button>
-        </div>
-        <div class="result-list" id="result-list" role="listbox" aria-label="插件结果"></div>
-      </section>
 
-      <section class="detail-pane" aria-labelledby="detail-title">
-        <div class="detail-body" id="detail-body"></div>
-        <footer class="detail-footer">
-          <span class="profile-line">目标 profile：<strong id="profile-label">web</strong></span>
-          <div class="action-row" id="primary-actions"></div>
-        </footer>
-      </section>
+        <div class="market-layout">
+          <section class="catalog-pane" aria-label="插件目录">
+            <header class="catalog-head">
+              <div class="catalog-heading">
+                <div class="directory-source" aria-label="目录来源">
+                  <span class="directory-status">目录已同步</span>
+                  <a class="directory-link" href="https://awesome-dsh-plugin.com/plugins.json" target="_blank" rel="noreferrer">
+                    awesome-dsh-plugin.com <span class="external" aria-hidden="true">↗</span>
+                  </a>
+                </div>
+                <button class="button ghost xs" id="refresh" type="button" aria-label="刷新目录">↻ 刷新</button>
+              </div>
+              <div class="search-wrap">
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input class="search-input" id="search" type="search" placeholder="搜索名称、仓库或能力" aria-label="搜索插件">
+                <kbd class="shortcut">⌘ K</kbd>
+              </div>
+              <div class="category-bar" id="category-bar" aria-label="插件分类"></div>
+              <section class="custom-install" aria-labelledby="custom-title">
+                <button class="custom-toggle" id="custom-toggle" type="button" aria-expanded="false" aria-controls="custom-content">
+                  <span class="plus" aria-hidden="true">+</span><span id="custom-title">自定义安装</span><span class="chevron" aria-hidden="true">⌄</span>
+                </button>
+                <div class="custom-content" id="custom-content" hidden>
+                  <form class="custom-form" id="custom-form">
+                    <input class="custom-input" id="custom-command" type="text" placeholder="dsh plugin --profile web add <source>" aria-label="自定义插件安装命令" aria-describedby="custom-feedback">
+                    <button class="button default sm" type="submit">继续</button>
+                  </form>
+                  <p class="custom-feedback" id="custom-feedback" role="status" aria-live="polite"></p>
+                </div>
+              </section>
+            </header>
+            <div class="toolbar">
+              <div class="result-count"><strong id="result-count">6</strong><span>个结果</span><span class="stale-label" id="stale-label" hidden>可能已过期</span></div>
+              <div class="toolbar-actions">
+                <button class="button ghost xs" id="clear" type="button">清除</button>
+                <select class="sort-select" id="sort" aria-label="排序"><option value="relevance">推荐</option><option value="updated">最近加入</option><option value="stars">GitHub Stars</option></select>
+              </div>
+            </div>
+            <div class="result-list" id="result-list" role="listbox" aria-label="插件结果" tabindex="0"></div>
+          </section>
+
+          <section class="detail-pane" aria-labelledby="detail-title">
+            <div class="detail-body" id="detail-body"></div>
+            <footer class="detail-footer">
+              <span class="profile-line">目标 profile：<strong>web</strong></span>
+              <div class="detail-actions" id="detail-actions"></div>
+            </footer>
+          </section>
         </div>
-        <p class="refresh-status"><span role="status" aria-live="polite" id="live-status">这是全屏设置页原型。目录来自受控 API，安装操作只由 Launcher 构造固定的 dsh 插件 spec。</span></p>
-      </div>
-    </div>
-  </main>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
     const plugins = [
       {
-        id: 'Han-1413141/dsh-cost-meter',
-        name: 'dsh-cost-meter',
-        description: '会话与当日 API 费用统计、预算图框、账户余额和历史看板，支持按模型查看费用。',
-        category: '界面增强',
-        tags: ['费用', '用量', 'Web UI'],
-        updated: '2026-08-15',
-        stars: 312,
-        rank: 8,
-        installed: true,
-        ref: 'main',
-        validated: '2026-08-16 14:30',
-        subdir: ''
-      },
-      {
-        id: 'omdsh-dev/dsh-at-file',
-        name: 'dsh-at-file',
+        id: 'omdsh-dev/dsh-at-file', name: 'dsh-at-file', category: '会话与消息', categoryId: 'conversation',
         description: '在输入框中搜索并引用工作区文件，提供接近编辑器的 @file 文件选择体验。',
-        category: '开发工具',
-        tags: ['文件', '工作区', '输入'],
-        updated: '2026-08-14',
-        stars: 184,
-        rank: 17,
-        installed: false,
-        ref: 'main',
-        validated: '2026-08-16 14:30',
-        subdir: ''
+        tags: ['文件', '工作区', '输入'], source: 'github:omdsh-dev/dsh-at-file', kind: 'github', stars: 184, added: '2026-08-14', installed: false
       },
       {
-        id: 'LeemanCheung/dsh-task-dag',
-        name: 'dsh-task-dag',
-        description: '把会话子代理和持久工作流展示为实时 DAG，支持查看状态、跳转节点和历史恢复。',
-        category: '自动化',
-        tags: ['子代理', '工作流', '可视化'],
-        updated: '2026-08-12',
-        stars: 96,
-        rank: 47,
-        installed: false,
-        ref: 'v0.5.1',
-        validated: '2026-08-16 14:30',
-        subdir: ''
+        id: 'Han-1413141/dsh-cost-meter', name: 'dsh-cost-meter', category: '用量与计费', categoryId: 'usage',
+        description: '会话与当日 API 费用统计、预算图框、账户余额和历史看板，支持按模型查看费用。',
+        tags: ['费用', '用量', 'Web UI'], source: 'github:Han-1413141/dsh-cost-meter', kind: 'github', stars: 312, added: '2026-08-15', installed: true
       },
       {
-        id: 'omdsh-dev/dsh-genui',
-        name: 'dsh-genui',
+        id: 'omdsh-dev/dsh-genui', name: 'dsh-genui', category: '界面增强', categoryId: 'ui',
         description: '在助手回复中渲染交互式组件，支持图表、表单、Mermaid 与事件回传。',
-        category: '界面增强',
-        tags: ['组件', '图表', '生成式 UI'],
-        updated: '2026-08-10',
-        stars: 271,
-        rank: 12,
-        installed: false,
-        ref: 'main',
-        validated: '2026-08-16 14:30',
-        subdir: ''
+        tags: ['组件', '图表', '生成式 UI'], source: 'npm:@dsh/dsh-genui', kind: 'npm', stars: 271, added: '2026-08-10', installed: false
       },
       {
-        id: 'a903067276-rgb/dsh-hud',
-        name: 'dsh-hud',
-        description: '在悬浮侧栏查看 Git 状态、MCP 服务器、技能、模型与 token 用量。',
-        category: '开发工具',
-        tags: ['Git', 'MCP', '状态'],
-        updated: '2026-08-09',
-        stars: 143,
-        rank: 35,
-        installed: false,
-        ref: 'main',
-        validated: '2026-08-16 14:30',
-        subdir: ''
+        id: 'LeemanCheung/dsh-task-dag', name: 'dsh-task-dag', category: '自动化', categoryId: 'automation',
+        description: '把会话子代理和持久工作流展示为实时 DAG，支持查看状态、跳转节点和历史恢复。',
+        tags: ['子代理', '工作流', '可视化'], source: 'github:LeemanCheung/dsh-task-dag', kind: 'github', stars: 96, added: '2026-08-12', installed: false
       },
       {
-        id: 'nonewind/dsh-spend',
-        name: 'dsh-spend',
-        description: '按模型、日期和会话聚合用量与费用，提供紧凑的运行时费用视图。',
-        category: '界面增强',
-        tags: ['费用', '统计'],
-        updated: '2026-08-06',
-        stars: 74,
-        rank: 128,
-        installed: false,
-        ref: 'main',
-        validated: null,
-        subdir: ''
+        id: 'dsh-community/dsh-paper', name: 'dsh-paper', category: '主题与外观', categoryId: 'theme',
+        description: '一套低对比度的纸张主题，减少长时间阅读和调试时的视觉干扰。',
+        tags: ['主题', '低对比度'], source: 'npm:@dsh/theme-paper', kind: 'npm', stars: 128, added: '2026-08-08', installed: false
+      },
+      {
+        id: 'dsh-community/dsh-nocturne', name: 'dsh-nocturne', category: '主题与外观', categoryId: 'theme',
+        description: '为深色工作流准备的紧凑主题，保留清晰的代码、状态与消息层级。',
+        tags: ['主题', '深色'], source: 'github:dsh-community/dsh-nocturne', kind: 'github', stars: null, added: '2026-08-06', installed: false
       }
     ];
 
+    const categories = ['全部', '界面增强', '用量与计费', '主题与外观', '模型与账号接入', '会话与消息', '自动化', '开发工具'];
     const state = {
-      selectedId: plugins[0].id,
-      phase: 'idle',
-      tab: 'market',
-      refreshedAt: '今天 14:30',
-      isRefreshing: false,
-      customInstall: null,
-      customCommandError: '',
-      isCustomInstallExpanded: false
+      tab: 'discover', category: '全部', search: '', sort: 'relevance', selectedId: 'omdsh-dev/dsh-at-file',
+      pending: null, customOpen: false, customPreview: null, refreshing: false
     };
-
     const $ = (selector) => document.querySelector(selector);
-    const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
-    const selectedPlugin = () => plugins.find((plugin) => plugin.id === state.selectedId);
-    const repositoryUrl = (plugin) => `https://github.com/${plugin.id.split('/').slice(0, 2).join('/')}`;
-    const installSpec = (plugin) => `github:${plugin.id.split('/').slice(0, 2).join('/')}${plugin.subdir ? `#path:${plugin.subdir}` : ''}`;
-    const isCustomPhase = () => ['confirm-custom-install', 'custom-installing', 'custom-succeeded'].includes(state.phase);
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
+    const selectedPlugin = () => plugins.find((plugin) => plugin.id === state.selectedId) || null;
+    const installedPlugins = () => plugins.filter((plugin) => plugin.installed);
+    const statusBadge = (plugin) => plugin.installed ? '<span class="badge secondary">已安装</span>' : '<span class="badge outline">可安装</span>';
+    const initials = (plugin) => plugin.name.split(/[-_\s]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'D';
+    const displayStars = (plugin) => plugin.stars === null ? 'Stars 未提供' : `${plugin.stars.toLocaleString()} Stars`;
+    const repositoryUrl = (plugin) => plugin.source.startsWith('github:') ? `https://github.com/${plugin.source.slice(7).split('#')[0]}` : `https://github.com/${plugin.id.split('/').slice(0, 2).join('/')}`;
 
-    function parseCustomCommand(rawCommand) {
-      const command = rawCommand.trim();
-      const match = command.match(/^dsh[ \t]+plugin[ \t]+--profile[ \t]+([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]+add[ \t]+([^ \t]+)$/);
-      if (!match) return { error: '请输入 dsh plugin --profile <profile> add <source>。' };
-
-      const [, profile, source] = match;
-      if (profile !== 'web') return { error: `找不到 profile：${profile}。当前可用 profile 是 web。` };
-      if (source.length > 2048 || source.startsWith('-') || /[\u0000-\u001f\u007f'"`$|;<>(){}\[\]]/.test(source)) return { error: '来源格式无效。source 必须是单个安全参数。' };
-
-      return { command, profile, spec: source, id: source, name: source };
+    function showToast(message) {
+      const toast = $('#toast');
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove('is-visible'), 2200);
     }
 
-    function renderCustomInstallControl() {
-      const section = $('#custom-install-section');
-      const toggle = $('#custom-install-toggle');
-      const content = $('#custom-install-content');
-      const input = $('#custom-command');
-      const feedback = $('#custom-command-feedback');
-      const submit = $('#custom-install-form button[type="submit"]');
-      const isVisible = state.tab === 'market';
-      const isInstalling = state.phase === 'custom-installing';
-      const isLocked = isCustomPhase();
-
-      section.hidden = !isVisible;
-      content.hidden = !state.isCustomInstallExpanded;
-      toggle.setAttribute('aria-expanded', String(state.isCustomInstallExpanded));
-      toggle.disabled = isLocked;
-      input.disabled = isLocked;
-      submit.disabled = isLocked;
-      submit.textContent = isInstalling ? '正在安装' : '继续';
-      input.setAttribute('aria-invalid', String(Boolean(state.customCommandError)));
-      feedback.setAttribute('role', state.customCommandError ? 'alert' : 'status');
-      feedback.textContent = state.customCommandError;
-      feedback.classList.toggle('error', Boolean(state.customCommandError));
-    }
-
-    function getFilteredPlugins() {
-      const query = $('#search').value.trim().toLocaleLowerCase();
-      const category = $('#category').value;
-      const rankFilter = $('#rank-filter').value;
-      const starsFilter = Number($('#stars-filter').value);
-      const sort = $('#sort').value;
-      const filtered = plugins.filter((plugin) => {
+    function getResults() {
+      const needle = state.search.trim().toLocaleLowerCase();
+      const results = plugins.filter((plugin) => {
+        const matchesTab = state.tab === 'discover' ? true : plugin.installed;
         const searchable = [plugin.name, plugin.id, plugin.description, plugin.category, ...plugin.tags].join(' ').toLocaleLowerCase();
-        const rankLimit = rankFilter === 'top100' ? 100 : rankFilter === 'top500' ? 500 : null;
-        return (!query || searchable.includes(query))
-          && (category === 'all' || plugin.category === category)
-          && (state.tab !== 'market' || !plugin.localOnly)
-          && (state.tab !== 'installed' || plugin.installed)
-          && (!rankLimit || (plugin.rank !== null && plugin.rank <= rankLimit))
-          && (!starsFilter || plugin.stars >= starsFilter);
+        return matchesTab
+          && (!needle || searchable.includes(needle))
+          && (state.category === '全部' || plugin.category === state.category);
       });
-
-      return filtered.sort((left, right) => {
-        if (sort === 'rank') return (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY);
-        if (sort === 'stars') return right.stars - left.stars;
-        if (sort === 'updated') return right.updated.localeCompare(left.updated);
-        if (query) {
-          const leftScore = `${left.name} ${left.id}`.toLocaleLowerCase().startsWith(query) ? 1 : 0;
-          const rightScore = `${right.name} ${right.id}`.toLocaleLowerCase().startsWith(query) ? 1 : 0;
-          return rightScore - leftScore || (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY);
+      return results.sort((left, right) => {
+        if (state.sort === 'updated') return right.added.localeCompare(left.added);
+        if (state.sort === 'stars') return (right.stars ?? -1) - (left.stars ?? -1);
+        if (needle) {
+          const leftStarts = `${left.name} ${left.id}`.toLocaleLowerCase().startsWith(needle) ? 1 : 0;
+          const rightStarts = `${right.name} ${right.id}`.toLocaleLowerCase().startsWith(needle) ? 1 : 0;
+          return rightStarts - leftStarts;
         }
-        return (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY);
+        return 0;
       });
     }
 
-    function badgeFor(plugin) {
-      if (plugin.localOnly && plugin.installed) return '<span class="badge secondary installed">已安装</span><span class="badge local">本地插件</span>';
-      if (plugin.installed) return '<span class="badge secondary installed">已安装</span>';
-      return '<span class="badge outline available">可安装</span>';
+    function renderCategories() {
+      $('#category-bar').innerHTML = categories.map((category) => `<button class="category-chip" type="button" aria-pressed="${state.category === category}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`).join('');
     }
 
-    function rankMark(plugin) {
-      if (plugin.localOnly) return '<span class="badge outline rank-badge">本地</span>';
-      if (plugin.rank === null) return '<span class="badge outline rank-badge">未上榜</span>';
-      return `<span class="badge outline rank-badge" aria-label="市场排名第 ${plugin.rank} 名">#${plugin.rank}</span>`;
-    }
-
-    function renderResults() {
-      const results = getFilteredPlugins();
-      $('#result-count').textContent = state.tab === 'installed' ? `${results.length} 个已安装插件` : `${results.length} 个插件`;
+    function renderCards() {
+      const results = getResults();
+      if (!results.some((plugin) => plugin.id === state.selectedId)) state.selectedId = results[0]?.id || null;
+      $('#result-count').textContent = String(results.length);
       const list = $('#result-list');
-      if (!results.some((plugin) => plugin.id === state.selectedId)) {
-        state.selectedId = results[0]?.id || null;
-        if (!isCustomPhase()) state.phase = 'idle';
-      }
-
       if (!results.length) {
-        const emptyCopy = state.tab === 'installed' ? '当前 web profile 没有已安装插件。' : '没有匹配的插件。';
-        list.innerHTML = `<div class="empty-list"><p>${emptyCopy}</p><button class="button outline sm" id="empty-clear" type="button">清除筛选</button></div>`;
+        list.innerHTML = `<div class="empty"><p>${state.tab === 'installed' ? '当前 web profile 没有已安装插件。' : '没有匹配的插件。'}</p><button class="button outline sm" type="button" data-action="clear">清除筛选</button></div>`;
         return;
       }
-
-        list.innerHTML = results.map((plugin) => `
-        <button class="result-item" type="button" role="option" aria-selected="${plugin.id === state.selectedId}" data-plugin-id="${escapeHtml(plugin.id)}">
-          <span class="result-content">
-            <span class="result-top">${rankMark(plugin)}<span class="result-name">${escapeHtml(plugin.name)}</span><span class="result-badges">${badgeFor(plugin)}</span></span>
-            <span class="result-id">${escapeHtml(plugin.id)}</span>
-            <span class="result-description">${escapeHtml(plugin.description)}</span>
-            <span class="result-bottom"><span class="result-category">${escapeHtml(plugin.category)}</span>${plugin.localOnly ? '<span class="result-category">目录未收录</span>' : `<span class="star-count" aria-label="GitHub Stars ${plugin.stars.toLocaleString()}"><span class="star-glyph" aria-hidden="true">★</span>${plugin.stars.toLocaleString()} Stars</span><span class="result-category result-updated">更新于 ${escapeHtml(plugin.updated)}</span>`}</span>
+      list.innerHTML = results.map((plugin) => `
+        <button class="card" type="button" role="option" aria-selected="${plugin.id === state.selectedId}" data-plugin-id="${escapeHtml(plugin.id)}">
+          <span class="card-icon" aria-hidden="true">${escapeHtml(initials(plugin))}</span>
+          <span class="card-main">
+            <span class="card-heading"><span class="card-name">${escapeHtml(plugin.name)}</span>${statusBadge(plugin)}</span>
+            <span class="card-id">${escapeHtml(plugin.id)}</span>
+            <span class="card-description">${escapeHtml(plugin.description)}</span>
+            <span class="card-meta">
+              <span class="card-meta-tags"><span class="meta-chip">${escapeHtml(plugin.category)}</span><span class="meta-chip source-chip"># ${plugin.kind === 'npm' ? 'npm' : '源码'}</span></span>
+              <span class="card-meta-facts"><span class="card-stars">${plugin.stars !== null ? '★ ' : ''}${escapeHtml(displayStars(plugin))}</span><span class="card-date">加入于 ${escapeHtml(plugin.added)}</span></span>
+            </span>
           </span>
-        </button>
-      `).join('');
+          <span class="card-action ${plugin.installed ? 'muted' : ''}">${plugin.installed ? '已安装' : plugin.source ? '查看' : '不可安装'} ›</span>
+        </button>`).join('');
     }
 
-    function renderOperation(plugin) {
-      const spec = escapeHtml(installSpec(plugin));
-      if (state.phase === 'confirm-install') {
-        return `
-          <section class="operation-panel confirm-install" aria-label="确认安装">
-            <p class="operation-heading">确认安装到 <span class="mono">web</span></p>
-            <p class="operation-copy">Launcher 只会使用下方的固定来源，不会执行目录返回的展示命令。</p>
-            <code class="command-preview">dsh plugin --profile web add ${spec}</code>
-            <div class="action-row"><button class="button outline" type="button" data-action="cancel">取消</button><button class="button default" type="button" data-action="confirm-install">确认安装</button></div>
-          </section>`;
-      }
-      if (state.phase === 'confirm-remove') {
-        return `
-          <section class="operation-panel confirm-remove" aria-label="确认卸载">
-            <p class="operation-heading">从 <span class="mono">web</span> 移除插件</p>
-            <p class="operation-copy">这会使用本地 profile 中已解析的安装 spec。不会影响其他 profile。</p>
-            <code class="command-preview">dsh plugin --profile web remove ${spec}</code>
-            <div class="action-row"><button class="button outline" type="button" data-action="cancel">取消</button><button class="button destructive" type="button" data-action="confirm-remove">确认卸载</button></div>
-          </section>`;
-      }
-      if (state.phase === 'installing' || state.phase === 'removing') {
-        const action = state.phase === 'installing' ? '正在安装并核验 profile' : '正在卸载并核验 profile';
-        return `
-          <section class="operation-panel" aria-label="正在处理">
-            <p class="operation-heading">${action}</p>
-            <div class="operation-running"><span class="progress-track"><span class="progress-value"></span></span><span>请稍候</span></div>
-          </section>`;
-      }
-      return '';
+    function operationMarkup(plugin) {
+      if (!state.pending) return '';
+      const remove = state.pending === 'remove';
+      const custom = state.pending === 'custom';
+      const source = custom ? state.customPreview.source : plugin.source;
+      const title = custom ? '自定义来源，尚未执行' : remove ? '确认从 web profile 卸载' : '确认安装到 web profile';
+      const copy = custom ? '此来源未经过市场目录校验。Launcher 会从解析后的字段重新构造 dsh 参数。' : remove ? '将使用本地 profile 中已解析的安装来源，不会影响其他 profile。' : 'Launcher 只会使用下方固定来源，不会执行目录返回的展示命令。';
+      const command = remove ? `dsh plugin --profile web remove ${source}` : `dsh plugin --profile web add ${source}`;
+      return `<section class="operation-panel ${remove ? 'remove' : ''}" aria-label="${escapeHtml(title)}"><p class="operation-heading">${escapeHtml(title)}</p><p class="operation-copy">${escapeHtml(copy)}</p><code class="command-preview">${escapeHtml(command)}</code><div class="operation-actions"><button class="button outline xs" type="button" data-action="cancel">取消</button><button class="button ${remove ? 'destructive' : 'default'} xs" type="button" data-action="confirm">${remove ? '确认卸载' : '确认安装'}</button></div></section>`;
     }
 
-    function renderCustomInstallDetail() {
-      const custom = state.customInstall;
-      const body = $('#detail-body');
-      const actions = $('#primary-actions');
-      if (!custom) return;
-
-      let operation = '';
-      if (state.phase === 'confirm-custom-install') {
-        operation = `
-          <section class="operation-panel confirm-install" aria-label="确认自定义安装">
-            <p class="operation-heading">自定义来源，尚未执行</p>
-            <p class="operation-copy">Launcher 会从解析后的字段重建命令，不会直接执行输入文本。</p>
-            <code class="command-preview">dsh plugin --profile ${escapeHtml(custom.profile)} add ${escapeHtml(custom.spec)}</code>
-            <div class="action-row"><button class="button outline" type="button" data-action="custom-back">返回编辑</button><button class="button default" type="button" data-action="confirm-custom-install">确认安装</button></div>
-          </section>`;
-      } else if (state.phase === 'custom-installing') {
-        operation = `
-          <section class="operation-panel" aria-label="正在安装自定义插件">
-            <p class="operation-heading">正在安装并核验 profile</p>
-            <div class="operation-running"><span class="progress-track"><span class="progress-value"></span></span><span>请稍候</span></div>
-          </section>`;
-      } else if (state.phase === 'custom-succeeded') {
-        operation = `
-          <section class="operation-panel" aria-label="自定义安装已完成">
-            <p class="operation-heading">已安装并完成 profile 核验</p>
-            <p class="operation-copy">该插件会作为本地插件出现在“已安装”中，不会被标记为目录收录。</p>
-            <div class="action-row"><button class="button default" type="button" data-action="view-custom-installed">查看已安装插件</button></div>
-          </section>`;
-      }
-
-      body.innerHTML = `
-        <div class="detail-eyebrow"><span class="badge outline available">自定义来源</span><span>未经过目录校验</span></div>
-        <h2 class="detail-heading" id="detail-title">自定义安装</h2>
-        <p class="detail-id">${escapeHtml(custom.id)}</p>
-        <p class="detail-description">检查解析结果后确认安装。此来源不会写入插件市场目录，也不会获得目录排名或结构校验信息。</p>
-        <section class="detail-section">
-          <p class="section-label">解析结果</p>
-          <dl class="detail-list">
-            <div><dt>目标 profile</dt><dd class="mono">${escapeHtml(custom.profile)}</dd></div>
-            <div><dt>安装来源</dt><dd class="mono">${escapeHtml(custom.spec)}</dd></div>
-            <div><dt>输入命令</dt><dd class="mono">${escapeHtml(custom.command)}</dd></div>
-            <div><dt>执行者</dt><dd>Launcher 托管的 dsh 0.1.0-rc.6</dd></div>
-          </dl>
-        </section>
-        <aside class="risk-note"><strong>安装前请确认仓库来源。</strong> 这是用户输入的来源，未经过当前市场目录的结构校验。插件安装后可在 dsh 中执行其声明的能力。</aside>
-        ${operation}
-      `;
-      actions.innerHTML = '';
+    function renderCustomDetail() {
+      const custom = state.customPreview;
+      $('#detail-body').innerHTML = `<div class="detail-eyebrow"><span class="badge outline">自定义来源</span><span>未经过目录校验</span></div><h2 class="detail-heading" id="detail-title">自定义安装</h2><p class="detail-id mono">${escapeHtml(custom.source)}</p><p class="detail-description">检查解析结果后确认安装。这个来源不会写入插件市场目录，也不会获得目录排序或策展校验信息。</p><section class="detail-section"><p class="section-label">解析结果</p><dl class="detail-list"><div><dt>目标 profile</dt><dd class="mono">${escapeHtml(custom.profile)}</dd></div><div><dt>安装来源</dt><dd class="mono">${escapeHtml(custom.source)}</dd></div><div><dt>执行者</dt><dd>Launcher 托管的 dsh 0.1.0-rc.6</dd></div></dl></section><aside class="risk-note"><strong>安装前请确认来源。</strong> 输入不会交给 shell，但来源不在当前目录中。</aside>${operationMarkup(null)}`;
+      $('#detail-actions').innerHTML = '';
     }
 
     function renderDetail() {
-      if (isCustomPhase()) {
-        renderCustomInstallDetail();
-        return;
-      }
+      if (state.customPreview) return renderCustomDetail();
       const plugin = selectedPlugin();
-      const body = $('#detail-body');
-      const actions = $('#primary-actions');
       if (!plugin) {
-        body.innerHTML = '<div class="empty-list"><p>选择一个插件以查看详情。</p></div>';
-        actions.innerHTML = '';
+        $('#detail-body').innerHTML = '<div class="detail-empty">选择一个插件以查看详情。</div>';
+        $('#detail-actions').innerHTML = '';
         return;
       }
-
-      const validated = plugin.localOnly ? '不适用（本地插件）' : plugin.validated ? escapeHtml(plugin.validated) : '目录未提供';
-      const catalogUpdated = plugin.localOnly ? '未被当前目录收录' : escapeHtml(plugin.updated);
-      const marketplaceRank = plugin.localOnly ? '目录未提供（本地插件）' : plugin.rank === null ? '目录未提供' : `#${plugin.rank} · 随目录同步更新`;
-      const githubStars = plugin.localOnly ? '目录未提供（本地插件）' : `${plugin.stars.toLocaleString()} · 随目录同步更新`;
-      body.innerHTML = `
-        <div class="detail-eyebrow">${badgeFor(plugin)} <span>${escapeHtml(plugin.category)}</span></div>
-        <h2 class="detail-heading" id="detail-title">${escapeHtml(plugin.name)}</h2>
-        <p class="detail-id">${escapeHtml(plugin.id)}</p>
-        <p class="detail-description">${escapeHtml(plugin.description)}</p>
-        <section class="detail-section">
-          <p class="section-label">标签</p>
-          <div class="tag-row">${plugin.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>
-        </section>
-        <section class="detail-section">
-          <p class="section-label">来源与目录信息</p>
-          <dl class="detail-list">
-            <div><dt>GitHub 仓库</dt><dd><a href="${escapeHtml(repositoryUrl(plugin))}" target="_blank" rel="noreferrer">${escapeHtml(repositoryUrl(plugin).replace('https://github.com/', 'github.com/'))}</a></dd></div>
-            <div><dt>安装来源</dt><dd class="mono">${escapeHtml(installSpec(plugin))}</dd></div>
-            <div><dt>目录更新</dt><dd>${catalogUpdated}</dd></div>
-            <div><dt>结构校验</dt><dd>${validated}</dd></div>
-            <div><dt>市场排名</dt><dd>${marketplaceRank}</dd></div>
-            <div><dt>GitHub Stars</dt><dd>${githubStars}</dd></div>
-          </dl>
-        </section>
-        <aside class="risk-note"><strong>安装前请确认仓库来源。</strong> 目录校验插件结构，不代表代码安全。插件安装后可在 dsh 中执行其声明的能力。</aside>
-        ${renderOperation(plugin)}
-      `;
-
-      if (state.phase === 'confirm-install' || state.phase === 'confirm-remove' || state.phase === 'installing' || state.phase === 'removing') {
-        actions.innerHTML = '';
+      const repo = repositoryUrl(plugin);
+      $('#detail-body').innerHTML = `<div class="detail-eyebrow">${statusBadge(plugin)}<span>${escapeHtml(plugin.category)}</span></div><h2 class="detail-heading" id="detail-title">${escapeHtml(plugin.name)}</h2><p class="detail-id">${escapeHtml(plugin.id)}</p><p class="detail-description">${escapeHtml(plugin.description)}</p><section class="detail-section"><p class="section-label">标签</p><div class="tag-row">${plugin.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div></section><section class="detail-section"><p class="section-label">来源与目录信息</p><dl class="detail-list"><div><dt>GitHub 仓库</dt><dd><a href="${escapeHtml(repo)}" target="_blank" rel="noreferrer">${escapeHtml(repo.replace('https://', ''))} ↗</a></dd></div><div><dt>安装来源</dt><dd class="mono">${escapeHtml(plugin.source)}</dd></div><div><dt>分类</dt><dd>${escapeHtml(plugin.category)}</dd></div><div><dt>GitHub Stars</dt><dd>${escapeHtml(displayStars(plugin))}</dd></div><div><dt>加入目录</dt><dd>${escapeHtml(plugin.added)}</dd></div><div><dt>目录校验</dt><dd>2026-08-18 · registry source</dd></div></dl></section><aside class="risk-note"><strong>目录校验插件结构，不代表代码安全。</strong> 安装前请确认仓库来源；插件可在 dsh 中执行其声明的能力。</aside>${operationMarkup(plugin)}`;
+      if (state.pending) {
+        $('#detail-actions').innerHTML = '';
       } else if (plugin.installed) {
-        actions.innerHTML = '<button class="button destructive" type="button" data-action="remove">卸载</button>';
+        $('#detail-actions').innerHTML = '<button class="button destructive xs" type="button" data-action="remove">卸载</button>';
       } else {
-        actions.innerHTML = '<button class="button default" type="button" data-action="install">安装</button>';
+        $('#detail-actions').innerHTML = `<button class="button default xs" type="button" data-action="install" ${plugin.source ? '' : 'disabled'}>安装</button>`;
       }
     }
 
     function render() {
-      const installedCount = plugins.filter((plugin) => plugin.installed).length;
-      $('#installed-count').textContent = String(installedCount);
-      document.querySelectorAll('[data-market-tab]').forEach((tab) => {
-        tab.setAttribute('aria-selected', String(tab.dataset.marketTab === state.tab));
-      });
-      renderCustomInstallControl();
-      renderResults();
+      $('#installed-count').textContent = String(installedPlugins().length);
+      document.querySelectorAll('[data-tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.tab === state.tab)));
+      $('#sort').value = state.sort;
+      $('#custom-content').hidden = !state.customOpen;
+      $('#custom-toggle').setAttribute('aria-expanded', String(state.customOpen));
+      renderCategories();
+      renderCards();
       renderDetail();
-      $('#profile-label').textContent = state.customInstall?.profile ?? 'web';
-      $('#source-text').textContent = `已同步 · ${state.refreshedAt}`;
     }
 
-    function setStatus(message) {
-      $('#live-status').textContent = message;
+    function parseCustomCommand(command) {
+      const match = command.trim().match(/^dsh\s+plugin\s+--profile\s+([A-Za-z0-9][A-Za-z0-9._-]{0,63})\s+add\s+([^\s]+)$/);
+      if (!match) return { error: '请输入 dsh plugin --profile <profile> add <source>。' };
+      if (match[1] !== 'web') return { error: `找不到 profile：${match[1]}。当前可用 profile 是 web。` };
+      if (/['"`;$|&<>\u0000-\u001f]/.test(match[2])) return { error: '来源格式无效。source 必须是单个安全参数。' };
+      return { profile: match[1], source: match[2] };
     }
 
-    function clearFilters() {
-      $('#search').value = '';
-      $('#category').value = 'all';
-      $('#sort').value = 'rank';
-      $('#rank-filter').value = 'all';
-      $('#stars-filter').value = 'all';
-      state.phase = 'idle';
-      render();
-      setStatus('已清除筛选，正在显示目录中的全部插件。');
-    }
-
-    function completeOperation(kind) {
-      const plugin = selectedPlugin();
-      if (!plugin) return;
-      plugin.installed = kind === 'install';
-      state.phase = 'idle';
-      render();
-      setStatus(kind === 'install' ? `${plugin.name} 已安装到 web，并已完成 profile 核验。` : `${plugin.name} 已从 web 卸载，并已完成 profile 核验。`);
-    }
-
-    function completeCustomInstall() {
-      const custom = state.customInstall;
-      if (!custom) return;
-
-      let plugin = plugins.find((item) => item.id === custom.id);
-      if (!plugin) {
-        plugin = {
-          id: custom.id,
-          name: custom.name,
-          description: '通过自定义安装命令添加。本地 profile 已确认该插件存在。',
-          category: '本地插件',
-          tags: ['自定义安装'],
-          updated: '目录未提供',
-          stars: 0,
-          rank: null,
-          installed: true,
-          ref: null,
-          validated: null,
-          subdir: '',
-          localOnly: true
-        };
-        plugins.push(plugin);
-      } else {
-        plugin.installed = true;
-      }
-
-      custom.pluginId = plugin.id;
-      state.selectedId = plugin.id;
-      state.phase = 'custom-succeeded';
-      render();
-      setStatus(`${custom.id} 已安装到 ${custom.profile}，并已完成 profile 核验。`);
-    }
-
-    $('#custom-install-form').addEventListener('submit', (event) => {
+    function handleCustomSubmit(event) {
       event.preventDefault();
-      const parsed = parseCustomCommand($('#custom-command').value);
-      if (parsed.error) {
-        state.customCommandError = parsed.error;
-        state.isCustomInstallExpanded = true;
-        renderCustomInstallControl();
-        setStatus('自定义安装命令未通过格式校验，未执行任何更改。');
-        return;
-      }
-
-      state.customCommandError = '';
-      state.customInstall = parsed;
-      state.phase = 'confirm-custom-install';
-      state.isCustomInstallExpanded = true;
+      const result = parseCustomCommand($('#custom-command').value);
+      const feedback = $('#custom-feedback');
+      feedback.textContent = result.error || '';
+      if (result.error) return;
+      state.customPreview = result;
+      state.pending = 'custom';
       render();
-      setStatus('命令已解析。请确认来源、目标 profile 与将要执行的受控命令。');
-    });
+      showToast('已解析来源，请在详情区确认安装');
+    }
 
-    $('#custom-command').addEventListener('input', () => {
-      if (!state.customCommandError) return;
-      state.customCommandError = '';
-      renderCustomInstallControl();
-    });
+    function refreshCatalog() {
+      if (state.refreshing) return;
+      state.refreshing = true;
+      $('#refresh').disabled = true;
+      $('#refresh').textContent = '↻ 刷新中';
+      window.setTimeout(() => {
+        state.refreshing = false;
+        $('#refresh').disabled = false;
+        $('#refresh').textContent = '↻ 刷新';
+        showToast('目录刷新完成');
+      }, 700);
+    }
 
     document.addEventListener('click', (event) => {
-      if (event.target.closest('#return-to-dsh')) {
-        setStatus('原型演示：这里会返回正在运行的 dsh Web UI，并保留当前插件市场的搜索与选中状态。');
-        return;
-      }
-
-      if (event.target.closest('#custom-install-toggle')) {
-        state.isCustomInstallExpanded = !state.isCustomInstallExpanded;
-        render();
-        setStatus(state.isCustomInstallExpanded ? '已展开自定义安装。输入命令后会先显示解析预览。' : '');
-        if (state.isCustomInstallExpanded) window.requestAnimationFrame(() => $('#custom-command').focus());
-        return;
-      }
-
-      const result = event.target.closest('[data-plugin-id]');
-      if (result) {
-        state.selectedId = result.dataset.pluginId;
-        state.phase = 'idle';
-        state.customInstall = null;
-        state.customCommandError = '';
+      const target = event.target.closest('button, a');
+      if (!target) return;
+      if (target.dataset.tab) {
+        state.tab = target.dataset.tab;
+        state.pending = null;
+        state.customPreview = null;
         render();
         return;
       }
-
-      const tab = event.target.closest('[data-market-tab]');
-      if (tab) {
-        state.tab = tab.dataset.marketTab;
-        state.phase = 'idle';
-        state.customInstall = null;
-        state.customCommandError = '';
-        if (state.tab !== 'market') state.isCustomInstallExpanded = false;
-        render();
-        setStatus(state.tab === 'installed' ? '正在显示 web profile 的已安装插件。' : '正在显示市场目录。');
+      if (target.dataset.category) { state.category = target.dataset.category; render(); return; }
+      if (target.dataset.pluginId) { state.selectedId = target.dataset.pluginId; state.pending = null; state.customPreview = null; render(); return; }
+      if (target.id === 'refresh') { refreshCatalog(); return; }
+      if (target.id === 'clear' || target.dataset.action === 'clear') { state.search = ''; state.category = '全部'; $('#search').value = ''; render(); return; }
+      if (target.id === 'custom-toggle') { state.customOpen = !state.customOpen; render(); return; }
+      if (target.dataset.action === 'install') { state.pending = 'install'; render(); return; }
+      if (target.dataset.action === 'remove') { state.pending = 'remove'; render(); return; }
+      if (target.dataset.action === 'cancel') { state.pending = null; render(); return; }
+      if (target.dataset.action === 'confirm') {
+        const plugin = selectedPlugin();
+        const removing = state.pending === 'remove';
+        if (state.pending === 'custom') { state.customPreview = null; state.pending = null; state.customOpen = false; showToast('自定义来源已安装并完成核验'); render(); return; }
+        if (plugin) { plugin.installed = !removing; state.pending = null; showToast(removing ? '插件已从 web profile 移除' : '插件已安装并完成核验'); render(); }
         return;
-      }
-
-      const action = event.target.closest('[data-action]')?.dataset.action;
-      if (action === 'install') {
-        state.phase = 'confirm-install';
-        render();
-        setStatus('请确认安装来源与目标 profile。');
-      }
-      if (action === 'remove') {
-        state.phase = 'confirm-remove';
-        render();
-        setStatus('请确认卸载目标。');
-      }
-      if (action === 'cancel') {
-        state.phase = 'idle';
-        render();
-        setStatus('已取消操作，未对 profile 做任何更改。');
-      }
-      if (action === 'confirm-install') {
-        state.phase = 'installing';
-        render();
-        setStatus('正在通过 Launcher 托管的 dsh 安装插件。');
-        window.setTimeout(() => completeOperation('install'), 1100);
-      }
-      if (action === 'confirm-remove') {
-        state.phase = 'removing';
-        render();
-        setStatus('正在通过 Launcher 托管的 dsh 卸载插件。');
-        window.setTimeout(() => completeOperation('remove'), 900);
-      }
-      if (action === 'custom-back') {
-        state.phase = 'idle';
-        state.customInstall = null;
-        state.isCustomInstallExpanded = true;
-        render();
-        setStatus('已返回编辑。自定义命令尚未执行。');
-        window.requestAnimationFrame(() => $('#custom-command').focus());
-      }
-      if (action === 'confirm-custom-install') {
-        state.phase = 'custom-installing';
-        render();
-        setStatus('正在通过 Launcher 托管的 dsh 安装自定义插件。');
-        window.setTimeout(completeCustomInstall, 1100);
-      }
-      if (action === 'view-custom-installed') {
-        const pluginId = state.customInstall?.pluginId;
-        state.tab = 'installed';
-        state.phase = 'idle';
-        state.selectedId = pluginId ?? state.selectedId;
-        state.customInstall = null;
-        state.customCommandError = '';
-        state.isCustomInstallExpanded = false;
-        $('#search').value = '';
-        $('#category').value = 'all';
-        $('#sort').value = 'rank';
-        $('#rank-filter').value = 'all';
-        $('#stars-filter').value = 'all';
-        render();
-        setStatus('正在显示刚刚确认安装到 web profile 的本地插件。');
-      }
-      if (event.target.closest('#clear-filters') || event.target.closest('#empty-clear')) clearFilters();
-    });
-
-    ['input', 'change'].forEach((eventName) => {
-      $('#search').addEventListener(eventName, () => { if (!isCustomPhase()) { state.phase = 'idle'; render(); } });
-      $('#category').addEventListener(eventName, () => { if (!isCustomPhase()) { state.phase = 'idle'; render(); } });
-      $('#sort').addEventListener(eventName, () => { if (!isCustomPhase()) { state.phase = 'idle'; render(); } });
-      $('#rank-filter').addEventListener(eventName, () => { if (!isCustomPhase()) { state.phase = 'idle'; render(); } });
-      $('#stars-filter').addEventListener(eventName, () => { if (!isCustomPhase()) { state.phase = 'idle'; render(); } });
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        $('#search').focus();
-      }
-      if (event.key === 'Escape' && state.phase !== 'idle') {
-        state.phase = 'idle';
-        state.customInstall = null;
-        render();
-        setStatus('已取消操作，未对 profile 做任何更改。');
       }
     });
-
+    $('#search').addEventListener('input', (event) => { state.search = event.target.value; render(); });
+    $('#sort').addEventListener('change', (event) => { state.sort = event.target.value; render(); });
+    $('#custom-form').addEventListener('submit', handleCustomSubmit);
+    $('#result-list').addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+      event.preventDefault();
+      const results = getResults();
+      const current = results.findIndex((plugin) => plugin.id === state.selectedId);
+      const delta = event.key === 'ArrowDown' ? 1 : -1;
+      state.selectedId = (results[current + delta] || results[delta > 0 ? 0 : results.length - 1])?.id || null;
+      render();
+    });
+    window.addEventListener('keydown', (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('#search').focus(); }
+    });
     render();
   </script>
 </body>

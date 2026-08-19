@@ -16,8 +16,8 @@ pub fn cache_path() -> Result<PathBuf> {
         .join(CACHE_FILE))
 }
 
-pub fn load() -> Result<Option<CatalogCache>> {
-    load_from(&cache_path()?)
+pub fn load_for_provider(provider_id: &str) -> Result<Option<CatalogCache>> {
+    load_from_for_provider(&cache_path()?, provider_id)
 }
 
 pub fn load_from(path: &Path) -> Result<Option<CatalogCache>> {
@@ -28,6 +28,10 @@ pub fn load_from(path: &Path) -> Result<Option<CatalogCache>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(LauncherError::Io(error)),
     }
+}
+
+pub fn load_from_for_provider(path: &Path, provider_id: &str) -> Result<Option<CatalogCache>> {
+    Ok(load_from(path)?.filter(|cache| cache.provider_id == provider_id))
 }
 
 pub fn save(cache: &CatalogCache) -> Result<()> {
@@ -62,18 +66,22 @@ mod tests {
             etag: Some("etag".to_string()),
             fetched_at: Utc::now(),
             response_version: Some("v1".to_string()),
+            catalog_updated_at: Some("2026-08-18".to_string()),
+            catalog_count: Some(1),
             plugins: vec![CatalogPlugin {
                 id: "owner/repo".to_string(),
                 name: "plugin".to_string(),
-                repository_url: "https://github.com/owner/repo".to_string(),
-                install_spec: InstallSpec {
+                repository_url: Some("https://github.com/owner/repo".to_string()),
+                install_spec: Some(InstallSpec {
                     owner: "owner".to_string(),
                     repository: "repo".to_string(),
                     subdirectory: None,
                     reference: None,
-                },
+                    source: "github:owner/repo".to_string(),
+                }),
                 description: "test".to_string(),
                 category: None,
+                category_id: None,
                 tags: vec![],
                 source_updated_at: None,
                 validated_at: None,
@@ -94,6 +102,18 @@ mod tests {
         save_to(&path, &cache()).unwrap();
         assert_eq!(load_from(&path).unwrap().unwrap().provider_id, "test");
         assert!(!temp.path().join(".catalog-cache-v1.json.tmp").exists());
+    }
+
+    #[test]
+    fn provider_scoped_load_ignores_a_cache_from_another_provider() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("catalog-cache-v1.json");
+        save_to(&path, &cache()).unwrap();
+
+        assert!(load_from_for_provider(&path, "awesome-dsh-registry-v1")
+            .unwrap()
+            .is_none());
+        assert!(load_from_for_provider(&path, "test").unwrap().is_some());
     }
 
     #[test]
