@@ -32,18 +32,19 @@
 - 首启读取并冻结 registry `latest`，dsh 更新提示、显式安装、立即切换、重启失败回滚。
 - Node 按平台选择 archive，安装后二进制版本校验；版本目录采用 staging + rename，`VERSION` 指针采用同目录临时文件 + `sync_all` + `rename` 原子替换。
 - Host 崩溃恢复、托盘全生命周期状态同步，以及 macOS 模板图标和 Windows/Linux 图标变体。
+- 崩溃弹窗“退出应用”操作复用托盘的 Host 优雅退出路径。
 - dsh 会话日志、最近 3 份诊断导出和 CLI shim。
 - 本地 CI matrix 与 macOS arm64/x64、Windows x64、Linux x64 未签名测试包 workflow；正式发布仍未启用。
 
 部分完成：
 
-- Node 升级与 dsh 更新的跨步骤事务：Node 已切换而后续 dsh 安装失败或取消时，目前没有自动回滚 Node 指针与对应状态。
+- 原生桌面验收：Host mock 生命周期、Node 回滚和托盘状态序列已有自动化测试；真实 Tauri 托盘/E2E 尚未在干净桌面环境验收。
 - 发布流程：CI 构建和跨平台未签名测试清单已具备，但正式签名/公证、Windows/Linux 发布验收和干净机器 smoke test 尚未完成。
-- 测试：Rust/Vue 单元测试已覆盖核心逻辑，但 mock Host 生命周期集成测试、原生托盘联动测试、Tauri E2E、覆盖率门禁和 nightly 尚未建立。
+- 测试：Rust/Vue 单元测试和 Host mock 生命周期测试已覆盖核心逻辑；原生托盘桌面 E2E、覆盖率门禁和 nightly 尚未建立。
 
 尚未实现：
 
-- 崩溃弹窗中的“退出应用”操作。
+- Tauri 原生托盘桌面 E2E、覆盖率门禁与 nightly 流程。
 - `tauri-plugin-updater`、签名元数据和 `latest.json` 发布链路。
 - Apple Developer ID/公证以及 Windows Authenticode 正式签名。
 
@@ -311,7 +312,7 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 6. 继续 dsh 安装和启动流程
 ```
 
-当前实现保留旧的版本目录用于回滚；Node 安装自身失败或取消时会清理 staging 并保留旧指针。Node 已切换而后续 dsh 安装失败或取消时的跨步骤回滚仍待实现。
+当前实现保留旧的版本目录用于回滚；Node 安装自身失败或取消时会清理 staging 并保留旧指针。dsh 更新场景会持有 Node 升级事务句柄，后续 dsh 安装失败或取消时恢复旧 Node 指针和 `state.json`。
 
 ### 5.5 崩溃恢复
 
@@ -327,7 +328,7 @@ dsh 启动后异常退出（不是启动失败，是跑了一段时间挂了）�
 4. 用户主动重启 app → crash_counter 清零
 ```
 
-当前实现已提供回滚和重试；崩溃弹窗中的“退出”操作尚未接入，用户可从系统托盘退出应用。
+当前实现已提供回滚、重试和“退出应用”操作；退出按钮与系统托盘共用 Host 优雅关闭路径。
 
 ### 5.6 终端 CLI 与 profile 插件
 
