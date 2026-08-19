@@ -3,17 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::EXPECTED_SCHEMA_VERSION;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
+    #[default]
     Light,
     Dark,
-}
-
-impl Default for ThemeMode {
-    fn default() -> Self {
-        Self::Light
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

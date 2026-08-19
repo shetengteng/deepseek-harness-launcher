@@ -379,3 +379,54 @@ pub fn cancel_node_install_command(
 ) -> bool {
     operations.cancel(&operation_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn transaction() -> NodeUpgradeTransaction {
+        NodeUpgradeTransaction {
+            upgraded_node: "24.4.0".to_string(),
+            previous_node: NodeState {
+                version: "22.19.0".to_string(),
+                installed_at: Utc::now(),
+                mirror: "https://nodejs.org/dist".to_string(),
+            },
+            previous_node_mirror: Some("https://nodejs.org/dist".to_string()),
+        }
+    }
+
+    #[test]
+    fn restore_node_state_reinstates_the_previous_version_and_mirror() {
+        let transaction = transaction();
+        let mut state = AppState::new();
+        state.node = Some(NodeState {
+            version: "24.4.0".to_string(),
+            installed_at: Utc::now(),
+            mirror: "https://nodejs.org/dist".to_string(),
+        });
+        state.node_mirror = Some("https://nodejs.org/dist".to_string());
+
+        restore_node_state(&mut state, &transaction).unwrap();
+
+        assert_eq!(state.node, Some(transaction.previous_node));
+        assert_eq!(state.node_mirror, transaction.previous_node_mirror);
+    }
+
+    #[test]
+    fn restore_node_state_rejects_a_stale_transaction() {
+        let transaction = transaction();
+        let mut state = AppState::new();
+        state.node = Some(NodeState {
+            version: "25.0.0".to_string(),
+            installed_at: Utc::now(),
+            mirror: "https://nodejs.org/dist".to_string(),
+        });
+
+        assert!(matches!(
+            restore_node_state(&mut state, &transaction),
+            Err(LauncherError::NodeVersion(_))
+        ));
+    }
+}

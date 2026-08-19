@@ -402,6 +402,27 @@ mod tests {
         assert_eq!(temporary_files, 0);
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn selecting_previous_runtime_restores_a_valid_node_pointer() {
+        let runtime = tempfile::tempdir().unwrap();
+        let previous = runtime.path().join("node-v22.19.0");
+        let upgraded = runtime.path().join("node-v24.4.0");
+        write_fake_node(&previous, "v22.19.0");
+        write_fake_node(&upgraded, "v24.4.0");
+        std::fs::write(runtime.path().join(VERSION_FILE_NAME), "24.4.0").unwrap();
+
+        select_node_version_in(runtime.path(), "22.19.0")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(runtime.path().join(VERSION_FILE_NAME)).unwrap(),
+            "22.19.0"
+        );
+        assert_eq!(current_node_dir_in(runtime.path()).unwrap(), previous);
+    }
+
     #[tokio::test]
     async fn cancellation_cleans_staging_and_preserves_the_active_runtime() {
         let runtime = tempfile::tempdir().unwrap();
