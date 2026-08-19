@@ -10,6 +10,11 @@
     <meta name="theme-color" content="#0a0e14" />
     <title>DeepSeek Harness Launcher</title>
     <link rel="icon" type="image/svg+xml" href="./launcher-mark.svg" />
+    <script>
+      if (window.localStorage.getItem("dsh-launcher-docs-theme") === "light") {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
     <style>
       :root {
         --ink: #f5f7fa;
@@ -24,6 +29,21 @@
         --green-strong: #4cdb82;
         --blue: #8cb5ff;
         color-scheme: dark;
+      }
+
+      html[data-theme="light"] {
+        --ink: #18222d;
+        --muted: #526273;
+        --subtle: #718094;
+        --canvas: #ffffff;
+        --panel: #ffffff;
+        --panel-strong: #f5f7fa;
+        --line: rgb(24 34 45 / 12%);
+        --line-strong: rgb(24 34 45 / 20%);
+        --green: #197842;
+        --green-strong: #238b50;
+        --blue: #316ec7;
+        color-scheme: light;
       }
 
       * {
@@ -65,6 +85,21 @@
         text-rendering: optimizeLegibility;
       }
 
+      html[data-theme="light"] body {
+        background:
+          radial-gradient(
+            circle at 81% -9%,
+            rgb(87 227 139 / 16%),
+            transparent 25rem
+          ),
+          radial-gradient(
+            circle at -6% 66%,
+            rgb(93 131 255 / 11%),
+            transparent 27rem
+          ),
+          var(--canvas);
+      }
+
       a {
         color: inherit;
       }
@@ -91,6 +126,13 @@
           transparent 0 16%,
           var(--canvas) 64%
         );
+      }
+
+      html[data-theme="light"] .page-grid {
+        opacity: 0.38;
+        background-image:
+          linear-gradient(rgb(24 34 45 / 7%) 1px, transparent 1px),
+          linear-gradient(90deg, rgb(24 34 45 / 7%) 1px, transparent 1px);
       }
 
       .shell {
@@ -163,7 +205,60 @@
         background: rgb(255 255 255 / 5%);
       }
 
+      .language-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        min-height: 36px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        transition:
+          border-color 180ms ease,
+          color 180ms ease,
+          background 180ms ease;
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        min-height: 36px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--muted);
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        font-size: 17px;
+        line-height: 1;
+        transition:
+          border-color 180ms ease,
+          color 180ms ease,
+          background 180ms ease;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--line-strong);
+        color: var(--ink);
+        background: rgb(255 255 255 / 5%);
+      }
+
+      .language-link:hover {
+        border-color: var(--line-strong);
+        color: var(--ink);
+        background: rgb(255 255 255 / 5%);
+      }
+
       .github-link svg,
+      .language-link svg,
       .button svg,
       .feature-index svg {
         width: 16px;
@@ -171,11 +266,33 @@
         flex: 0 0 auto;
       }
 
+      html[data-theme="light"] .button-primary {
+        color: #092212;
+        background: #9bf5be;
+        box-shadow: 0 14px 34px -16px rgb(96 240 150 / 70%);
+      }
+
+      html[data-theme="light"] .button-primary:hover {
+        background: #b4facd;
+        box-shadow: 0 18px 40px -17px rgb(96 240 150 / 80%);
+      }
+
+      html[data-theme="light"] .button-secondary,
+      html[data-theme="light"] .github-link:hover,
+      html[data-theme="light"] .language-link:hover,
+      html[data-theme="light"] .theme-toggle:hover {
+        background: rgb(24 34 45 / 4%);
+      }
+
+      html[data-theme="light"] .button-secondary:hover {
+        background: rgb(24 34 45 / 7%);
+      }
+
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 0.92fr) minmax(500px, 1.08fr);
+        grid-template-columns: minmax(0, 0.82fr) minmax(500px, 1.18fr);
         align-items: center;
-        gap: clamp(48px, 7vw, 104px);
+        gap: clamp(36px, 5vw, 76px);
         min-height: 620px;
         padding: 70px 0 92px;
       }
@@ -299,221 +416,26 @@
         filter: blur(60px);
       }
 
-      .window {
-        overflow: hidden;
+      .product-image {
+        display: block;
+        width: 100%;
+        height: auto;
         border: 1px solid rgb(255 255 255 / 15%);
         border-radius: 17px;
-        background: #101720;
         box-shadow:
           0 42px 90px -38px rgb(0 0 0 / 92%),
           0 0 0 1px rgb(255 255 255 / 3%) inset;
       }
 
-      .window-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 45px;
-        padding: 0 16px;
-        border-bottom: 1px solid var(--line);
-        background: rgb(255 255 255 / 2%);
+      html[data-theme="light"] .brand img {
+        filter: brightness(0);
       }
 
-      .window-control {
-        display: flex;
-        gap: 6px;
-      }
-
-      .window-control i {
-        display: block;
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: #576170;
-      }
-
-      .window-control i:first-child {
-        background: #f06b61;
-      }
-
-      .window-control i:nth-child(2) {
-        background: #f8c75d;
-      }
-
-      .window-control i:last-child {
-        background: #54cd82;
-      }
-
-      .window-title {
-        margin-right: 30px;
-        color: #758295;
-        font-family:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 11px;
-      }
-
-      .app-view {
-        display: grid;
-        grid-template-columns: 148px minmax(0, 1fr);
-        min-height: 350px;
-      }
-
-      .app-sidebar {
-        display: flex;
-        flex-direction: column;
-        padding: 18px 12px 15px;
-        border-right: 1px solid var(--line);
-        background: rgb(255 255 255 / 2%);
-      }
-
-      .app-brand {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 0 5px 22px;
-        color: #e7ebf1;
-        font-size: 11px;
-        font-weight: 650;
-      }
-
-      .app-brand img {
-        width: 21px;
-        height: 21px;
-      }
-
-      .app-nav {
-        display: grid;
-        gap: 4px;
-      }
-
-      .app-nav span {
-        padding: 8px 9px;
-        border-radius: 6px;
-        color: #8190a3;
-        font-size: 11px;
-      }
-
-      .app-nav span.active {
-        color: #eaf4ed;
-        background: rgb(117 235 160 / 12%);
-      }
-
-      .app-version {
-        margin-top: auto;
-        padding: 10px 9px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        color: #7d8998;
-        font-family:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 9px;
-        line-height: 1.55;
-      }
-
-      .app-version strong {
-        display: block;
-        color: #b8f4ce;
-        font-size: 10px;
-        font-weight: 600;
-      }
-
-      .app-main {
-        padding: 38px 34px 30px;
-      }
-
-      .app-overline {
-        margin: 0 0 10px;
-        color: #78e7a3;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.09em;
-        text-transform: uppercase;
-      }
-
-      .app-main h2 {
-        margin: 0;
-        font-size: clamp(20px, 2.1vw, 27px);
-        font-weight: 640;
-        letter-spacing: -0.052em;
-      }
-
-      .app-main > p:not(.app-overline) {
-        max-width: 310px;
-        margin: 11px 0 25px;
-        color: #8491a2;
-        font-size: 12px;
-        line-height: 1.6;
-      }
-
-      .runtime-card {
-        padding: 14px 15px;
-        border: 1px solid rgb(108 233 154 / 22%);
-        border-radius: 10px;
-        background: linear-gradient(
-          135deg,
-          rgb(81 215 126 / 10%),
-          rgb(81 215 126 / 3%)
-        );
-      }
-
-      .runtime-head,
-      .runtime-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .runtime-head {
-        margin-bottom: 12px;
-        color: #d7e6dc;
-        font-size: 12px;
-        font-weight: 600;
-      }
-
-      .ready {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: #9bf5be;
-        font-size: 10px;
-        font-weight: 650;
-      }
-
-      .ready::before {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        content: "";
-        background: currentColor;
-        box-shadow: 0 0 0 4px rgb(155 245 190 / 13%);
-      }
-
-      .runtime-row {
-        padding-top: 10px;
-        border-top: 1px solid rgb(155 245 190 / 12%);
-        color: #8b9aab;
-        font-size: 11px;
-      }
-
-      .runtime-row code {
-        color: #e7f3eb;
-        font-family:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 10px;
-      }
-
-      .app-launch {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 17px;
-        padding: 9px 12px;
-        border-radius: 7px;
-        color: #082212;
-        background: #9bf5be;
-        font-size: 11px;
-        font-weight: 700;
+      html[data-theme="light"] .product-image {
+        border-color: rgb(24 34 45 / 15%);
+        box-shadow:
+          0 32px 72px -42px rgb(24 34 45 / 40%),
+          0 0 0 1px rgb(24 34 45 / 3%) inset;
       }
 
       .product-caption {
@@ -530,6 +452,10 @@
         color: #91a0b2;
         font-family:
           ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      html[data-theme="light"] .product-caption span:last-child {
+        color: #68798b;
       }
 
       .section {
@@ -598,6 +524,27 @@
         );
       }
 
+      html[data-theme="light"] .feature {
+        background: linear-gradient(
+          135deg,
+          rgb(24 34 45 / 2%),
+          transparent 60%
+        );
+      }
+
+      html[data-theme="light"] .feature:hover {
+        background: linear-gradient(
+          135deg,
+          rgb(35 139 80 / 9%),
+          rgb(24 34 45 / 2%) 65%
+        );
+      }
+
+      html[data-theme="light"] .feature-index {
+        border-color: rgb(35 139 80 / 28%);
+        background: rgb(35 139 80 / 8%);
+      }
+
       .feature-index {
         display: grid;
         place-items: center;
@@ -654,6 +601,14 @@
         );
       }
 
+      html[data-theme="light"] .runway::after {
+        background: linear-gradient(
+          transparent,
+          rgb(24 34 45 / 14%),
+          transparent
+        );
+      }
+
       .runway-copy {
         position: relative;
         z-index: 1;
@@ -686,6 +641,10 @@
         border-top: 1px solid rgb(255 255 255 / 18%);
       }
 
+      html[data-theme="light"] .step {
+        border-top-color: rgb(24 34 45 / 18%);
+      }
+
       .step-number {
         color: var(--blue);
         font-family:
@@ -705,87 +664,6 @@
         color: var(--muted);
         font-size: 12px;
         line-height: 1.68;
-      }
-
-      .command-card {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(320px, 0.86fr);
-        gap: 38px;
-        margin-top: 14px;
-        padding: clamp(28px, 5vw, 58px);
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background: var(--panel);
-      }
-
-      .command-card h2 {
-        max-width: 600px;
-        margin: 12px 0 0;
-      }
-
-      .command-card p {
-        max-width: 560px;
-        margin: 18px 0 0;
-        color: var(--muted);
-        font-size: 15px;
-        line-height: 1.75;
-      }
-
-      .command-list {
-        display: grid;
-        gap: 12px;
-        margin: 25px 0 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .command-list li {
-        position: relative;
-        padding-left: 22px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.7;
-      }
-
-      .command-list li::before {
-        position: absolute;
-        top: 0.5em;
-        left: 0;
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        content: "";
-        background: var(--green-strong);
-      }
-
-      .terminal {
-        align-self: center;
-        overflow: hidden;
-        border: 1px solid var(--line-strong);
-        border-radius: 12px;
-        background: #080d13;
-        box-shadow: 0 20px 45px rgb(0 0 0 / 22%);
-      }
-
-      .terminal-bar {
-        padding: 11px 14px;
-        border-bottom: 1px solid var(--line);
-        color: var(--subtle);
-        font-size: 12px;
-      }
-
-      .terminal pre {
-        margin: 0;
-        padding: 18px;
-        color: #d8fbe5;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.9;
-        white-space: pre-wrap;
-      }
-
-      .terminal code {
-        color: inherit;
       }
 
       .closing {
@@ -839,8 +717,7 @@
 
       @media (max-width: 920px) {
         .hero,
-        .section-heading,
-        .command-card {
+        .section-heading {
           grid-template-columns: 1fr;
         }
 
@@ -856,10 +733,6 @@
 
         .section-intro {
           max-width: 560px;
-        }
-
-        .app-view {
-          min-height: 330px;
         }
       }
 
@@ -890,6 +763,16 @@
           font-size: 12px;
         }
 
+        .language-link {
+          width: 34px;
+          min-height: 34px;
+        }
+
+        .theme-toggle {
+          width: 34px;
+          min-height: 34px;
+        }
+
         .hero {
           gap: 42px;
           padding: 50px 0 62px;
@@ -916,18 +799,6 @@
           flex-direction: column;
         }
 
-        .app-view {
-          grid-template-columns: 1fr;
-        }
-
-        .app-sidebar {
-          display: none;
-        }
-
-        .app-main {
-          padding: 32px 24px 25px;
-        }
-
         .feature-grid,
         .steps {
           grid-template-columns: 1fr;
@@ -948,11 +819,6 @@
 
         .runway {
           padding: 40px 24px;
-        }
-
-        .command-card {
-          gap: 26px;
-          padding: 34px 24px;
         }
 
         .steps {
@@ -985,6 +851,16 @@
           transition-duration: 0.01ms !important;
         }
       }
+
+      @media (max-width: 400px) {
+        .nav-actions {
+          gap: 8px;
+        }
+
+        .brand span {
+          display: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -996,13 +872,48 @@
           class="brand"
           href="./index.html"
           aria-label="DeepSeek Harness Launcher 首页"
+          data-i18n-aria-label="brandAria"
         >
           <img src="./launcher-mark.svg" alt="" />
           <span>deepseek-harness-launcher</span>
         </a>
-        <nav class="nav-actions" aria-label="页面导航">
-          <a class="text-link" href="#how-it-works">工作方式</a>
-          <a class="text-link" href="#command-line">命令行</a>
+        <nav
+          class="nav-actions"
+          aria-label="页面导航"
+          data-i18n-aria-label="navigationAria"
+        >
+          <a class="text-link" href="#how-it-works" data-i18n="navHowItWorks"
+            >工作方式</a
+          >
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            aria-label="切换为浅色主题"
+          ></button>
+          <a
+            id="language-toggle"
+            class="language-link"
+            href="?lang=en"
+            aria-label="切换为英文"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m5 8 6 6" />
+              <path d="m4 14 6-6 2-3" />
+              <path d="M2 5h12" />
+              <path d="M7 2h1" />
+              <path d="m22 22-5-10-5 10" />
+              <path d="M14 18h6" />
+            </svg>
+          </a>
           <a
             class="github-link"
             href="https://github.com/shetengteng/deepseek-harness-launcher"
@@ -1020,9 +931,13 @@
       <main>
         <section class="hero" aria-labelledby="hero-title">
           <div>
-            <p class="eyebrow">DeepSeek Harness · Desktop Launcher</p>
-            <h1 id="hero-title">启动一次，<br /><em>专注 Harness。</em></h1>
-            <p class="lede">
+            <p class="eyebrow" data-i18n="heroEyebrow">
+              DeepSeek Harness · Desktop Launcher
+            </p>
+            <h1 id="hero-title" data-i18n-html="heroTitle">
+              启动一次，<br /><em>专注 Harness。</em>
+            </h1>
+            <p class="lede" data-i18n="heroLede">
               一个安静的桌面入口：替你准备 Node、安装并管理 dsh，随后直接打开
               DeepSeek Harness。少一次环境折腾，多一段连续的工作时间。
             </p>
@@ -1031,7 +946,7 @@
                 class="button button-primary"
                 href="https://github.com/shetengteng/deepseek-harness-launcher"
               >
-                查看项目
+                <span data-i18n="projectCta">查看项目</span>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -1049,54 +964,23 @@
                 class="button button-secondary"
                 href="https://github.com/deepseek-ai/deepseek-harness"
               >
-                了解 DeepSeek Harness
+                <span data-i18n="learnCta">了解 DeepSeek Harness</span>
               </a>
             </div>
           </div>
 
-          <div class="product" aria-label="应用界面示意图">
-            <div class="window">
-              <div class="window-bar">
-                <div class="window-control" aria-hidden="true">
-                  <i></i><i></i><i></i>
-                </div>
-                <span class="window-title">deepseek-harness-launcher</span>
-              </div>
-              <div class="app-view">
-                <aside class="app-sidebar" aria-hidden="true">
-                  <div class="app-brand">
-                    <img src="./launcher-mark.svg" alt="" />
-                    <span>Launcher</span>
-                  </div>
-                  <div class="app-nav">
-                    <span class="active">DeepSeek Harness</span>
-                    <span>运行时</span>
-                    <span>更新与诊断</span>
-                  </div>
-                  <div class="app-version">
-                    <strong>dsh v0.8.4</strong>Node v22.14.0
-                  </div>
-                </aside>
-                <div class="app-main">
-                  <p class="app-overline">环境已就绪</p>
-                  <h2>DeepSeek Harness 已准备好。</h2>
-                  <p>
-                    所有依赖都由启动器托管。现在打开 Harness，继续你的工作。
-                  </p>
-                  <div class="runtime-card">
-                    <div class="runtime-head">
-                      <span>本地服务</span><span class="ready">READY</span>
-                    </div>
-                    <div class="runtime-row">
-                      <span>地址</span><code>127.0.0.1:5179</code>
-                    </div>
-                  </div>
-                  <div class="app-launch">打开 DeepSeek Harness →</div>
-                </div>
-              </div>
-            </div>
+          <div class="product">
+            <img
+              id="product-image"
+              class="product-image"
+              src="./image-black.png"
+              alt="DeepSeek Harness 应用界面"
+              data-i18n-alt="productImageAlt"
+            />
             <div class="product-caption">
-              <span>运行时状态一目了然，真正工作时只留下 Harness。</span>
+              <span data-i18n="productCaption"
+                >环境准备好后，直接进入 DeepSeek Harness。</span
+              >
               <span>macOS · Windows · Linux</span>
             </div>
           </div>
@@ -1105,10 +989,14 @@
         <section class="section" aria-labelledby="features-title">
           <div class="section-heading">
             <div>
-              <p class="section-label">Designed for the boring parts</p>
-              <h2 id="features-title">把复杂留在后台，把注意力留给对话。</h2>
+              <p class="section-label" data-i18n="featuresLabel">
+                Designed for the boring parts
+              </p>
+              <h2 id="features-title" data-i18n="featuresTitle">
+                把复杂留在后台，把注意力留给对话。
+              </h2>
             </div>
-            <p class="section-intro">
+            <p class="section-intro" data-i18n="featuresIntro">
               启动器并不打断你的流程。它只在该出现的时候出现：第一次准备环境、版本需要确认，或在异常后帮你回到可用状态。
             </p>
           </div>
@@ -1129,8 +1017,8 @@
                   <path d="M5 21h14" />
                 </svg>
               </div>
-              <h3>首启自动准备</h3>
-              <p>
+              <h3 data-i18n="featureOneTitle">首启自动准备</h3>
+              <p data-i18n="featureOneBody">
                 把匹配的 Node 下载到应用自己的数据目录，再安装当前
                 dsh。无需配置全局环境，也不碰你现有的项目。
               </p>
@@ -1149,8 +1037,8 @@
                   <path d="M21 3v6h-6" />
                 </svg>
               </div>
-              <h3>升级由你确认</h3>
-              <p>
+              <h3 data-i18n="featureTwoTitle">升级由你确认</h3>
+              <p data-i18n="featureTwoBody">
                 发现新版时只提示，不擅自打断。确认升级后再切换到新版本，让每次变化都在你掌控中。
               </p>
             </article>
@@ -1170,8 +1058,8 @@
                   <path d="m8 13-4 4 4 4" />
                 </svg>
               </div>
-              <h3>出错仍可继续</h3>
-              <p>
+              <h3 data-i18n="featureThreeTitle">出错仍可继续</h3>
+              <p data-i18n="featureThreeBody">
                 新版本启动失败时，自动回到上一个已经验证可用的版本；诊断信息也随时可以导出，方便排查。
               </p>
             </article>
@@ -1181,9 +1069,13 @@
         <section class="section" id="how-it-works" aria-labelledby="flow-title">
           <div class="runway">
             <div class="runway-copy">
-              <p class="section-label">Three calm steps</p>
-              <h2 id="flow-title">从安装到开始工作，不必再研究环境。</h2>
-              <p class="section-intro">
+              <p class="section-label" data-i18n="flowLabel">
+                Three calm steps
+              </p>
+              <h2 id="flow-title" data-i18n="flowTitle">
+                从安装到开始工作，不必再研究环境。
+              </h2>
+              <p class="section-intro" data-i18n="flowIntro">
                 启动器把依赖、版本与本地服务串成一个可靠的起点；你只需要在准备完成后进入
                 Harness。
               </p>
@@ -1191,54 +1083,77 @@
             <div class="steps">
               <article class="step">
                 <span class="step-number">01</span>
-                <h3>打开启动器</h3>
-                <p>首次运行时，它识别本机状态并准备需要的 Node 运行时。</p>
+                <h3 data-i18n="stepOneTitle">打开启动器</h3>
+                <p data-i18n="stepOneBody">
+                  首次运行时，它识别本机状态并准备需要的 Node 运行时。
+                </p>
               </article>
               <article class="step">
                 <span class="step-number">02</span>
-                <h3>托管 dsh</h3>
-                <p>安装、校验与版本切换都在专属目录中完成，不干扰系统环境。</p>
+                <h3 data-i18n="stepTwoTitle">托管 dsh</h3>
+                <p data-i18n="stepTwoBody">
+                  安装、校验与版本切换都在专属目录中完成，不干扰系统环境。
+                </p>
               </article>
               <article class="step">
                 <span class="step-number">03</span>
-                <h3>直接进入 Harness</h3>
-                <p>本地服务就绪后，主窗口直接承载 DeepSeek Harness。</p>
+                <h3 data-i18n="stepThreeTitle">直接进入 Harness</h3>
+                <p data-i18n="stepThreeBody">
+                  本地服务就绪后，主窗口直接承载 DeepSeek Harness。
+                </p>
               </article>
             </div>
           </div>
         </section>
 
-        <section class="section" id="command-line" aria-labelledby="command-title">
-          <div class="command-card">
+        <section class="section" id="download" aria-labelledby="download-title">
+          <div class="section-heading">
             <div>
-              <p class="section-label">Terminal, when you need it</p>
-              <h2 id="command-title">也可以在终端直接使用 <code>dsh</code>。</h2>
-              <p>
-                完成首次启动后，在 Launcher 的「设置」→「命令行」中点击「安装
-                <code>dsh</code> 命令」。它会创建一个稳定入口，始终指向 Launcher
-                托管的 Node.js 和当前 dsh 版本，无需 <code>npm install -g</code>。
+              <p class="section-label" data-i18n="releaseLabel">Test builds</p>
+              <h2 id="download-title" data-i18n="releaseTitle">
+                先把体验跑通，再准备正式签名。
+              </h2>
+            </div>
+            <p class="section-intro" data-i18n="releaseIntro">
+              当前提供的安装包用于受控测试：macOS 使用 ad-hoc 签名，Windows 和
+              Linux 暂未签名。正式签名、公证和自动更新将在发布阶段启用。
+            </p>
+          </div>
+          <div class="steps">
+            <article class="step">
+              <span class="step-number">macOS</span>
+              <h3 data-i18n="releaseMacTitle">下载后清除隔离属性</h3>
+              <p data-i18n="releaseMacBody">
+                将应用拖到“应用程序”后，在终端执行下面的命令，再打开应用。Gatekeeper
+                提示是未公证测试包的预期行为。
               </p>
-              <ul class="command-list">
-                <li>macOS/Linux：安装到 <code>~/.local/bin/dsh</code>。</li>
-                <li>首次安装后将该目录加入 <code>PATH</code>，再重新打开终端。</li>
-                <li>以后升级或回滚 dsh，不需要重新安装这个命令。</li>
-              </ul>
-            </div>
-            <div class="terminal" aria-label="macOS 终端配置示例">
-              <div class="terminal-bar">macOS Terminal</div>
-              <pre><code># 首次安装后，在 ~/.zprofile 加入
-export PATH="$HOME/.local/bin:$PATH"
-
-# 关闭并重新打开终端后验证
-dsh --help</code></pre>
-            </div>
+              <pre><code>xattr -cr /Applications/deepseek-harness-launcher.app</code></pre>
+            </article>
+            <article class="step">
+              <span class="step-number">Windows</span>
+              <h3 data-i18n="releaseWindowsTitle">仅在测试机上继续运行</h3>
+              <p data-i18n="releaseWindowsBody">
+                当前 Windows 测试包未使用 Authenticode，SmartScreen
+                的“未知发布者”提示是预期行为。不要关闭系统级 SmartScreen。
+              </p>
+            </article>
+            <article class="step">
+              <span class="step-number">Linux</span>
+              <h3 data-i18n="releaseLinuxTitle">验证安装与卸载</h3>
+              <p data-i18n="releaseLinuxBody">
+                AppImage 和 deb 仅用于测试，请在干净环境完成首启、Node/dsh
+                安装、Host 启动、托盘退出和卸载验证。
+              </p>
+            </article>
           </div>
         </section>
 
         <section class="closing" aria-labelledby="closing-title">
           <div>
-            <h2 id="closing-title">让第一次启动，成为最后一次环境配置。</h2>
-            <p>
+            <h2 id="closing-title" data-i18n="closingTitle">
+              让第一次启动，成为最后一次环境配置。
+            </h2>
+            <p data-i18n="closingLede">
               DeepSeek Harness Launcher
               是一个轻量的桌面壳子，专注把入口做得可靠、干净，也足够不打扰。
             </p>
@@ -1247,7 +1162,7 @@ dsh --help</code></pre>
             class="button button-primary"
             href="https://github.com/shetengteng/deepseek-harness-launcher"
           >
-            前往 GitHub
+            <span data-i18n="closingCta">前往 GitHub</span>
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -1273,5 +1188,149 @@ dsh --help</code></pre>
         </p>
       </footer>
     </div>
+    <script>
+      const englishCopy = {
+        title: "DeepSeek Harness Launcher",
+        description:
+          "DeepSeek Harness Launcher prepares Node, manages dsh, and opens DeepSeek Harness on your desktop.",
+        brandAria: "DeepSeek Harness Launcher home",
+        navigationAria: "Page navigation",
+        navHowItWorks: "How it works",
+        heroEyebrow: "DeepSeek Harness · Desktop Launcher",
+        heroTitle: "Launch once.<br /><em>Stay focused on Harness.</em>",
+        heroLede:
+          "A quiet desktop entry point that prepares Node, installs and manages dsh, then opens DeepSeek Harness directly. Spend less time on setup and more time in a continuous flow.",
+        projectCta: "View project",
+        learnCta: "Explore DeepSeek Harness",
+        productImageAlt: "DeepSeek Harness application interface",
+        productCaption:
+          "Once the environment is ready, enter DeepSeek Harness directly.",
+        featuresLabel: "Designed for the boring parts",
+        featuresTitle:
+          "Keep the complexity in the background, and your attention on the conversation.",
+        featuresIntro:
+          "The launcher does not interrupt your flow. It appears only when it should: to prepare the first environment, confirm a version, or help restore a working state after an issue.",
+        featureOneTitle: "Prepared automatically on first launch",
+        featureOneBody:
+          "It downloads the matching Node runtime into its own data directory, then installs the current dsh. No global setup and no changes to your existing projects.",
+        featureTwoTitle: "Updates stay in your control",
+        featureTwoBody:
+          "New versions are surfaced without an interruption. Switch only after you confirm, so every change remains deliberate.",
+        featureThreeTitle: "Keep moving when something fails",
+        featureThreeBody:
+          "If a new version cannot start, the launcher returns to the last verified version. Diagnostic information is ready to export whenever you need it.",
+        flowLabel: "Three calm steps",
+        flowTitle:
+          "From installation to work, there is no environment left to study.",
+        flowIntro:
+          "The launcher turns dependencies, versions, and the local service into one reliable starting point. You only need to enter Harness once everything is ready.",
+        stepOneTitle: "Open the launcher",
+        stepOneBody:
+          "On first run, it checks your machine and prepares the Node runtime it needs.",
+        stepTwoTitle: "Host dsh",
+        stepTwoBody:
+          "Installation, verification, and version switching happen in a dedicated directory without affecting your system environment.",
+        stepThreeTitle: "Enter Harness directly",
+        stepThreeBody:
+          "Once the local service is ready, the main window hosts DeepSeek Harness directly.",
+        closingTitle:
+          "Make your first launch the last time you configure an environment.",
+        closingLede:
+          "DeepSeek Harness Launcher is a lightweight desktop shell focused on making the entry point dependable, clean, and unobtrusive.",
+        closingCta: "Go to GitHub",
+        releaseLabel: "Test builds",
+        releaseTitle: "Run the experience first. Sign it for release later.",
+        releaseIntro:
+          "Current packages are for controlled testing: macOS uses an ad-hoc signature, while Windows and Linux packages are unsigned. Formal signing, notarization, and updates will be enabled for the release phase.",
+        releaseMacTitle: "Clear quarantine after download",
+        releaseMacBody:
+          "Move the app to Applications, run the command below in Terminal, then open it. Gatekeeper warnings are expected for an unnotarized test build.",
+        releaseWindowsTitle: "Continue only on a test machine",
+        releaseWindowsBody:
+          "The current Windows test package is not Authenticode-signed, so SmartScreen may show an unknown publisher warning. Do not disable SmartScreen globally.",
+        releaseLinuxTitle: "Verify install and uninstall",
+        releaseLinuxBody:
+          "The AppImage and deb packages are test builds. On a clean environment, verify first launch, Node/dsh setup, Host start, tray exit, and uninstall.",
+      };
+
+      const currentLanguage = new URLSearchParams(window.location.search).get(
+        "lang",
+      );
+      const isEnglish = currentLanguage === "en";
+      const languageToggle = document.querySelector("#language-toggle");
+      const themeToggle = document.querySelector("#theme-toggle");
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      const productImage = document.querySelector("#product-image");
+
+      if (isEnglish) {
+        document.documentElement.lang = "en";
+        document.title = englishCopy.title;
+        document.querySelector('meta[name="description"]').content =
+          englishCopy.description;
+
+        document.querySelectorAll("[data-i18n]").forEach((element) => {
+          element.textContent = englishCopy[element.dataset.i18n];
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach((element) => {
+          element.innerHTML = englishCopy[element.dataset.i18nHtml];
+        });
+        document
+          .querySelectorAll("[data-i18n-aria-label]")
+          .forEach((element) => {
+            element.setAttribute(
+              "aria-label",
+              englishCopy[element.dataset.i18nAriaLabel],
+            );
+          });
+        document.querySelectorAll("[data-i18n-alt]").forEach((element) => {
+          element.setAttribute("alt", englishCopy[element.dataset.i18nAlt]);
+        });
+      }
+
+      languageToggle.href = isEnglish ? "?lang=zh" : "?lang=en";
+      languageToggle.setAttribute(
+        "aria-label",
+        isEnglish ? "Switch language to Chinese" : "切换为英文",
+      );
+
+      const setTheme = (theme) => {
+        const isLight = theme === "light";
+        const nextThemeLabel = isEnglish
+          ? isLight
+            ? "dark"
+            : "light"
+          : isLight
+            ? "深色"
+            : "浅色";
+
+        document.documentElement.dataset.theme = theme;
+        window.localStorage.setItem("dsh-launcher-docs-theme", theme);
+        themeColor.content = isLight ? "#ffffff" : "#0a0e14";
+        productImage.src = isLight ? "./image.png" : "./image-black.png";
+        themeToggle.textContent = isLight ? "☾" : "☼";
+        themeToggle.setAttribute(
+          "aria-label",
+          isEnglish
+            ? `Switch to ${nextThemeLabel} theme`
+            : `切换为${nextThemeLabel}主题`,
+        );
+        themeToggle.setAttribute(
+          "title",
+          isEnglish
+            ? `Switch to ${nextThemeLabel} theme`
+            : `切换为${nextThemeLabel}主题`,
+        );
+        themeToggle.setAttribute("aria-pressed", String(isLight));
+      };
+
+      setTheme(
+        document.documentElement.dataset.theme === "light" ? "light" : "dark",
+      );
+      themeToggle.addEventListener("click", () => {
+        setTheme(
+          document.documentElement.dataset.theme === "light" ? "dark" : "light",
+        );
+      });
+    </script>
   </body>
 </html>

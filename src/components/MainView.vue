@@ -16,6 +16,7 @@ import AboutDialog from "@/components/AboutDialog.vue";
 import { useDshExternalLinks } from "@/composables/useDshExternalLinks";
 import { useTrayEvents } from "@/composables/useTrayEvents";
 import { useI18n } from "@/lib/i18n";
+import { exitApp } from "@/lib/tauri";
 import { useLauncherStore } from "@/stores/launcher";
 
 type SettingsSection = "settings" | "plugins";
@@ -37,6 +38,10 @@ function handleUpgradeReady(origin: string): void {
 
 function handleNodeUpdated(version: string): void {
   store.nodeVersion = version;
+}
+
+function handleExitApp(): void {
+  void exitApp();
 }
 
 function openSettingsPage(section: SettingsSection): void {
@@ -184,6 +189,7 @@ onMounted(async () => {
       @retry="store.retryAfterCrash()"
       @rollback="store.rollbackAfterCrash()"
       @dismiss="store.dismissCrash()"
+      @exit="handleExitApp"
     />
 
     <DshUpdateDialog @open-settings="openSettingsPage('settings')" />

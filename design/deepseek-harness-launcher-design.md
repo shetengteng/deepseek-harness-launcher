@@ -25,6 +25,30 @@
 - 设置页只保留版本、检查更新、更新源和诊断信息等必要操作
 - 持久化只使用 `state.json` 和版本目录，不引入数据库、历史版本管理或复杂任务队列
 
+## 当前实现进度（2026-08-19）
+
+已实现：
+
+- 首启读取并冻结 registry `latest`，dsh 更新提示、显式安装、立即切换、重启失败回滚。
+- Node 按平台选择 archive，安装后二进制版本校验；版本目录采用 staging + rename，`VERSION` 指针采用同目录临时文件 + `sync_all` + `rename` 原子替换。
+- Host 崩溃恢复、托盘全生命周期状态同步，以及 macOS 模板图标和 Windows/Linux 图标变体。
+- dsh 会话日志、最近 3 份诊断导出和 CLI shim。
+- 本地 CI matrix 与 macOS arm64/x64、Windows x64、Linux x64 未签名测试包 workflow；正式发布仍未启用。
+
+部分完成：
+
+- Node 升级与 dsh 更新的跨步骤事务：Node 已切换而后续 dsh 安装失败或取消时，目前没有自动回滚 Node 指针与对应状态。
+- 发布流程：CI 构建和跨平台未签名测试清单已具备，但正式签名/公证、Windows/Linux 发布验收和干净机器 smoke test 尚未完成。
+- 测试：Rust/Vue 单元测试已覆盖核心逻辑，但 mock Host 生命周期集成测试、原生托盘联动测试、Tauri E2E、覆盖率门禁和 nightly 尚未建立。
+
+尚未实现：
+
+- 崩溃弹窗中的“退出应用”操作。
+- `tauri-plugin-updater`、签名元数据和 `latest.json` 发布链路。
+- Apple Developer ID/公证以及 Windows Authenticode 正式签名。
+
+离线安装包、多 profile、dsh Web 前后端兼容性校验仍属于 v2/发布决策，不是当前实现阻塞项。
+
 ## 2. 与 dsh 的关系
 
 deepseek-harness-launcher 是 dsh 的"运行环境管家"，二者通过稳定契约通信：
@@ -280,13 +304,14 @@ Linux:   ~/.local/share/deepseek-harness-launcher/
 
 ```
 1. 弹窗："dsh 0.2.0 需要 Node 24+，当前 22.19.0"
-2. 用户确认 → 下载 Node 24 到 node-runtime-new/
-3. 校验 SHA-256
-4. 原子切换：重命名 node-runtime → node-runtime-old，node-runtime-new → node-runtime
-5. 更新 state.json
-6. 删除 node-runtime-old
-7. 继续启动流程
+2. 用户确认 → 下载 Node 24 到版本化 staging 目录
+3. 校验 SHA-256，并执行受管 `node --version` 确认二进制版本
+4. 将 staging 目录提升为 `node-runtime/node-v24.x/`，再用同目录临时文件 + `sync_all` + `rename` 原子替换 `node-runtime/VERSION`
+5. 更新 `state.json`
+6. 继续 dsh 安装和启动流程
 ```
+
+当前实现保留旧的版本目录用于回滚；Node 安装自身失败或取消时会清理 staging 并保留旧指针。Node 已切换而后续 dsh 安装失败或取消时的跨步骤回滚仍待实现。
 
 ### 5.5 崩溃恢复
 
@@ -301,6 +326,8 @@ dsh 启动后异常退出（不是启动失败，是跑了一段时间挂了）�
    - 选项：[回滚到 known_good] [继续重试] [退出]
 4. 用户主动重启 app → crash_counter 清零
 ```
+
+当前实现已提供回滚和重试；崩溃弹窗中的“退出”操作尚未接入，用户可从系统托盘退出应用。
 
 ### 5.6 终端 CLI 与 profile 插件
 
@@ -454,16 +481,16 @@ dsh 作为远程页面不配置任何 Tauri `remote` capability，不能直接�
 
 ## 9. 跨平台差异
 
-| 平台    | Node 路径               | 符号链接     | 签名                 |
-| ------- | ----------------------- | ------------ | -------------------- |
-| macOS   | `node-runtime/bin/node` | `symlink(2)` | Developer ID + 公证  |
-| Windows | `node-runtime\node.exe` | 用 JSON 指针 | Authenticode（待做） |
-| Linux   | `node-runtime/bin/node` | `symlink(2)` | 无                   |
+| 平台    | Node 路径               | 版本选择方式                         | 当前发布状态                         |
+| ------- | ----------------------- | ------------------------------------ | ------------------------------------ |
+| macOS   | `node-runtime/bin/node` | `VERSION` 指针 + 版本目录            | ad-hoc 测试包；Developer ID/公证待做  |
+| Windows | `node-runtime\node.exe` | `VERSION` 指针 + 版本目录            | NSIS CI 构建；Authenticode 待做       |
+| Linux   | `node-runtime/bin/node` | `VERSION` 指针 + 版本目录            | AppImage/deb CI 构建；无签名           |
 
 macOS 额外处理：
 
 - 不主动移除下载文件的 `com.apple.quarantine` 扩展属性，保留 macOS 安全检查
-- Hardened Runtime 下要给 node 二进制单独签名
+- 正式发布前必须确定托管 Node 可执行文件的签名/分发方案；Developer ID 私钥不得放入客户端，优先由 CI 预签名并校验 Node archive
 - App Sandbox 要允许执行用户目录下的二进制（entitlements）
 
 ## 10. 配置项
@@ -508,6 +535,8 @@ macOS 额外处理：
 
 ### 12.1 CI matrix
 
+当前已写入本地 CI workflow，覆盖 macOS arm64/x64、Windows x64 和 Linux x64，并构建对应 bundle。另有手动触发的 unsigned test release workflow：macOS 使用 ad-hoc identity `-`，Windows/Linux 不签名，产物仅进入 Draft + Prerelease；远程 GitHub Actions 运行结果尚未取得。
+
 ```yaml
 strategy:
   matrix:
@@ -532,6 +561,8 @@ strategy:
 
 ### 12.3 壳子自身升级
 
+目标方案如下，当前尚未实现 updater 插件、签名元数据或 `latest.json` 发布链路。
+
 壳子本身用 Tauri 的 `updater` 插件（`tauri-plugin-updater`）：
 
 - 发布时同时推 `latest.json` 到 GitHub Releases
@@ -544,7 +575,7 @@ strategy:
 
 1. **首次启动必须联网**——下载 Node 和 dsh。后续离线可用。
 2. **dsh 的破坏性变更**——dsh 处于预览期，可能改 CLI 接口。显式安装最新版本、`engines.node` 校验与回滚能降低风险，但极端情况下仍需手动干预。
-3. **Windows 符号链接**——普通用户权限下不能创建符号链接，用 JSON 指针替代，切换版本不是原子操作。
+3. **跨步骤事务**——各平台使用 `VERSION` 指针选择版本，指针本身通过同目录临时文件 + `rename` 原子替换；Node 指针与 dsh `current`、`state.json` 的多文件更新仍不是一个跨步骤原子事务。
 4. **macOS 沙盒**——如果上架 App Store，沙盒限制可能阻止执行用户目录下的 node。非 App Store 分发用 Developer ID 签名可绕过。
 5. **dsh 依赖体积**——160+ 个 workspace 包，首次 `npm install` 较慢（30 秒–2 分钟），靠镜像源和进度条缓解。
 

@@ -5,6 +5,12 @@ use crate::error::{LauncherError, Result};
 use crate::state::{AppState, StateStatus};
 
 #[tauri::command]
+pub fn exit_app_command(app: tauri::AppHandle) -> Result<()> {
+    crate::tray::request_exit(app);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn rollback_dsh_command() -> Result<String> {
     use crate::dsh::version::rollback_to_known_good;
     let mut state = match AppState::load()? {

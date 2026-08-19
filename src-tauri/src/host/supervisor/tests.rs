@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(unix)]
+use std::time::Duration;
 
 use tokio::sync::Mutex;
 
@@ -9,6 +11,27 @@ use super::output::append_output;
 use super::*;
 use crate::host::readiness::MAX_STARTUP_OUTPUT_CHARS;
 use crate::host::SpawnDshWebOptions;
+
+#[cfg(unix)]
+fn mock_host_options(temp: &tempfile::TempDir, mode: &str) -> SpawnDshWebOptions {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = temp.path().join("mock-host.sh");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\ncase \"$DSH_TEST_MODE\" in\n  ready) printf 'dsh web: http://127.0.0.1:43123/\\n'; while true; do sleep 1; done ;;\n  exit) printf 'dsh web: http://127.0.0.1:43123/\\n'; exit 17 ;;\n  timeout) sleep 30 ;;\nesac\n",
+    )
+    .expect("mock host script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("mock host executable");
+    SpawnDshWebOptions {
+        node_executable: script,
+        cli_entry: PathBuf::from("/tmp/mock-dsh-entry.js"),
+        cwd: temp.path().to_path_buf(),
+        env: HashMap::from([("DSH_TEST_MODE".to_string(), mode.to_string())]),
+        electron_run_as_node: false,
+    }
+}
 
 #[tokio::test]
 async fn shutdown_without_start_is_noop() {
@@ -83,4 +106,85 @@ async fn each_startup_parser_accepts_its_own_random_port() {
         .expect("restarted host origin");
 
     assert_eq!(origin.as_str(), "http://127.0.0.1:52819");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn mock_host_ready_then_shutdown_has_no_unexpected_exit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let supervisor = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
+    let called = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&called);
+    supervisor.set_exit_handler(Arc::new(move |_| {
+        flag.store(true, Ordering::Release);
+    }));
+
+    let origin = supervisor
+        .start(&mock_host_options(&temp, "ready"))
+        .await
+        .expect("mock host ready");
+    assert_eq!(origin.as_str(), "http://127.0.0.1:43123");
+    supervisor.shutdown().await.await_completion().await;
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert!(!called.load(Ordering::Acquire));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn mock_host_readiness_timeout_kills_child() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let config = HostSupervisorConfig {
+        readiness_timeout: Duration::from_millis(40),
+        ..HostSupervisorConfig::default()
+    };
+    let supervisor = Arc::new(HostSupervisor::new(config));
+    let error = supervisor
+        .start(&mock_host_options(&temp, "timeout"))
+        .await
+        .expect_err("mock host should time out");
+    assert!(matches!(error, HostSupervisorError::ReadinessTimeout(_)));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn mock_host_unexpected_exit_invokes_handler() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let supervisor = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
+    let called = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&called);
+    supervisor.set_exit_handler(Arc::new(move |detail| {
+        assert_eq!(detail.code, Some(17));
+        flag.store(true, Ordering::Release);
+    }));
+    supervisor
+        .start(&mock_host_options(&temp, "exit"))
+        .await
+        .expect("mock host ready before exit");
+
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !called.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("unexpected exit callback");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn mock_host_restart_does_not_report_intentional_exit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let supervisor = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
+    let called = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&called);
+    supervisor.set_exit_handler(Arc::new(move |_| {
+        flag.store(true, Ordering::Release);
+    }));
+    let options = mock_host_options(&temp, "ready");
+    supervisor.start(&options).await.expect("first start");
+    let restarted = supervisor.restart(&options).await.expect("restart");
+    assert_eq!(restarted.as_str(), "http://127.0.0.1:43123");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!called.load(Ordering::Acquire));
+    supervisor.shutdown().await.await_completion().await;
 }

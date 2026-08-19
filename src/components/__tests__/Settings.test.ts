@@ -10,6 +10,8 @@ const api = vi.hoisted(() =>
       "installDshCli",
       "installDsh",
       "upgradeNode",
+      "upgradeNodeForDshUpdate",
+      "rollbackNodeUpgrade",
       "restartHostAfterDshUpdate",
       "setNodeMirror",
       "setRegistry",
@@ -74,6 +76,18 @@ function state(current: string | null) {
     installed: [],
     node_mirror: "https://nodejs.org/dist",
     registry: "https://registry.npmjs.org",
+  };
+}
+
+function nodeUpgradeTransaction() {
+  return {
+    upgraded_node: "24.4.0",
+    previous_node: {
+      version: "22.19.0",
+      installed_at: "2026-08-19T00:00:00Z",
+      mirror: "https://nodejs.org/dist",
+    },
+    previous_node_mirror: "https://nodejs.org/dist",
   };
 }
 
@@ -430,7 +444,7 @@ test("upgrades Node after confirmation and then installs the displayed dsh", asy
       },
     })
     .mockResolvedValueOnce("0.1.0");
-  api.upgradeNode.mockResolvedValue("24.4.0");
+  api.upgradeNodeForDshUpdate.mockResolvedValue(nodeUpgradeTransaction());
   const wrapper = mount(Settings, { attachTo: document.body });
   await flushPromises();
 
@@ -441,7 +455,7 @@ test("upgrades Node after confirmation and then installs the displayed dsh", asy
     ?.click();
   await flushPromises();
 
-  expect(api.upgradeNode).toHaveBeenCalledWith({
+  expect(api.upgradeNodeForDshUpdate).toHaveBeenCalledWith({
     version: "24.4.0",
     operationId: expect.any(String),
   });

@@ -116,9 +116,7 @@ pub async fn install_node_to(
         }
     }
 
-    if let Err(error) =
-        activate_installed_node(runtime_dir, version, &target_dir, progress_tx).await
-    {
+    if let Err(error) = activate_installed_node(runtime_dir, version, progress_tx).await {
         if created {
             let _ = std::fs::remove_dir_all(&target_dir);
         }
@@ -184,9 +182,7 @@ pub(crate) async fn install_node_to_cancellable(
         }
         return Err(error);
     }
-    if let Err(error) =
-        activate_installed_node(runtime_dir, version, &target_dir, progress_tx).await
-    {
+    if let Err(error) = activate_installed_node(runtime_dir, version, progress_tx).await {
         if created {
             cleanup_created_runtime(
                 runtime_dir,
@@ -320,12 +316,18 @@ pub async fn install_node(
 async fn activate_installed_node(
     runtime_dir: &Path,
     version: &str,
-    target_dir: &Path,
     progress_tx: Option<&mpsc::Sender<ProgressEvent>>,
 ) -> Result<()> {
-    verify_node_binary(target_dir, version).await?;
-    write_version_pointer(runtime_dir, version.as_bytes())?;
+    select_node_version_in(runtime_dir, version).await?;
     send_extract_progress(progress_tx, Some(0));
+    Ok(())
+}
+
+/// 验证并切换到已经存在的 Node 版本目录。
+pub async fn select_node_version_in(runtime_dir: &Path, version: &str) -> Result<()> {
+    let target_dir = runtime_dir.join(format!("node-v{version}"));
+    verify_node_binary(&target_dir, version).await?;
+    write_version_pointer(runtime_dir, version.as_bytes())?;
     Ok(())
 }
 

@@ -4,7 +4,7 @@ mod app;
 pub mod cli_shim;
 mod navigation;
 mod platform;
-mod tray;
+pub(crate) mod tray;
 
 pub mod commands;
 pub mod dsh;

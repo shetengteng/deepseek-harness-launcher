@@ -20,7 +20,7 @@ pub(crate) use download::{download_with_retry_cancellable, remove_archive};
 pub use install::{
     archive_kind_for_current_platform, current_node_dir, current_node_dir_in, current_node_version,
     current_node_version_in, install_node, install_node_to, node_archive_filename, node_bin_path,
-    node_npm_path, verify_node_binary, NodeArchiveKind,
+    node_npm_path, select_node_version_in, verify_node_binary, NodeArchiveKind,
 };
 pub(crate) use install::{cleanup_cancelled_install, install_node_to_cancellable};
 pub use mirror::{

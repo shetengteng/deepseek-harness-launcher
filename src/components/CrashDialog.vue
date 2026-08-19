@@ -4,7 +4,7 @@
 // 选项：重试（清零计数器重启）/ 回滚 known_good / 忽略。
 
 import { computed } from "vue";
-import { AlertTriangle, RotateCcw, Undo2, X } from "lucide-vue-next";
+import { AlertTriangle, LogOut, RotateCcw, Undo2, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,6 +31,8 @@ const emit = defineEmits<{
   (e: "rollback"): void;
   /** 用户点"忽略"：关闭弹窗不重启。 */
   (e: "dismiss"): void;
+  /** 用户点"退出应用"：走后端托盘的优雅退出流程。 */
+  (e: "exit"): void;
 }>();
 
 const open = computed(() => props.crash !== null);
@@ -71,6 +73,10 @@ const exitDetail = computed(() => {
         <Button variant="outline" :disabled="recovering" @click="emit('dismiss')">
           <X class="h-4 w-4 mr-2" />
           {{ t("crash.dismiss") }}
+        </Button>
+        <Button variant="destructive" :disabled="recovering" @click="emit('exit')">
+          <LogOut class="h-4 w-4 mr-2" />
+          {{ t("crash.exit") }}
         </Button>
         <Button
           v-if="canRollback"

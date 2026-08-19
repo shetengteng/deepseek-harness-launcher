@@ -4,7 +4,7 @@ use tauri::{Emitter, State};
 use crate::commands::host::host_platform_arch;
 use crate::error::{LauncherError, Result};
 use crate::node::{self, Mirror, MirrorId};
-use crate::state::{AppState, StateStatus};
+use crate::state::{AppState, NodeState, StateStatus};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -25,10 +25,26 @@ pub struct NodeUpdateTarget {
     pub update_available: bool,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeUpgradeTransaction {
+    pub upgraded_node: String,
+    pub previous_node: NodeState,
+    pub previous_node_mirror: Option<String>,
+}
+
 #[tauri::command]
 pub async fn install_node_command(
     app: tauri::AppHandle,
     operations: State<'_, node::NodeDownloadOperations>,
+    args: InstallNodeArgs,
+) -> Result<String> {
+    install_node_command_inner(app, operations.inner(), args).await
+}
+
+async fn install_node_command_inner(
+    app: tauri::AppHandle,
+    operations: &node::NodeDownloadOperations,
     args: InstallNodeArgs,
 ) -> Result<String> {
     use crate::node::{
@@ -197,6 +213,95 @@ pub async fn upgrade_node_command(
         },
     )
     .await
+}
+
+#[tauri::command]
+pub async fn upgrade_node_for_dsh_update_command(
+    app: tauri::AppHandle,
+    operations: State<'_, node::NodeDownloadOperations>,
+    version: String,
+    operation_id: String,
+) -> Result<NodeUpgradeTransaction> {
+    let state = match AppState::load()? {
+        StateStatus::FirstRun => {
+            return Err(LauncherError::NodeNotInstalled {
+                reason: "cannot upgrade Node before the first-run runtime exists".to_string(),
+            })
+        }
+        StateStatus::Loaded(state) => *state,
+    };
+    let previous_node = state
+        .node
+        .clone()
+        .ok_or_else(|| LauncherError::NodeNotInstalled {
+            reason: "cannot upgrade Node before a managed runtime exists".to_string(),
+        })?;
+    let mirror_base_url = state
+        .node_mirror
+        .clone()
+        .unwrap_or_else(|| previous_node.mirror.clone());
+    let upgraded_node = install_node_command_inner(
+        app,
+        operations.inner(),
+        InstallNodeArgs {
+            version,
+            operation_id,
+            mirror_base_url,
+            platform: String::new(),
+            arch: String::new(),
+        },
+    )
+    .await?;
+    Ok(NodeUpgradeTransaction {
+        upgraded_node,
+        previous_node,
+        previous_node_mirror: state.node_mirror,
+    })
+}
+
+fn restore_node_state(state: &mut AppState, transaction: &NodeUpgradeTransaction) -> Result<()> {
+    let active_version = state.node.as_ref().map(|node| node.version.as_str());
+    if active_version != Some(transaction.upgraded_node.as_str()) {
+        return Err(LauncherError::NodeVersion(format!(
+            "refusing stale Node rollback: active version is {}, expected {}",
+            active_version.unwrap_or("none"),
+            transaction.upgraded_node
+        )));
+    }
+    state.node = Some(transaction.previous_node.clone());
+    state.node_mirror = transaction.previous_node_mirror.clone();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn rollback_node_upgrade_command(transaction: NodeUpgradeTransaction) -> Result<String> {
+    let runtime_dir = crate::paths::node_runtime_dir()?;
+    let mut state = match AppState::load()? {
+        StateStatus::FirstRun => {
+            return Err(LauncherError::NodeNotInstalled {
+                reason: "cannot roll back Node before the first-run runtime exists".to_string(),
+            })
+        }
+        StateStatus::Loaded(state) => *state,
+    };
+    crate::node::install::select_node_version_in(&runtime_dir, &transaction.previous_node.version)
+        .await?;
+    if let Err(error) = restore_node_state(&mut state, &transaction) {
+        let _ =
+            crate::node::install::select_node_version_in(&runtime_dir, &transaction.upgraded_node)
+                .await;
+        return Err(error);
+    }
+    if let Err(error) = state.save() {
+        let restore_pointer =
+            crate::node::install::select_node_version_in(&runtime_dir, &transaction.upgraded_node)
+                .await;
+        if let Err(pointer_error) = restore_pointer {
+            tracing::error!(%pointer_error, "failed to restore Node pointer after state rollback failure");
+        }
+        return Err(error);
+    }
+    Ok(transaction.previous_node.version)
 }
 
 #[tauri::command]

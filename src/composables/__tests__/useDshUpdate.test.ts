@@ -7,8 +7,9 @@ const api = vi.hoisted(() => ({
   cancelNodeInstall: vi.fn(),
   checkDshUpdate: vi.fn(),
   installDsh: vi.fn(),
+  rollbackNodeUpgrade: vi.fn(),
   restartHostAfterDshUpdate: vi.fn(),
-  upgradeNode: vi.fn(),
+  upgradeNodeForDshUpdate: vi.fn(),
 }));
 
 const eventListeners = vi.hoisted(
@@ -66,6 +67,18 @@ function nodeUpgradeError() {
   };
 }
 
+function nodeUpgradeTransaction() {
+  return {
+    upgraded_node: "24.4.0",
+    previous_node: {
+      version: "22.19.0",
+      installed_at: "2026-08-19T00:00:00Z",
+      mirror: "https://nodejs.org/dist",
+    },
+    previous_node_mirror: "https://nodejs.org/dist",
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   eventListeners.clear();
@@ -81,6 +94,7 @@ beforeEach(() => {
     active_version: "0.2.0",
     rolled_back: false,
   });
+  api.rollbackNodeUpgrade.mockResolvedValue("22.19.0");
 });
 
 test("prompts for a Node upgrade and leaves the current runtime when cancelled", async () => {
@@ -93,13 +107,13 @@ test("prompts for a Node upgrade and leaves the current runtime when cancelled",
 
   expect(wrapper.vm.updateDialogState).toBe("confirming_node");
   expect(wrapper.vm.nodeUpgrade?.suggested_node).toBe("24.4.0");
-  expect(api.upgradeNode).not.toHaveBeenCalled();
+  expect(api.upgradeNodeForDshUpdate).not.toHaveBeenCalled();
 
   await wrapper.vm.cancelDshUpdate();
   await flushPromises();
 
   expect(wrapper.vm.updateDialogState).toBe("idle");
-  expect(api.upgradeNode).not.toHaveBeenCalled();
+  expect(api.upgradeNodeForDshUpdate).not.toHaveBeenCalled();
   expect(store.nodeVersion).toBe("22.19.0");
 });
 
@@ -107,7 +121,7 @@ test("upgrades Node after confirmation then installs and restarts dsh", async ()
   api.installDsh
     .mockRejectedValueOnce(nodeUpgradeError())
     .mockResolvedValueOnce("0.2.0");
-  api.upgradeNode.mockResolvedValue("24.4.0");
+  api.upgradeNodeForDshUpdate.mockResolvedValue(nodeUpgradeTransaction());
   const wrapper = mount(Harness);
   await flushPromises();
 
@@ -116,7 +130,7 @@ test("upgrades Node after confirmation then installs and restarts dsh", async ()
   await wrapper.vm.confirmNodeUpgrade();
   await flushPromises();
 
-  expect(api.upgradeNode).toHaveBeenCalledWith({
+  expect(api.upgradeNodeForDshUpdate).toHaveBeenCalledWith({
     version: "24.4.0",
     operationId: expect.any(String),
   });
@@ -127,6 +141,45 @@ test("upgrades Node after confirmation then installs and restarts dsh", async ()
   expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
   expect(store.nodeVersion).toBe("24.4.0");
   expect(store.setHostReady).toHaveBeenCalledWith("http://127.0.0.1:1337/");
+  expect(wrapper.vm.updateDialogState).toBe("idle");
+});
+
+test("rolls Node back when dsh installation fails after the upgrade", async () => {
+  api.installDsh
+    .mockRejectedValueOnce(nodeUpgradeError())
+    .mockRejectedValueOnce({ message: "npm install failed" });
+  api.upgradeNodeForDshUpdate.mockResolvedValue(nodeUpgradeTransaction());
+  const wrapper = mount(Harness);
+  await flushPromises();
+
+  wrapper.vm.startDshUpdate();
+  await flushPromises();
+  await wrapper.vm.confirmNodeUpgrade();
+  await flushPromises();
+
+  expect(api.rollbackNodeUpgrade).toHaveBeenCalledWith(nodeUpgradeTransaction());
+  expect(store.nodeVersion).toBe("22.19.0");
+  expect(wrapper.vm.updateDialogState).toBe("failed");
+});
+
+test("rolls Node back when dsh installation is cancelled", async () => {
+  api.installDsh
+    .mockRejectedValueOnce(nodeUpgradeError())
+    .mockRejectedValueOnce({
+      kind: "dsh_install_cancelled",
+      message: "dsh installation was cancelled",
+    });
+  api.upgradeNodeForDshUpdate.mockResolvedValue(nodeUpgradeTransaction());
+  const wrapper = mount(Harness);
+  await flushPromises();
+
+  wrapper.vm.startDshUpdate();
+  await flushPromises();
+  await wrapper.vm.confirmNodeUpgrade();
+  await flushPromises();
+
+  expect(api.rollbackNodeUpgrade).toHaveBeenCalledWith(nodeUpgradeTransaction());
+  expect(store.nodeVersion).toBe("22.19.0");
   expect(wrapper.vm.updateDialogState).toBe("idle");
 });
 

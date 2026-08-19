@@ -321,6 +321,38 @@ mod tests {
             host_status_label(HostTrayStatus::Failed, None),
             "DeepSeek Harness 启动失败"
         );
+        assert_eq!(
+            host_status_label(HostTrayStatus::Restarting, Some("0.3.0")),
+            "DeepSeek Harness 正在重启…"
+        );
+        assert_eq!(
+            host_status_label(HostTrayStatus::Stopped, Some("0.3.0")),
+            "DeepSeek Harness 已停止"
+        );
+        assert_eq!(
+            host_status_label(HostTrayStatus::Recovering, Some("0.3.0")),
+            "DeepSeek Harness 已崩溃，正在恢复…"
+        );
+    }
+
+    #[test]
+    fn tray_status_transition_sequence_keeps_the_selected_version_context() {
+        let version = Some("0.3.0");
+        let sequence = [
+            (HostTrayStatus::Starting, "DeepSeek Harness 正在启动…"),
+            (HostTrayStatus::Running, "DeepSeek Harness 运行中 · 0.3.0"),
+            (HostTrayStatus::Stopping, "DeepSeek Harness 正在停止…"),
+            (HostTrayStatus::Stopped, "DeepSeek Harness 已停止"),
+            (
+                HostTrayStatus::Recovering,
+                "DeepSeek Harness 已崩溃，正在恢复…",
+            ),
+            (HostTrayStatus::Crashed, "DeepSeek Harness 已崩溃，等待处理"),
+            (HostTrayStatus::Failed, "DeepSeek Harness 启动失败"),
+        ];
+        for (status, expected) in sequence {
+            assert_eq!(host_status_label(status, version), expected);
+        }
     }
 
     #[test]

@@ -1,40 +1,52 @@
-# deepseek-harness-launcher
+# DeepSeek Harness Launcher
 
-DeepSeek Harness（dsh）的 Tauri 桌面壳子。它在用户数据目录托管 Node 和 dsh，通过本地 loopback Web UI 运行 dsh。
+## 从打开应用，到开始工作
 
-## 当前状态
+DeepSeek Harness Launcher 是 DeepSeek Harness 的桌面入口。它把运行环境、版本管理和本地启动流程集中处理，让你不必先配置 Node、dsh 或其他运行依赖，打开应用即可进入工作空间。
 
-- 已实现：首启安装、Node 下载与 SHA-256 校验、dsh 安装、版本指针与回滚、崩溃恢复、托盘、错误提示、诊断导出和可选的 `dsh` 终端命令。
-- 当前可通过 GitHub Actions 创建 arm64/x64 的 macOS 测试草稿包。它使用 ad-hoc 签名、未公证，仅限受控测试；正式公开分发仍需要 Apple Developer Program 的 Developer ID 签名与公证。
-- CI 会在 macOS、Windows 和 Linux 上执行测试与基础打包验证。壳子自动更新、正式签名/公证和公开发布仍未启用。
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/image-black.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./docs/image.png" />
+    <img src="./docs/image.png" alt="DeepSeek Harness Launcher 主界面" width="960" />
+  </picture>
+</p>
 
-首次启动需要联网下载 Node 和 dsh。当前 dsh 版本由 npm registry 在运行时解析，仓库不写死 `latest`。
+## 核心功能
 
-## 开发
+### 自动准备运行环境
+
+首次启动时，应用会自动下载匹配的 Node 运行时，并安装 DeepSeek Harness 所需的 dsh。所有运行文件由应用独立管理，不修改系统环境，也不会影响已有项目。
+
+### 打开即进入 Harness
+
+环境准备完成后，应用会自动启动本地服务，并在主窗口中打开 DeepSeek Harness。你可以直接创建会话、选择工作区和模式，开始处理任务。
+
+### 版本升级由你掌控
+
+发现 dsh 新版本时，应用只会进行提示，不会在工作过程中自动切换。确认升级后，应用才会完成下载、校验、切换和重启。
+
+### 启动失败自动恢复
+
+如果新版本启动失败，应用会自动回到上一个已验证可用的版本，减少升级对工作的影响。
+
+## 安装与首次使用
+
+1. 前往 [Releases](https://github.com/shetengteng/deepseek-harness-launcher/releases) 下载对应系统的安装包。
+2. macOS 用户根据芯片选择版本：
+   - Apple Silicon：`arm64` / `aarch64`
+   - Intel：`x64`
+3. macOS 打开 `.dmg`，将应用拖入「应用程序」；Windows 和 Linux 按对应安装包完成安装。
+4. 首次启动时保持网络连接，应用会自动下载 Node 和 dsh，完成后即可进入 Harness。
+
+### macOS 额外步骤
+
+当前 macOS 安装包尚未经过 Apple 公证。首次打开时，系统可能提示「已损坏」或「无法验证开发者」。这是 macOS 对未公证应用的安全拦截，并不代表应用文件损坏。
+
+将应用放入「应用程序」后，打开「终端」，执行：
 
 ```bash
-pnpm install
-pnpm tauri dev
+xattr -cr /Applications/deepseek-harness-launcher.app
 ```
 
-常用检查：
-
-```bash
-pnpm test
-pnpm lint
-pnpm build
-
-cd src-tauri
-cargo test --quiet
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-```
-
-## 文档
-
-- [设计文档](./design/deepseek-harness-launcher-design.md)
-- [实施计划与当前待办](./design/deepseek-harness-launcher-implementation-plan.md)
-- [测试计划](./design/deepseek-harness-launcher-test-plan.md)
-- [原型](./design/deepseek-harness-launcher-prototype.html)
-
-`design/page-flow-analysis.md` 是已归档的故障分析记录，不代表当前待办。
+执行完成后重新打开应用。如果系统仍然拦截，请按住 Control 点击应用图标，选择「打开」。

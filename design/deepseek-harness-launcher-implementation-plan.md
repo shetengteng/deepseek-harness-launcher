@@ -6,9 +6,9 @@
 
 ## 0. 审阅清单
 
-### 当前待办（2026-08-17）
+### 当前待办（2026-08-19）
 
-本节是唯一的当前 TODO。下文 M1–M4 是历史交付记录与实现说明，不应据此重复实施或判断当前完成度。
+本节是当前实现状态的唯一汇总。下文 M1–M4 保留历史交付记录与实现说明，但其状态已按当前源码复核；判断是否需要继续开发或测试时，以本节和“测试待办”为准。
 
 | 优先级 | 工作项 | 状态 |
 | ------ | ------ | ---- |
@@ -16,10 +16,16 @@
 | P0 | dsh 子进程持久化日志；诊断包只收集最近 3 份 dsh 日志 | 已完成 |
 | P0 | 日常启动校验 current Node/dsh；current 损坏或启动失败时回退 `known_good` 一次 | 已完成 |
 | P0 | Webview 精确 origin 白名单、用户点击 `http/https` 外链转系统浏览器；确认 dsh Web UI 管理项目目录的边界（浏览器权限与弹窗保留给 dsh/用户） | 已完成 |
-| P1 | dsh 更新触发的 Node 升级确认与原子切换 | 未开始 |
-| P1 | Node 安装命令按平台选择 archive，并执行下载后二进制版本校验 | 未开始 |
-| P1 | PR-021–PR-026：CI、签名/公证、打包、发布文档 | 未开始 |
+| P1 | dsh 更新触发的 Node 升级确认与原子切换 | 部分完成：确认、平台 archive、校验和指针切换已实现；跨步骤回滚与集成测试待补 |
+| P1 | Node 安装命令按平台选择 archive，并执行下载后二进制版本校验 | 已完成 |
+| P1 | PR-021–PR-026：CI、签名/公证、打包、发布文档 | 部分完成：CI/构建和跨平台未签名测试包已具备；正式签名、公证、自动更新和跨平台发布验收待补 |
 | P2 | Tauri 冷启动、更新与崩溃恢复 E2E | 未开始 |
+
+### 状态口径
+
+- “已完成”表示源码和对应单元/集成测试已经存在；不代表已经在所有目标平台或干净机器上验收。
+- “部分完成”表示主流程已经落地，但仍有明确的事务边界、发布配置或测试缺口。
+- 2026-08-19 的本地基线为：Rust `cargo test --quiet` 通过 170 个 crate 测试和 4 个集成测试，前端 `pnpm test` 通过 32 个测试；`clippy`、`lint` 和 `build` 均通过。
 
 实施前必读：
 
@@ -321,13 +327,15 @@ deepseek-harness-launcher/
 
 **验收**：`cargo test` 115/115（lib 93 + commands_integration 4 + mirror 9 + download 9）；`cargo clippy -- -D warnings` + `cargo fmt --check` 全绿。
 
-### M2.3 解压与安装（`node/install.rs`） 🚧
+### M2.3 解压与安装（`node/install.rs`） ✅ PR-009 已完成
 
 - [x] 下载 archive 解压到版本化 staging 目录，再原子提升到 `node-runtime/node-v<version>/` 并更新 `VERSION`。
 - [x] Unix tar.gz 和 Windows zip 解压实现保留可执行权限/路径安全校验。
 - [x] 安装成功后写入 `state.node` 与首启计划阶段。
-- [ ] `install_node_command` 目前固定下载 tar.gz；需按平台选择 `.tar.gz` 或 Windows `.zip`，并与 Node 发布索引的正式产物对应。
-- [ ] 安装后执行受管 `node --version`，确认入口存在且版本与下载目标一致。
+- [x] `install_node_command` 按目标平台选择 `.tar.gz` 或 Windows `.zip`，并与 Node 发布索引中的正式产物对应。
+- [x] 安装后执行受管 `node --version`，确认入口存在且版本与下载目标一致。
+- [x] `VERSION` 使用同目录临时文件、`sync_all` 和 `rename` 替换；取消或失败时清理 staging，保留旧版本指针。
+- [ ] Node 切换与后续 dsh 安装尚未形成跨步骤事务；dsh 安装失败或取消时，仍需回滚本次已切换的 Node。
 
 ### M2.4 版本与 engines（`node/version.rs`） ✅
 
@@ -346,7 +354,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - `probe_mirrors_command(custom_urls?)`：探活后返回首个可用源
   - `validate_custom_mirror_command(url)`：校验自定义源（必须 https、无 query/fragment）
   - `install_node_command(args)`：下载 + 校验 + 解压 + 原子切换 + 写 state.json，通过 `download-progress` / `extract-progress` 事件推送 `ProgressEvent`
-  - `fake_install_node_command(version)`（debug only）：跳过下载直接写 VERSION + state
+  - `fake_install_node_command(version)`（历史联调命令，已删除，不属于当前功能）
 - [x] 前端 store 扩展（`stores/launcher.ts`）：
   - 新增子状态机 `wizardStep = mirror_select | probing | downloading | extracting | done | failed`
   - `loadMirrors()` / `autoPickMirror()` / `validateCustomMirror()` / `selectMirror()`
@@ -365,7 +373,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
   - 完成页显示"启动 dsh"按钮，调用 `store.startHost()`
   - 监听 Tauri 事件 `download-progress` / `extract-progress`
 - [x] MainView 集成：`first_run` phase 渲染 `FirstRun` 组件（替换 M1 占位 Card）
-- [x] dev 按钮"[dev] 假安装"调用 `fake_install_node_command`，便于本地测试
+- [x] 历史 dev 假安装按钮曾用于联调，现已删除，不随当前首启流程发布
 - [x] 单元测试 7 个（`commands.rs`）：`MirrorInfo::from` 转换、序列化 snake_case、`list_mirrors` 返回内置源、`validate_custom_mirror_command` 接受 https / 拒绝 http / 拒绝 query
 - [x] store 测试 14 个：wizard 初始状态、loadMirrors 默认选中、selectMirror、validateCustomMirror 成功/失败/空、selectedMirror computed、downloadPercent computed、applyProgressEvent、installNode 成功/失败/无镜像源/并发保护、resetWizard、autoPickMirror 成功/失败
 - [x] 组件测试 8 个（`FirstRun.test.ts`）：挂载显示选择器+下载按钮、downloading UI、extracting UI、done UI、failed UI + 重试、禁用按钮、dev 假安装触发
@@ -551,7 +559,7 @@ PR-011 已实现 Node 下载、镜像选择和进度事件基础设施，但其�
 
 **后续策略**：这段历史实现中的复杂后台升级流程已由 PR-020c 收敛为轻量版本检查、右侧更新提示和用户主动安装；`Settings.vue` 的通用设置布局继续复用。
 
-### M3.3b 首启体验与原型 03 对齐 🚧 PR-020b
+### M3.3b 首启体验与原型 03 对齐 ✅ PR-020b
 
 **目标**：把现有首启能力重组为原型 03 的专用 bootstrap 界面。dsh 任务卡显示当前 registry `latest` 的精确版本，界面挂载后自动冻结并安装；不提供历史版本选择、范围规则或复杂版本管理。
 
@@ -617,7 +625,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 ## 7. M4 — 健壮性
 
-### M4.1 崩溃恢复（`host/crash.rs` + `commands/recovery.rs`） ✅
+### M4.1 崩溃恢复（`host/crash.rs` + `commands/recovery.rs`） 🚧（核心恢复已完成）
 
 - [x] `crash_counter` 与最后崩溃时间持久化到 `state.json`。
 - [x] dsh 意外退出后在 5 分钟窗口内计数；低于上限时自动重启 current，达到上限时发出 `host-crash-limit` 事件。
@@ -630,10 +638,11 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 - [x] 首启会由 dsh 的 `engines.node` 与 Node 发布索引解析可用的具体 Node 版本。
 - [x] 更新目标与当前 Node 不兼容时会中止安装，保留当前 dsh。
-- [ ] 更新场景显示 Node 版本差异，用户确认后下载、原子切换 Node 并继续 dsh 更新。
-- [ ] 用户取消时明确放弃该次更新。
+- [x] 更新场景显示 Node 版本差异，用户确认后下载、校验、原子切换 Node 并继续 dsh 更新。
+- [x] 用户取消时明确放弃该次更新，并清理未完成的安装任务。
+- [ ] Node 升级成功而后续 dsh 安装失败或取消时，回滚 Node 指针与状态，形成跨步骤事务。
 
-### M4.3 错误提示与日志 🚧
+### M4.3 错误提示与日志 ✅
 
 - [x] `error.rs` 为网络、磁盘、下载、Host 等错误提供用户可读文案。
 - [x] 壳子日志使用 `tracing_subscriber` + `tracing_appender::rolling::daily`；macOS 写入 `~/Library/Logs/deepseek-harness-launcher/`。
@@ -647,7 +656,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 - [x] 下载错误区分连接/超时与磁盘或权限问题，返回可操作文案。
 - [x] 镜像探活会汇总所有失败来源。
 
-### M4.5 系统托盘与窗口生命周期 🚧
+### M4.5 系统托盘与窗口生命周期 ✅（原生托盘主流程）
 
 原型中的托盘菜单定义信息架构：dsh 状态、显示主窗口、重启 dsh、检查更新、设置、关于、导出诊断日志和退出。实际实现使用 Tauri 2 的系统原生托盘菜单，不以 `TrayMenu.vue` 复刻 HTML/CSS 视觉，保证 macOS、Windows、Linux 的平台一致性与可访问性。
 
@@ -656,51 +665,57 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 - [x] 菜单与左键事件可显示窗口、发出前端事件、重启 Host 或在退出前关闭 Host。
 - [x] `useTrayEvents.ts` 将托盘事件桥接至设置、关于和诊断导出视图。
 - [x] 主窗口关闭时隐藏；用户从托盘退出时等待 Host 停止后退出。
-- [ ] 让状态行覆盖所有 Host 生命周期（启动、运行、停止、异常）；当前只在创建和托盘重启路径更新。
-- [ ] 补齐平台专用 tray 图标变体；macOS 使用模板图标，Windows/Linux 使用 16/32 px 图标。
+- [x] 让状态行覆盖所有 Host 生命周期（启动、运行、停止、恢复、异常）。
+- [x] 补齐平台专用 tray 图标变体；macOS 使用模板图标，Windows/Linux 使用对应平台资源。
+- [ ] 增加原生托盘与 Host 生命周期联动的桌面集成测试；当前只有状态标签和图标资源单元测试。
 
-**剩余验收**：dsh 日志按会话落盘并被诊断包收集；所有 Host 状态同步到托盘；确认 Node 升级或取消更新不会改变当前可用运行时。
+**剩余验收**：原生托盘在各目标桌面环境中的显示与点击行为；确认 Node 升级或取消更新不会改变当前可用运行时。
 
 ---
 
 ## 8. M5 — 发布
 
-### M5.1 CI Matrix
+### M5.1 CI Matrix 🚧
 
-- [ ] `.github/workflows/ci.yml`：
+- [x] `.github/workflows/ci.yml` 已写入：
   - matrix：`macos-14 (arm64)`、`macos-13 (x64)`、`windows-latest (x64)`、`ubuntu-22.04 (x64)`
   - 步骤：`actions/setup-node`、`dtolnay/rust-toolchain`、`pnpm/action-setup`、`cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test`、`pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm tauri build`
-- [ ] 缓存：`Swatinem/rust-cache` + pnpm store
+- [x] 缓存：`Swatinem/rust-cache` + pnpm store
+- [x] `release.yml` 已提供手动 `unsigned-test` workflow：构建 macOS ad-hoc、Windows 未签名和 Linux 未签名测试包，并只创建 Draft + Prerelease。
+- [ ] 将当前本地 workflow 提交并在远程 GitHub Actions 跑通完整 matrix；目前尚无远程运行结果。
 
-### M5.2 打包配置
+### M5.2 打包配置 🚧
 
-- [ ] `tauri.conf.json`：
-  - macOS：`dmg`，`signingIdentity` 从 secret 注入
-  - Windows：`nsis` + `msi`（M5 先 NSIS）
+- [x] `tauri.conf.json` 的 `targets: all` 与 CI 已覆盖目标格式：
+  - macOS：CI 构建 `.app` + `.dmg`，当前使用 ad-hoc identity `-`
+  - Windows：CI 构建 `nsis`（正式发布仍需签名）
   - Linux：`appimage` + `deb`
-- [ ] Bundle resources：`icon.icns` / `icon.ico` 来自原型配套资源
+- [x] CI 已分别构建 macOS `.app`/`.dmg`、Windows NSIS 和 Linux AppImage/deb。
+- [ ] 完成正式跨平台发布 workflow、bundle 元数据校验和 Windows/Linux 干净机器 smoke test。
 
-### M5.3 签名与公证（macOS）
+### M5.3 签名与公证（macOS） ⬜
 
 - [ ] `APPLE_DEVELOPER_ID`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID` 注入 CI
 - [ ] `tauri build` 触发 `codesign` + `xcrun notarytool submit`
 - [ ] Hardened Runtime entitlements：允许执行用户目录二进制（`com.apple.security.cs.allow-unsigned-executable-memory` 视实际需要）
-- [ ] 给下载的 node 二进制单独签名（启动时按需 `codesign --force --options runtime`）
+- [ ] 确定托管 Node 可执行文件的正式签名/分发方案；优先由 CI 预签名并校验 Node archive，禁止把 Developer ID 私钥放进客户端
 
-### M5.4 壳子自动更新
+### M5.4 壳子自动更新 ⬜
 
 - [ ] `tauri-plugin-updater` 集成
 - [ ] `tauri.conf.json.plugins.updater`：pubkey + endpoints 指向 GitHub Releases `latest.json`
 - [ ] `release.yml` 用 `tauri-action` 上传签名后的 bundle + `latest.json`
 - [ ] 启动时后台检查壳子更新，**不**与 dsh 升级同窗口推
 
-### M5.5 镜像源默认值与发布检查清单
+### M5.5 镜像源默认值与发布检查清单 🚧
 
-- [ ] 发布前 checklist 文件 `docs/release-checklist.md`：
+- [x] 已有 `docs/release-checklist.md`，覆盖 macOS/Windows/Linux 未签名测试包的构建、安装和安全提示，以及正式发布前置条件。
+- [ ] 将 checklist 扩展为正式跨平台发布清单：
   - 确认 `DEFAULT_NODE_VERSION` 与 dsh `engines.node` 对齐
   - 确认 registry 中的 `latest` 可解析为完整 manifest
   - 确认所有镜像源可达
   - 确认 macOS 公证通过
+- [ ] 补充 Windows Authenticode、Linux 包安装、三平台干净机器冷启动和升级/卸载验证。
 - [x] README 写明“首次启动必须联网”限制与当前发布状态
 
 **验收**：在干净 macOS / Windows / Linux 机器上安装冷启动，全流程跑通；CI 跑 matrix 全绿。
@@ -711,19 +726,22 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 ### 9.1 已有 Rust 测试
 
-- 覆盖状态持久化、Node 下载/解压/校验、镜像探活、registry、dsh 安装与版本指针、Host readiness/监管、崩溃策略和命令层。
-- 2026-08-17 本地基线：`cargo test --quiet` 通过 126 个 crate 测试和 4 个集成测试。
+- 覆盖状态持久化、Node 下载/解压/校验、镜像探活、registry、dsh 安装与版本指针、Host readiness/监管、崩溃策略、托盘状态标签和命令层。
+- Node 安装已有 8 个直接单元测试，覆盖平台 archive、二进制版本校验、`VERSION` 指针原子替换和取消清理。
+- 2026-08-19 本地基线：`cargo test --quiet` 通过 170 个 crate 测试和 4 个集成测试；`cargo clippy --all-targets -- -D warnings` 与格式检查通过。
 
 ### 9.2 已有前端测试
 
-- Vitest 覆盖首启、启动遮罩和设置页的关键交互。
-- 2026-08-17 本地基线：`pnpm test` 通过 10 个测试；`pnpm lint && pnpm build` 通过，`pnpm build` 已包含 `vue-tsc --noEmit`。
+- Vitest 覆盖首启、启动遮罩、更新流程和设置页的关键交互；托盘/Host 原生联动尚无前端桌面 E2E。
+- 2026-08-19 本地基线：`pnpm test` 通过 32 个测试；`pnpm lint && pnpm build` 通过，`pnpm build` 已包含 `vue-tsc --noEmit`。
 
 ### 9.3 测试待办
 
 - [x] 为 PR-020b/PR-020c 增加“展示版本即安装版本”、立即切换重启、Node 不兼容、取消和同版本重试的 Rust/Vue 测试。
 - [x] 为 dsh 文件日志和诊断导出最近 3 份日志增加测试。
 - [ ] 补充 mock 子进程的 Host 生命周期集成测试：就绪、超时、意外退出和关闭。
+- [ ] 补充 Node 升级后 dsh 安装失败/取消的跨步骤回滚测试，并先实现对应事务回滚。
+- [ ] 补充原生托盘状态与 Host 生命周期联动的桌面集成测试；现有测试只覆盖状态标签和图标资源。
 - [ ] 建立 Tauri E2E：首启、更新、回滚和崩溃恢复；作为 CI nightly 门禁。
 - [ ] 在 CI 中采集覆盖率后，再设定可测量的模块覆盖率目标。
 
@@ -746,7 +764,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 - ✅ PR-007 [M2] `mirror` 模块 + 探活（详见 §M2.1）
 - ✅ PR-008 [M2] `node/download` + SHA 校验 + 进度事件（详见 §M2.2 + §M2.4）
-- 🚧 PR-009 [M2] `node/install` 解压 + 原子切换；Windows archive 选择与安装后二进制校验待补齐（详见 §M2.3）
+- ✅ PR-009 [M2] `node/install` 解压、平台 archive 选择、安装后二进制校验与 `VERSION` 原子切换（详见 §M2.3）
 - ✅ PR-010 [M2] `node/version` + engines 校验（已并入 PR-008，详见 §M2.4）
 - ✅ PR-011 [M2] 前端首启向导 + 镜像源选择器（详见 §M2.5）
 
@@ -763,20 +781,20 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 
 ### M4
 
-- ✅ PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（`host/crash.rs` 计数窗口策略 + supervisor 自动重启 + `host-crash-limit`/`host-restarted` 事件 + 前端 `CrashDialog.vue` + store 恢复 actions）
-- 🚧 PR-018 [M4] Node 升级基础设施；当前只会阻止不兼容更新，确认后的 Node 升级待实现
+- 🚧 PR-017 [M4] 崩溃计数 + 自动重启 + 弹窗（计数、自动重启、回滚/重试已完成；崩溃弹窗“退出应用”操作待补）
+- 🚧 PR-018 [M4] Node 升级确认、安装与切换已实现；跨步骤回滚和真实集成测试待补（详见 §M4.2）
 - ✅ PR-019 [M4] 错误文案、诊断导出、dsh 子进程日志落盘与“最近 3 份”筛选
 - ✅ PR-020 [M4] 磁盘/网络错误识别（`node/disk.rs` 200MB 下载前检查 + 下载错误文案区分网络/磁盘不足）
-- 🚧 PR-020a [M4] 系统托盘与窗口生命周期（菜单、事件桥接与退出时 host shutdown 已完成；全生命周期状态同步和平台图标待完成，详见 §M4.5）
+- ✅ PR-020a [M4] 系统托盘与窗口生命周期（状态同步、事件桥接、退出时 host shutdown 和平台图标已完成；原生桌面联动测试待补，详见 §M4.5）
 
 ### M5
 
-- ⬜ PR-021 [M5] CI matrix + 缓存
+- 🚧 PR-021 [M5] CI matrix + 缓存（workflow 已写入本地，尚未提交并取得远程运行结果）
 - ⬜ PR-022 [M5] macOS 签名 + 公证
-- ⬜ PR-023 [M5] Windows NSIS 打包
-- ⬜ PR-024 [M5] Linux AppImage + deb
+- 🚧 PR-023 [M5] Windows NSIS 打包（CI/unsigned test release 构建已配置，Authenticode 和干净机器验证待补）
+- 🚧 PR-024 [M5] Linux AppImage + deb（CI/unsigned test release 构建已配置，正式发布和干净机器验证待补）
 - ⬜ PR-025 [M5] 壳子自动更新 + `latest.json` 发布
-- 🚧 PR-026 [M5] 发布检查清单 + README（README 已补齐，发布检查清单待创建）
+- 🚧 PR-026 [M5] 发布检查清单 + README（跨平台未签名测试清单已创建，正式签名发布清单待补）
 
 ---
 
@@ -787,7 +805,7 @@ PR-015 与 PR-016 的版本范围输入、历史版本选择、自动下载和�
 | dsh 破坏性 CLI 变更     | dsh 改了就绪行格式 | `readiness.rs` 严格校验 + 失败回滚 + 写 Agent Note 记录契约 |
 | Node 下载源全失败       | 区域性网络问题     | 多镜像源 + 用户自定义源 + 离线安装包作为后续开放问题        |
 | macOS 沙盒限制执行 node | App Store 分发     | M5 走 Developer ID 非 App Store 路线                        |
-| Windows 符号链接无权限  | 普通用户账户       | 已在设计中决定用 `current.json` 指针，PR-014 验证           |
+| Windows 符号链接无权限  | 普通用户账户       | 使用 `VERSION` 指针和版本目录，避免依赖符号链接                 |
 | npm install 慢          | 160+ 依赖          | 进度条 + 日志 + 镜像源 + 后台预下载                         |
 | 壳子升级与 dsh 升级冲突 | 同时触发           | 升级窗口互斥；壳子升级先完成再允许 dsh 升级                 |
 

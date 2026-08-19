@@ -32,10 +32,11 @@ pub use host::{
     restart_host_after_dsh_update, restart_host_inner, shutdown_host, start_host,
     DshUpgradeRestartResult, SharedState, StatusSnapshot,
 };
-pub use maintenance::{rollback_dsh_command, uninstall_managed_runtime};
+pub use maintenance::{exit_app_command, rollback_dsh_command, uninstall_managed_runtime};
 pub use node_install::{
     cancel_node_install_command, get_node_update_target_command, install_node_command,
-    upgrade_node_command, InstallNodeArgs, NodeUpdateTarget,
+    rollback_node_upgrade_command, upgrade_node_command, upgrade_node_for_dsh_update_command,
+    InstallNodeArgs, NodeUpdateTarget, NodeUpgradeTransaction,
 };
 pub use plugin_command::{run_plugin_command, PluginCommandResult};
 pub use recovery::{

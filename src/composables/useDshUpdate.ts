@@ -17,10 +17,12 @@ import {
   checkDshUpdate,
   installDsh,
   parseNodeUpgradeRequired,
+  rollbackNodeUpgrade,
   restartHostAfterDshUpdate,
-  upgradeNode,
+  upgradeNodeForDshUpdate,
   type DshInstallProgressEvent,
   type NodeUpgradeRequired,
+  type NodeUpgradeTransaction,
 } from "@/lib/tauri";
 import { useLauncherStore } from "@/stores/launcher";
 import { useI18n } from "@/lib/i18n";
@@ -45,6 +47,7 @@ export function useDshUpdate() {
   const updateTargetVersion = ref<string | null>(null);
   const updateError = ref<string | null>(null);
   const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
+  const nodeUpgradeTransaction = ref<NodeUpgradeTransaction | null>(null);
   const updateStage = ref<DshInstallProgressEvent["stage"]>("resolving");
   const updateInstallActivity = ref(0);
   let unlistenUpdateProgress: (() => void) | null = null;
@@ -104,6 +107,19 @@ export function useDshUpdate() {
     updateOperationId.value = null;
     updateError.value = null;
     nodeUpgrade.value = null;
+    nodeUpgradeTransaction.value = null;
+  }
+
+  async function rollbackNodeIfNeeded(): Promise<void> {
+    const transaction = nodeUpgradeTransaction.value;
+    if (!transaction) return;
+    try {
+      store.nodeVersion = await rollbackNodeUpgrade(transaction);
+    } catch (rollbackError) {
+      updateError.value = `${messageOf(rollbackError)}; ${t("update.rollbackNodeFailed")}`;
+    } finally {
+      nodeUpgradeTransaction.value = null;
+    }
   }
 
   function isCancelled(error: unknown): boolean {
@@ -187,10 +203,12 @@ export function useDshUpdate() {
     updateOperationId.value = operationId;
     updateDialogState.value = "upgrading_node";
     try {
-      store.nodeVersion = await upgradeNode({
+      const transaction = await upgradeNodeForDshUpdate({
         version: required.suggested_node,
         operationId,
       });
+      nodeUpgradeTransaction.value = transaction;
+      store.nodeVersion = transaction.upgraded_node;
       updateStage.value = "resolving";
       updateDialogState.value = "installing";
       const dshOperationId = crypto.randomUUID();
@@ -202,11 +220,13 @@ export function useDshUpdate() {
       await finishInstalledUpdate(version);
     } catch (error) {
       if (isCancelled(error) || String(updateDialogState.value) === "cancelling") {
+        await rollbackNodeIfNeeded();
         closeUpdateDialog();
         return;
       }
+      await rollbackNodeIfNeeded();
       updateDialogState.value = "failed";
-      updateError.value = messageOf(error);
+      if (!updateError.value) updateError.value = messageOf(error);
     } finally {
       updateOperationId.value = null;
     }

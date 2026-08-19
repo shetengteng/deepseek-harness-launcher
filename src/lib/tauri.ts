@@ -117,6 +117,11 @@ export function shutdownHost(): Promise<void> {
   return invokeCommand<void>("shutdown_host");
 }
 
+/** 请求后端按托盘同一条路径优雅退出应用。 */
+export function exitApp(): Promise<void> {
+  return invokeCommand<void>("exit_app_command");
+}
+
 // ─── PR-017: 崩溃恢复 ───
 
 /** `host-crash-limit` 事件 payload（`commands.rs::CrashLimitPayload`）。 */
@@ -265,6 +270,40 @@ export function upgradeNode(options: {
   return invokeCommand<string>("upgrade_node_command", {
     version: options.version,
     operationId: options.operationId,
+  });
+}
+
+export interface NodeStateSnapshot {
+  version: string;
+  installed_at: string;
+  mirror: string;
+}
+
+/** Node→dsh 更新事务，失败或取消时用于恢复旧 Node 指针和状态。 */
+export interface NodeUpgradeTransaction {
+  upgraded_node: string;
+  previous_node: NodeStateSnapshot;
+  previous_node_mirror: string | null;
+}
+
+export function upgradeNodeForDshUpdate(options: {
+  version: string;
+  operationId: string;
+}): Promise<NodeUpgradeTransaction> {
+  return invokeCommand<NodeUpgradeTransaction>(
+    "upgrade_node_for_dsh_update_command",
+    {
+      version: options.version,
+      operationId: options.operationId,
+    },
+  );
+}
+
+export function rollbackNodeUpgrade(
+  transaction: NodeUpgradeTransaction,
+): Promise<string> {
+  return invokeCommand<string>("rollback_node_upgrade_command", {
+    transaction,
   });
 }
 

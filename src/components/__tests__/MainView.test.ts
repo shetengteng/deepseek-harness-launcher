@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   cancelNodeInstall: vi.fn(),
   checkDshUpdate: vi.fn(),
   installDsh: vi.fn(),
+  exitApp: vi.fn(),
   restartHostAfterDshUpdate: vi.fn(),
   upgradeNode: vi.fn(),
 }));
@@ -80,6 +81,7 @@ vi.mock("@/composables/useTrayEvents", () => ({
 }));
 
 import MainView from "@/components/MainView.vue";
+import CrashDialog from "@/components/CrashDialog.vue";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -100,6 +102,15 @@ beforeEach(() => {
     active_version: "0.1.0-rc.7",
     rolled_back: false,
   });
+  api.exitApp.mockResolvedValue(undefined);
+});
+
+test("routes crash dialog exit through the tray shutdown command", async () => {
+  const wrapper = shallowMount(MainView);
+  await wrapper.findComponent(CrashDialog).vm.$emit("exit");
+  await flushPromises();
+
+  expect(api.exitApp).toHaveBeenCalledOnce();
 });
 
 test("opens settings as a page from the tray", async () => {

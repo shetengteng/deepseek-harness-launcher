@@ -32,18 +32,21 @@ import {
   installDsh,
   listMirrors,
   parseNodeUpgradeRequired,
+  rollbackNodeUpgrade,
   restartHostAfterDshUpdate,
   setNodeMirror,
   setRegistry,
   uninstallDshCli,
   uninstallManagedRuntime,
   upgradeNode,
+  upgradeNodeForDshUpdate,
   type DshStateSnapshot,
   type DshCliStatus,
   type LatestDshVersion,
   type MirrorInfo,
   type NodeUpdateTarget,
   type NodeUpgradeRequired,
+  type NodeUpgradeTransaction,
   type ProgressEvent,
 } from "@/lib/tauri";
 
@@ -82,6 +85,7 @@ const confirmingUninstall = ref(false);
 const uninstalling = ref(false);
 const uninstallError = ref<string | null>(null);
 const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
+const nodeUpgradeTransaction = ref<NodeUpgradeTransaction | null>(null);
 const manualNodeTarget = ref<NodeUpdateTarget | null>(null);
 const preparingNodeUpdate = ref(false);
 const updatingNode = ref(false);
@@ -186,22 +190,35 @@ async function confirmNodeUpgrade(): Promise<void> {
   upgrading.value = true;
   upgradeError.value = null;
   try {
-    await upgradeNode({
+    const transaction = await upgradeNodeForDshUpdate({
       version: required.suggested_node,
       operationId: crypto.randomUUID(),
     });
+    nodeUpgradeTransaction.value = transaction;
     nodeUpgrade.value = null;
     await installDsh({ expectedVersion });
     await finishLatestInstall();
   } catch (error) {
-    upgradeError.value = messageOf(error);
+    const transaction = nodeUpgradeTransaction.value;
+    if (transaction) {
+      try {
+        await rollbackNodeUpgrade(transaction);
+      } catch (rollbackError) {
+        upgradeError.value = `${messageOf(rollbackError)}; ${t("update.rollbackNodeFailed")}`;
+      } finally {
+        nodeUpgradeTransaction.value = null;
+      }
+    }
+    if (!upgradeError.value) upgradeError.value = messageOf(error);
   } finally {
+    nodeUpgradeTransaction.value = null;
     upgrading.value = false;
   }
 }
 
 function cancelNodeUpgrade(): void {
   nodeUpgrade.value = null;
+  nodeUpgradeTransaction.value = null;
 }
 
 async function prepareNodeUpdate(): Promise<void> {

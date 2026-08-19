@@ -86,6 +86,8 @@ pub fn run() {
             commands::bootstrap::check_dsh_update_command,
             commands::node_install::install_node_command,
             commands::node_install::upgrade_node_command,
+            commands::node_install::upgrade_node_for_dsh_update_command,
+            commands::node_install::rollback_node_upgrade_command,
             commands::node_install::get_node_update_target_command,
             commands::node_install::cancel_node_install_command,
             commands::dsh_install::install_dsh_command,
@@ -100,6 +102,7 @@ pub fn run() {
             commands::cli_shim::uninstall_dsh_cli_command,
             commands::plugin_command::run_plugin_command,
             commands::maintenance::rollback_dsh_command,
+            commands::maintenance::exit_app_command,
             commands::diagnostics::export_diagnostics,
             commands::maintenance::uninstall_managed_runtime,
         ])
