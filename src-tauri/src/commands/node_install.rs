@@ -276,7 +276,7 @@ fn restore_node_state(state: &mut AppState, transaction: &NodeUpgradeTransaction
 #[tauri::command]
 pub async fn rollback_node_upgrade_command(transaction: NodeUpgradeTransaction) -> Result<String> {
     let runtime_dir = crate::paths::node_runtime_dir()?;
-    let mut state = match AppState::load()? {
+    let state = match AppState::load()? {
         StateStatus::FirstRun => {
             return Err(LauncherError::NodeNotInstalled {
                 reason: "cannot roll back Node before the first-run runtime exists".to_string(),
@@ -284,15 +284,11 @@ pub async fn rollback_node_upgrade_command(transaction: NodeUpgradeTransaction) 
         }
         StateStatus::Loaded(state) => *state,
     };
+    let mut restored_state = state.clone();
+    restore_node_state(&mut restored_state, &transaction)?;
     crate::node::install::select_node_version_in(&runtime_dir, &transaction.previous_node.version)
         .await?;
-    if let Err(error) = restore_node_state(&mut state, &transaction) {
-        let _ =
-            crate::node::install::select_node_version_in(&runtime_dir, &transaction.upgraded_node)
-                .await;
-        return Err(error);
-    }
-    if let Err(error) = state.save() {
+    if let Err(error) = restored_state.save() {
         let restore_pointer =
             crate::node::install::select_node_version_in(&runtime_dir, &transaction.upgraded_node)
                 .await;

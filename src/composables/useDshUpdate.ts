@@ -110,13 +110,15 @@ export function useDshUpdate() {
     nodeUpgradeTransaction.value = null;
   }
 
-  async function rollbackNodeIfNeeded(): Promise<void> {
+  async function rollbackNodeIfNeeded(): Promise<boolean> {
     const transaction = nodeUpgradeTransaction.value;
-    if (!transaction) return;
+    if (!transaction) return true;
     try {
       store.nodeVersion = await rollbackNodeUpgrade(transaction);
+      return true;
     } catch (rollbackError) {
       updateError.value = `${messageOf(rollbackError)}; ${t("update.rollbackNodeFailed")}`;
+      return false;
     } finally {
       nodeUpgradeTransaction.value = null;
     }
@@ -220,8 +222,9 @@ export function useDshUpdate() {
       await finishInstalledUpdate(version);
     } catch (error) {
       if (isCancelled(error) || String(updateDialogState.value) === "cancelling") {
-        await rollbackNodeIfNeeded();
-        closeUpdateDialog();
+        const rolledBack = await rollbackNodeIfNeeded();
+        if (rolledBack) closeUpdateDialog();
+        else updateDialogState.value = "failed";
         return;
       }
       await rollbackNodeIfNeeded();

@@ -1,13 +1,43 @@
 # 发布检查清单
 
-此清单适用于 GitHub Actions 的 `Draft unsigned test release` 工作流。它构建 macOS arm64/x64、Windows x64 和 Linux x64 测试包：macOS 使用 ad-hoc 签名，Windows/Linux 不签名，不需要 Apple Developer 证书，也不会公证。
+仓库有三条独立流水线：
 
-测试包仅供受控测试，必须保持 GitHub 草稿 Release 和 prerelease 状态，不能作为公开分发版本。不要为了安装测试包而关闭系统级 Gatekeeper 或 SmartScreen。
+- `CI`：PR 和 `main` 的测试门禁，不打包。
+- `Release`：跨平台未签名测试包。
+- `Docs`：把落地页发布到 GitHub Pages。
+
+当前安装包仅供受控测试：macOS 使用 ad-hoc 签名且未公证，Windows/Linux 不签名。不要关闭系统级 Gatekeeper 或 SmartScreen。
+
+## CI
+
+- PR 和 `main` 上的代码变更会跑前端测试 / lint / build，以及 macOS、Windows、Linux 的 Rust clippy 与测试。
+- 文档、设计稿和 workflow 文案变更不会触发 CI。
 
 ## 构建测试发布
 
-- 在 Actions 手动运行 `Draft unsigned test release`，并在确认输入框填写 `unsigned-test`。
-- 发布成功后只保留 GitHub Draft + Prerelease 状态，确认 Release 说明中明确写有 unsigned/ad-hoc test。
+### tag 正式草稿
+
+1. 确认 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本号一致。
+2. 创建并推送匹配版本的 tag：
+
+```bash
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+3. `Release` workflow 会在测试通过后构建四平台产物，并创建 Draft + Prerelease。
+4. 发布前检查 Release 说明已写明 unsigned / ad-hoc。
+
+### 手动调试包
+
+1. 在 Actions 手动运行 `Release`。
+2. 产物只出现在该次 run 的 Artifact，保留 30 天，不会创建 GitHub Release。
+
+## Docs / GitHub Pages
+
+1. 仓库 Settings → Pages → Source 选择 GitHub Actions。
+2. 推送 `docs/index.html`、`docs/image.png`、`docs/image-black.png` 或 `docs/launcher-mark.svg` 到 `main` 后，`Docs` workflow 会发布落地页。
+3. 也可在 Actions 手动运行 `Docs`。
 
 ## macOS 测试包
 
