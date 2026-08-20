@@ -4,6 +4,27 @@ use crate::error::{LauncherError, Result};
 use crate::node::BUILTIN_MIRRORS;
 use crate::state::{AppState, StateStatus, ThemeMode};
 
+fn native_theme(mode: ThemeMode) -> tauri::Theme {
+    match mode {
+        ThemeMode::Light => tauri::Theme::Light,
+        ThemeMode::Dark => tauri::Theme::Dark,
+    }
+}
+
+pub(crate) fn apply_window_theme(window: &tauri::WebviewWindow, mode: ThemeMode) {
+    if let Err(error) = window.set_theme(Some(native_theme(mode))) {
+        tracing::warn!(%error, "failed to apply window theme");
+    }
+}
+
+pub(crate) fn apply_persisted_window_theme(window: &tauri::WebviewWindow) {
+    let mode = match AppState::load() {
+        Ok(StateStatus::Loaded(state)) => state.theme,
+        Ok(StateStatus::FirstRun) | Err(_) => ThemeMode::default(),
+    };
+    apply_window_theme(window, mode);
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DshStateSnapshot {
@@ -115,13 +136,15 @@ pub async fn set_registry_command(registry: String) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn set_theme_command(theme: String) -> Result<()> {
+pub async fn set_theme_command(window: tauri::WebviewWindow, theme: String) -> Result<()> {
     let mut state = match AppState::load()? {
         StateStatus::FirstRun => AppState::new(),
         StateStatus::Loaded(state) => *state,
     };
     state.theme = validated_theme(&theme)?;
-    state.save()
+    state.save()?;
+    apply_window_theme(&window, state.theme);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -146,5 +169,11 @@ mod tests {
             validated_theme("system"),
             Err(LauncherError::Theme(_))
         ));
+    }
+
+    #[test]
+    fn maps_theme_mode_to_native_window_theme() {
+        assert_eq!(native_theme(ThemeMode::Light), tauri::Theme::Light);
+        assert_eq!(native_theme(ThemeMode::Dark), tauri::Theme::Dark);
     }
 }

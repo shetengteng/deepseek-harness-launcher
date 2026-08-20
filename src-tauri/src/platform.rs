@@ -1,3 +1,20 @@
+const DOCK_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+
+#[cfg(target_os = "macos")]
+pub(crate) fn apply_transparent_dock_icon() -> Result<(), String> {
+    use objc2::{AllocAnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let app = NSApplication::sharedApplication(mtm);
+    let data = NSData::with_bytes(DOCK_ICON_PNG);
+    let icon = NSImage::initWithData(NSImage::alloc(), &data)
+        .ok_or_else(|| "failed to decode dock icon PNG".to_string())?;
+    unsafe { app.setApplicationIconImage(Some(&icon)) };
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn ensure_self_signed_macos() -> Result<(), String> {
     use std::process::{Command, Stdio};
@@ -48,4 +65,17 @@ pub(crate) fn ensure_self_signed_macos() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dock_icon_png_is_rgba() {
+        assert_eq!(&super::DOCK_ICON_PNG[12..16], b"IHDR");
+        assert_eq!(
+            super::DOCK_ICON_PNG[25],
+            6,
+            "icon.png must stay RGBA so the packaged Dock icon can keep a transparent canvas"
+        );
+    }
 }

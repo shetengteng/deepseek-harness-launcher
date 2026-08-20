@@ -58,6 +58,9 @@ pub fn run() {
                     commands::spawn_crash_recovery(handle.clone(), detail)
                 }));
             tray::setup(app)?;
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                commands::settings::apply_persisted_window_theme(&window);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -112,6 +115,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if matches!(event, RunEvent::Ready) {
+                if let Err(error) = platform::apply_transparent_dock_icon() {
+                    tracing::warn!(%error, "failed to apply transparent dock icon");
+                }
+            }
             if let RunEvent::ExitRequested { api, .. } = event {
                 if app.state::<ExitCoordinator>().requested() {
                     return;
