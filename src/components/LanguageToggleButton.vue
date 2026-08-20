@@ -1,9 +1,18 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { Languages } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
 const { alternateLocale, setLocale, t } = useI18n();
+
+const actionLabel = computed(() =>
+  t("language.switchTo", {
+    language: t(
+      alternateLocale.value === "zh-CN" ? "language.zh" : "language.en",
+    ),
+  }),
+);
 
 function toggleLocale(): void {
   setLocale(alternateLocale.value);
@@ -15,11 +24,12 @@ function toggleLocale(): void {
     type="button"
     variant="ghost"
     size="xs"
-    :aria-label="t('language.switchTo', { language: t(alternateLocale === 'zh-CN' ? 'language.zh' : 'language.en') })"
+    class="size-7 px-0"
+    :aria-label="actionLabel"
+    :title="actionLabel"
     data-testid="language-toggle"
     @click="toggleLocale"
   >
-    <Languages class="mr-1 h-4 w-4" aria-hidden="true" />
-    {{ t(alternateLocale === "zh-CN" ? "language.zh" : "language.en") }}
+    <Languages aria-hidden="true" />
   </Button>
 </template>

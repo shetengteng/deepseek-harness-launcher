@@ -19,7 +19,11 @@ const nextMode = computed<ThemeMode>(() =>
   props.mode === "dark" ? "light" : "dark",
 );
 const actionLabel = computed(() =>
-  nextMode.value === "dark" ? t("theme.switchToDark") : t("theme.switchToLight"),
+  props.saving
+    ? t("theme.saving")
+    : nextMode.value === "dark"
+      ? t("theme.switchToDark")
+      : t("theme.switchToLight"),
 );
 
 function toggleTheme(): void {
@@ -33,14 +37,15 @@ function toggleTheme(): void {
       type="button"
       variant="ghost"
       size="xs"
+      class="size-7 px-0"
       :disabled="disabled"
       :aria-label="actionLabel"
+      :title="actionLabel"
       data-testid="first-run-theme-toggle"
       @click="toggleTheme"
     >
       <Sun v-if="mode === 'dark'" aria-hidden="true" />
       <Moon v-else aria-hidden="true" />
-      {{ saving ? t("theme.saving") : actionLabel }}
     </Button>
     <p
       v-if="error"
