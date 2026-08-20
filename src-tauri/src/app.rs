@@ -41,6 +41,9 @@ pub fn run() {
         eprintln!("warning: ensure_dirs failed: {error:?}");
     }
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(navigation::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -116,10 +119,12 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
-            if matches!(event, RunEvent::Ready) {
-                if let Err(error) = platform::apply_transparent_dock_icon() {
-                    tracing::warn!(%error, "failed to apply transparent dock icon");
-                }
+            if let RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = &event
+            {
+                tray::show_main_window(app);
             }
             if let RunEvent::ExitRequested { api, .. } = event {
                 if app.state::<ExitCoordinator>().requested() {
