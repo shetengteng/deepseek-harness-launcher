@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 const DOCK_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
 
 #[cfg(target_os = "macos")]
@@ -69,12 +70,13 @@ pub(crate) fn ensure_self_signed_macos() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    const DOCK_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+
     #[test]
     fn dock_icon_png_is_rgba() {
-        assert_eq!(&super::DOCK_ICON_PNG[12..16], b"IHDR");
+        assert_eq!(&DOCK_ICON_PNG[12..16], b"IHDR");
         assert_eq!(
-            super::DOCK_ICON_PNG[25],
-            6,
+            DOCK_ICON_PNG[25], 6,
             "icon.png must stay RGBA so the packaged Dock icon can keep a transparent canvas"
         );
     }
