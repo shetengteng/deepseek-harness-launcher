@@ -13,41 +13,19 @@ use crate::host::readiness::MAX_STARTUP_OUTPUT_CHARS;
 use crate::host::SpawnDshWebOptions;
 
 #[cfg(unix)]
+fn mock_host_script() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mock-host.sh")
+}
+
+#[cfg(unix)]
 fn mock_host_options(temp: &tempfile::TempDir, mode: &str) -> SpawnDshWebOptions {
-    let script = temp.path().join("mock-host.sh");
-    write_executable(
-        &script,
-        "#!/bin/sh\ncase \"$DSH_TEST_MODE\" in\n  ready) printf 'dsh web: http://127.0.0.1:43123/\\n'; while true; do sleep 1; done ;;\n  exit) printf 'dsh web: http://127.0.0.1:43123/\\n'; exit 17 ;;\n  timeout) sleep 30 ;;\nesac\n",
-    );
     SpawnDshWebOptions {
-        node_executable: script,
+        node_executable: mock_host_script(),
         cli_entry: PathBuf::from("/tmp/mock-dsh-entry.js"),
         cwd: temp.path().to_path_buf(),
         env: HashMap::from([("DSH_TEST_MODE".to_string(), mode.to_string())]),
         electron_run_as_node: false,
     }
-}
-
-/// Close and rename before exec. Linux returns ETXTBSY if the inode is still open for write.
-#[cfg(unix)]
-fn write_executable(path: &std::path::Path, contents: &str) {
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .expect("script name");
-    let temporary = path.with_file_name(format!(".{name}.tmp"));
-    {
-        let mut file = std::fs::File::create(&temporary).expect("create mock host");
-        file.write_all(contents.as_bytes())
-            .expect("write mock host");
-        file.sync_all().expect("sync mock host");
-    }
-    std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o755))
-        .expect("chmod mock host");
-    std::fs::rename(temporary, path).expect("install mock host");
 }
 
 #[tokio::test]
@@ -208,11 +186,11 @@ async fn mock_host_restart_does_not_report_intentional_exit() {
 
 #[cfg(unix)]
 #[test]
-fn write_executable_can_be_spawned_immediately() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let path = temp.path().join("echo.sh");
-    write_executable(&path, "#!/bin/sh\nprintf ok\n");
-    let output = std::process::Command::new(&path).output().expect("spawn");
-    assert!(output.status.success());
-    assert_eq!(output.stdout, b"ok");
+fn mock_host_fixture_runs_without_writing_an_executable() {
+    let output = std::process::Command::new(mock_host_script())
+        .env("DSH_TEST_MODE", "exit")
+        .output()
+        .expect("spawn fixture");
+    assert_eq!(output.status.code(), Some(17));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("dsh web: http://127.0.0.1:43123/"));
 }

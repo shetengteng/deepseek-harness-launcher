@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::time::Duration;
 
 use tokio::process::{Child, Command};
 
@@ -138,8 +139,37 @@ pub fn spawn_dsh_web(opts: &SpawnDshWebOptions) -> Result<Child> {
         cmd.env("ELECTRON_RUN_AS_NODE", "1");
     }
 
-    let child = cmd.spawn().map_err(LauncherError::Io)?;
-    Ok(child)
+    spawn_command(&mut cmd).map_err(LauncherError::Io)
+}
+
+const SPAWN_BUSY_ATTEMPTS: u32 = 8;
+
+// Linux exec of a file still open for write returns ETXTBSY (26).
+fn spawn_command(cmd: &mut Command) -> std::io::Result<Child> {
+    let mut last_error = None;
+    for attempt in 0..SPAWN_BUSY_ATTEMPTS {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(error) if is_executable_busy(&error) => {
+                last_error = Some(error);
+                std::thread::sleep(Duration::from_millis(20 * u64::from(attempt + 1)));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error.expect("ETXTBSY retry"))
+}
+
+fn is_executable_busy(error: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        error.raw_os_error() == Some(26)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = error;
+        false
+    }
 }
 
 #[cfg(test)]
@@ -227,6 +257,22 @@ mod tests {
         match old {
             Some(v) => std::env::set_var("DSH_CLI_ENTRY", v),
             None => std::env::remove_var("DSH_CLI_ENTRY"),
+        }
+    }
+
+    #[test]
+    fn executable_busy_matches_unix_etxtbsy() {
+        let busy = std::io::Error::from_raw_os_error(26);
+        let missing = std::io::Error::from_raw_os_error(2);
+        #[cfg(unix)]
+        {
+            assert!(is_executable_busy(&busy));
+            assert!(!is_executable_busy(&missing));
+        }
+        #[cfg(not(unix))]
+        {
+            assert!(!is_executable_busy(&busy));
+            assert!(!is_executable_busy(&missing));
         }
     }
 }
