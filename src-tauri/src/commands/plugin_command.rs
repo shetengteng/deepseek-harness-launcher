@@ -73,7 +73,6 @@ pub async fn run_plugin_command(command: String) -> Result<PluginCommandResult> 
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         child.creation_flags(CREATE_NO_WINDOW);
     }

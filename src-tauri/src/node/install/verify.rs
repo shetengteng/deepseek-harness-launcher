@@ -23,7 +23,6 @@ pub async fn verify_node_binary(node_dir: &Path, expected_version: &str) -> Resu
         .stderr(Stdio::piped());
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }

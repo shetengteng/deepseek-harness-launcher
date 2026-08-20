@@ -124,8 +124,6 @@ pub fn spawn_dsh_web(opts: &SpawnDshWebOptions) -> Result<Child> {
         .stderr(Stdio::piped());
     #[cfg(windows)]
     {
-        // CREATE_NO_WINDOW
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
