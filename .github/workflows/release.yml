@@ -1,14 +1,14 @@
 # Release 流水线
 #
 # 触发方式（二选一）：
-#   1. push tag → 创建 GitHub Release 草稿（永久产物）
+#   1. push tag → 创建公开 GitHub Release（永久产物）
 #      git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0
 #      tag 必须与 src-tauri/tauri.conf.json 的 version 一致（不含 v 前缀）
 #   2. workflow_dispatch → 日常调试/内部分发，只产 Artifact（30 天，不创建 Release）
 #      GitHub → Actions → Release → Run workflow
 #
 # 产物去向：
-#   - tag 触发  → GitHub Releases 草稿 + Artifact
+#   - tag 触发  → GitHub Releases + Artifact
 #   - 手动触发 → 只有 Artifact（对应 run 的 Summary 页）
 #
 # 平台矩阵：
@@ -196,7 +196,7 @@ jobs:
           retention-days: 30
 
   publish:
-    name: Publish draft release
+    name: Publish release
     if: github.event_name == 'push'
     needs:
       - metadata
@@ -215,25 +215,75 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Create draft prerelease
+      - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.metadata.outputs.version }}
           RELEASE_NOTES: |
-            Test-only unsigned build. Do not use for public distribution.
+            当前安装包为未公证 / 未签名测试构建。请从下方 **Assets** 下载对应系统的安装包，不要下载 Source code。
 
-            - macOS: ad-hoc signed, not notarized. After moving the app to Applications, run `xattr -cr /Applications/deepseek-harness-launcher.app`.
-            - Windows: unsigned. SmartScreen may show an unknown publisher warning.
-            - Linux: unsigned AppImage and deb.
+            ## 下载哪个文件
 
-            Keep Gatekeeper and SmartScreen enabled.
+            - macOS Apple Silicon：文件名含 `aarch64` 的 `.dmg`
+            - macOS Intel：文件名含 `x64` 的 `.dmg`
+            - Windows：`.exe` 安装包
+            - Linux：`.AppImage` 或 `.deb`
+
+            ## macOS（未公证 dmg）
+
+            1. 打开 `.dmg`，将 `deepseek-harness-launcher.app` 拖到「应用程序」。
+            2. 不要直接双击打开。先在终端执行：
+
+            ```bash
+            xattr -cr /Applications/deepseek-harness-launcher.app
+            ```
+
+            3. 再打开应用。若仍提示「已损坏」或「无法验证开发者」，按住 Control 点击应用图标，选择「打开」。
+
+            不要关闭系统 Gatekeeper。
+
+            ## Windows
+
+            运行安装包。若 SmartScreen 提示未知发布者，选择「更多信息」→「仍要运行」。不要关闭 SmartScreen。
+
+            ## Linux
+
+            AppImage：
+
+            ```bash
+            chmod +x deepseek-harness-launcher_*.AppImage
+            ./deepseek-harness-launcher_*.AppImage
+            ```
+
+            deb：
+
+            ```bash
+            sudo dpkg -i deepseek-harness-launcher_*.deb
+            ```
+
+            ## 首次启动
+
+            保持网络连接。应用会自动下载 Node 和 dsh，完成后进入 Harness。
         shell: bash
         run: |
           tag="v${VERSION}"
           printf '%s\n' "$RELEASE_NOTES" > /tmp/release-notes.md
-          gh release create "$tag" release-assets/* \
-            --draft \
-            --prerelease \
-            --verify-tag \
-            --title "DeepSeek Harness Launcher v${VERSION}" \
-            --notes-file /tmp/release-notes.md
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "No release assets found in release-assets/" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --draft=false \
+              --prerelease=false \
+              --title "DeepSeek Harness Launcher v${VERSION}" \
+              --notes-file /tmp/release-notes.md
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --verify-tag \
+              --title "DeepSeek Harness Launcher v${VERSION}" \
+              --notes-file /tmp/release-notes.md
+          fi
