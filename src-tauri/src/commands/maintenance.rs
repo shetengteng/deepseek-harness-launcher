@@ -33,23 +33,30 @@ pub async fn uninstall_managed_runtime(
 ) -> Result<()> {
     let shutdown = state.supervisor.shutdown().await;
     shutdown.await_completion().await;
-    remove_managed_runtime(
-        &crate::paths::state_file()?,
-        &crate::paths::node_runtime_dir()?,
-        &crate::paths::dsh_dir()?,
-    )?;
+    remove_managed_runtime(&crate::paths::data_dir()?)?;
+    if let Err(error) = crate::cli_shim::uninstall_default() {
+        tracing::warn!(
+            %error,
+            "managed dsh command shim could not be removed during reinstall"
+        );
+    }
     tracing::info!("managed runtime uninstalled");
     app.exit(0);
     Ok(())
 }
 
-fn remove_managed_runtime(
-    state_file: &std::path::Path,
-    node_runtime_dir: &std::path::Path,
-    dsh_dir: &std::path::Path,
-) -> Result<()> {
-    for path in [state_file, node_runtime_dir, dsh_dir] {
-        remove_path_if_exists(path)?;
+fn remove_managed_runtime(data_dir: &std::path::Path) -> Result<()> {
+    for name in [
+        "state.json",
+        "node-runtime",
+        "dsh",
+        "bin",
+        "dsh-cli-shim.cjs",
+        "npm-cache",
+        "npmrc",
+        "npmrc-global",
+    ] {
+        remove_path_if_exists(&data_dir.join(name))?;
     }
     Ok(())
 }
@@ -70,15 +77,35 @@ mod tests {
     #[test]
     fn uninstall_keeps_logs_outside_owned_paths() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let state = temp.path().join("state.json");
-        let node = temp.path().join("node-runtime");
-        let dsh = temp.path().join("dsh");
-        let logs = temp.path().join("logs");
-        std::fs::write(&state, "{}").expect("state");
-        std::fs::create_dir_all(&node).expect("node");
-        std::fs::create_dir_all(&dsh).expect("dsh");
+        let data = temp.path();
+        let logs = data.join("logs");
+        for name in [
+            "state.json",
+            "node-runtime",
+            "dsh",
+            "bin",
+            "dsh-cli-shim.cjs",
+            "npm-cache",
+            "npmrc",
+            "npmrc-global",
+        ] {
+            let path = data.join(name);
+            if name.ends_with(".json") || name.ends_with(".cjs") || name.starts_with("npmrc") {
+                std::fs::write(&path, "{}").expect("file");
+            } else {
+                std::fs::create_dir_all(&path).expect("dir");
+            }
+        }
         std::fs::create_dir_all(&logs).expect("logs");
-        remove_managed_runtime(&state, &node, &dsh).expect("uninstall");
-        assert!(!state.exists() && !node.exists() && !dsh.exists() && logs.exists());
+        remove_managed_runtime(data).expect("uninstall");
+        assert!(!data.join("state.json").exists());
+        assert!(!data.join("node-runtime").exists());
+        assert!(!data.join("dsh").exists());
+        assert!(!data.join("bin").exists());
+        assert!(!data.join("dsh-cli-shim.cjs").exists());
+        assert!(!data.join("npm-cache").exists());
+        assert!(!data.join("npmrc").exists());
+        assert!(!data.join("npmrc-global").exists());
+        assert!(logs.exists());
     }
 }

@@ -27,6 +27,8 @@ pub struct InstallDshOptions {
     pub dsh_dir: PathBuf,
     pub node_executable: PathBuf,
     pub npm_script: Option<PathBuf>,
+    pub npm_cache: Option<PathBuf>,
+    pub npm_userconfig: Option<PathBuf>,
     pub log: Option<LogCallback>,
     pub timeout_secs: u64,
 }
@@ -39,6 +41,8 @@ impl std::fmt::Debug for InstallDshOptions {
             .field("dsh_dir", &self.dsh_dir)
             .field("node_executable", &self.node_executable)
             .field("npm_script", &self.npm_script)
+            .field("npm_cache", &self.npm_cache)
+            .field("npm_userconfig", &self.npm_userconfig)
             .field("log", &self.log.as_ref().map(|_| "<callback>"))
             .field("timeout_secs", &self.timeout_secs)
             .finish()
@@ -121,9 +125,26 @@ pub fn options_from_manifest(
         dsh_dir: dsh_dir.to_path_buf(),
         node_executable: node_bin_path(node_dir),
         npm_script: Some(crate::node::install::node_npm_path(node_dir)),
+        npm_cache: Some(managed_npm_cache_dir(node_dir)),
+        npm_userconfig: Some(managed_npm_userconfig(node_dir)),
         log: None,
         timeout_secs: 0,
     }
+}
+
+fn managed_runtime_dir(node_dir: &Path) -> PathBuf {
+    node_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| node_dir.to_path_buf())
+}
+
+pub(crate) fn managed_npm_cache_dir(node_dir: &Path) -> PathBuf {
+    managed_runtime_dir(node_dir).join("npm-cache")
+}
+
+pub(crate) fn managed_npm_userconfig(node_dir: &Path) -> PathBuf {
+    managed_runtime_dir(node_dir).join("npmrc")
 }
 
 #[cfg(test)]

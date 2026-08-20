@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -28,13 +29,13 @@ async fn run_npm_install_cancellable(
         cancellation.check()?;
     }
 
-    let mut cmd = if let Some(npm) = &opts.npm_script {
-        let mut command = Command::new(&opts.node_executable);
-        command.arg(npm);
-        command
-    } else {
-        Command::new("npm")
-    };
+    let npm = opts.npm_script.as_ref().ok_or_else(|| {
+        LauncherError::DshInstall(
+            "managed npm is required; launcher does not use system npm".to_string(),
+        )
+    })?;
+    let mut cmd = Command::new(&opts.node_executable);
+    cmd.arg(npm);
 
     cmd.current_dir(&cwd)
         .args([
@@ -58,13 +59,7 @@ async fn run_npm_install_cancellable(
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    cmd.env_clear();
-    cmd.env("PATH", std::env::var("PATH").unwrap_or_default());
-    if let Ok(home) = std::env::var("HOME") {
-        cmd.env("HOME", home);
-    } else if let Ok(user_profile) = std::env::var("USERPROFILE") {
-        cmd.env("USERPROFILE", user_profile);
-    }
+    apply_npm_install_env(&mut cmd, opts)?;
 
     let log = opts.log.clone().unwrap_or_else(default_log);
     let mut child = cmd.spawn().map_err(|error| {
@@ -91,6 +86,95 @@ async fn run_npm_install_cancellable(
         )));
     }
     Ok(String::new())
+}
+
+fn apply_npm_install_env(cmd: &mut Command, opts: &InstallDshOptions) -> Result<()> {
+    cmd.env_clear();
+    cmd.env("PATH", path_with_managed_node(&opts.node_executable)?);
+    for key in ["HOME", "USERPROFILE"] {
+        if let Some(value) = std::env::var_os(key) {
+            cmd.env(key, value);
+        }
+    }
+    #[cfg(windows)]
+    apply_windows_process_env(cmd);
+    cmd.env("npm_config_scripts_prepend_node_path", "true");
+    if let Some(cache) = &opts.npm_cache {
+        std::fs::create_dir_all(cache).map_err(LauncherError::Io)?;
+        cmd.env("npm_config_cache", cache);
+    }
+    if let Some(userconfig) = &opts.npm_userconfig {
+        cmd.env("npm_config_userconfig", userconfig);
+        cmd.env(
+            "npm_config_globalconfig",
+            userconfig.with_file_name("npmrc-global"),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn apply_windows_process_env(cmd: &mut Command) {
+    const KEYS: &[&str] = &[
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "TEMP",
+        "TMP",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "SYSTEMDRIVE",
+    ];
+    for (key, value) in std::env::vars_os() {
+        let Some(name) = key.to_str() else {
+            continue;
+        };
+        if KEYS.iter().any(|wanted| name.eq_ignore_ascii_case(wanted)) {
+            cmd.env(key, value);
+        }
+    }
+}
+
+/// 只给这次 npm 子进程用：托管 Node 目录 + 系统工具链。
+/// 不继承用户 PATH，避免 nvm / Homebrew 的 node、npm 混进来。
+pub(super) fn path_with_managed_node(node_executable: &Path) -> Result<std::ffi::OsString> {
+    let mut entries = Vec::new();
+    if let Some(dir) = node_executable.parent() {
+        if !dir.as_os_str().is_empty() {
+            entries.push(dir.to_path_buf());
+        }
+    }
+    entries.extend(os_toolchain_dirs());
+    std::env::join_paths(entries).map_err(|error| {
+        LauncherError::DshInstall(format!("join PATH for npm install failed: {error}"))
+    })
+}
+
+fn os_toolchain_dirs() -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        let mut dirs = Vec::new();
+        if let Some(root) =
+            std::env::var_os("SystemRoot").or_else(|| std::env::var_os("SYSTEMROOT"))
+        {
+            let root = PathBuf::from(root);
+            dirs.push(root.join("System32"));
+            dirs.push(root);
+        }
+        dirs
+    }
+    #[cfg(not(windows))]
+    {
+        vec![
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/bin"),
+            PathBuf::from("/usr/sbin"),
+            PathBuf::from("/sbin"),
+        ]
+    }
 }
 
 fn stream_install_output(
