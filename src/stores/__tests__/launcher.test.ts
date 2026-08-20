@@ -62,3 +62,33 @@ test("node runtime repair clears Node and dsh state for a full reinstall", () =>
   expect(store.nodeVersion).toBeNull();
   expect(store.dshVersion).toBeNull();
 });
+
+test("setHostReady remounts the host session even when origin is unchanged", () => {
+  const store = useLauncherStore();
+  store.setHostReady("http://127.0.0.1:1337/");
+  const firstSession = store.hostSession;
+
+  store.starting = true;
+  store.setHostReady("http://127.0.0.1:1337/");
+
+  expect(store.hostSession).toBe(firstSession + 1);
+  expect(store.origin).toBe("http://127.0.0.1:1337/");
+  expect(store.phase).toBe("ready");
+  expect(store.starting).toBe(false);
+});
+
+test("tray restart failure clears the starting overlay and records a host error", () => {
+  const store = useLauncherStore();
+  store.phase = "ready";
+  store.starting = true;
+
+  store.failHostRestart("failed to spawn host");
+
+  expect(store.starting).toBe(false);
+  expect(store.phase).toBe("error");
+  expect(store.error).toMatchObject({
+    kind: "host",
+    message: "failed to spawn host",
+  });
+  expect(store.lastFailedAction).toBe("startHost");
+});

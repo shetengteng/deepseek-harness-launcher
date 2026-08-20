@@ -65,8 +65,14 @@ useTrayEvents({
   openAbout: () => {
     showAbout.value = true;
   },
-  hostRestarted: () => {
-    void store.startHost();
+  hostRestarting: () => {
+    store.markHostRestarting();
+  },
+  hostRestarted: (origin: string) => {
+    store.setHostReady(origin);
+  },
+  hostRestartFailed: (message: string) => {
+    store.failHostRestart(message);
   },
 });
 
@@ -159,6 +165,7 @@ onMounted(async () => {
         </div>
         <iframe
           ref="dshFrame"
+          :key="store.hostSession"
           :src="store.origin"
           class="flex-1 w-full border-0"
           allow="

@@ -12,6 +12,7 @@ import type { LauncherPhase, LastAction, WizardStep } from "./launcher-types";
 export function createLauncherState() {
   const phase = ref<LauncherPhase>("booting");
   const origin = ref<string | null>(null);
+  const hostSession = ref(0);
   const dshVersion = ref<string | null>(null);
   const nodeVersion = ref<string | null>(null);
   const bootstrapPlan = ref<BootstrapPlan | null>(null);
@@ -92,6 +93,7 @@ export function createLauncherState() {
   return {
     phase,
     origin,
+    hostSession,
     dshVersion,
     nodeVersion,
     bootstrapPlan,

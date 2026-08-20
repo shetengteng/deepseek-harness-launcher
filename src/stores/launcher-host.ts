@@ -17,10 +17,21 @@ export function createHostActions(
   refreshStatus: () => Promise<void>,
 ) {
   function setHostReady(origin: string): void {
+    state.hostSession.value += 1;
     state.origin.value = origin;
     state.phase.value = "ready";
     state.error.value = null;
     state.lastFailedAction.value = null;
+    state.starting.value = false;
+  }
+
+  function markHostRestarting(): void {
+    state.starting.value = true;
+  }
+
+  function failHostRestart(message: string): void {
+    state.starting.value = false;
+    fail({ kind: "host", message }, "startHost");
   }
 
   async function startHostAction(): Promise<void> {
@@ -53,10 +64,8 @@ export function createHostActions(
     if (state.crashRecovering.value) return;
     state.crashRecovering.value = true;
     try {
-      state.origin.value = await restartHost();
-      state.phase.value = "ready";
+      setHostReady(await restartHost());
       state.crashLimit.value = null;
-      state.error.value = null;
     } catch (error) {
       fail(error, "startHost");
     } finally {
@@ -69,10 +78,8 @@ export function createHostActions(
     state.crashRecovering.value = true;
     try {
       await rollbackDsh();
-      state.origin.value = await restartHost();
-      state.phase.value = "ready";
+      setHostReady(await restartHost());
       state.crashLimit.value = null;
-      state.error.value = null;
       await refreshStatus();
     } catch (error) {
       fail(error, "startHost");
@@ -106,6 +113,8 @@ export function createHostActions(
 
   return {
     setHostReady,
+    markHostRestarting,
+    failHostRestart,
     startHostAction,
     shutdownHostAction,
     retryAfterCrash,

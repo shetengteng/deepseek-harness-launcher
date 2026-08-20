@@ -5,7 +5,9 @@ interface TrayEventHandlers {
   checkDshUpdate: () => void;
   exportDiagnostics: () => void;
   openAbout: () => void;
-  hostRestarted: () => void;
+  hostRestarting: () => void;
+  hostRestarted: (origin: string) => void;
+  hostRestartFailed: (message: string) => void;
 }
 
 export function useTrayEvents(handlers: TrayEventHandlers): void {
@@ -26,7 +28,13 @@ export function useTrayEvents(handlers: TrayEventHandlers): void {
       listen("tray-check-dsh-update", handlers.checkDshUpdate),
       listen("tray-export-diagnostics", handlers.exportDiagnostics),
       listen("tray-open-about", handlers.openAbout),
-      listen("tray-host-restarted", handlers.hostRestarted),
+      listen("tray-host-restarting", handlers.hostRestarting),
+      listen<string>("tray-host-restarted", (event) => {
+        handlers.hostRestarted(event.payload);
+      }),
+      listen<string>("tray-host-restart-failed", (event) => {
+        handlers.hostRestartFailed(event.payload);
+      }),
     ]);
     unlisteners.push(...listeners);
   }

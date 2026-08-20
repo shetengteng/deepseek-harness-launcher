@@ -123,6 +123,8 @@ export const useLauncherStore = defineStore("launcher", () => {
     ...state,
     refreshStatus,
     setHostReady: host.setHostReady,
+    markHostRestarting: host.markHostRestarting,
+    failHostRestart: host.failHostRestart,
     startHost: host.startHostAction,
     shutdownHost: host.shutdownHostAction,
     retryAfterCrash: host.retryAfterCrash,

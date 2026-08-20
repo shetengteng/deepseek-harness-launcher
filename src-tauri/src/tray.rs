@@ -255,6 +255,9 @@ fn emit_event(app: &AppHandle, event: &str) {
 }
 fn restart_host_from_tray(app: AppHandle) {
     set_host_status(&app, HostTrayStatus::Restarting);
+    if let Err(error) = app.emit("tray-host-restarting", ()) {
+        tracing::warn!(%error, "failed to emit tray restarting event");
+    }
     tauri::async_runtime::spawn(async move {
         let state = app.state::<commands::SharedState>();
         state.navigation.clear_dsh_origin();

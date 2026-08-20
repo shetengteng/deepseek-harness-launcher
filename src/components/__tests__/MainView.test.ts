@@ -36,7 +36,9 @@ const tray = vi.hoisted(() => ({
     checkDshUpdate: () => void;
     exportDiagnostics: () => void;
     openAbout: () => void;
-    hostRestarted: () => void;
+    hostRestarting: () => void;
+    hostRestarted: (origin: string) => void;
+    hostRestartFailed: (message: string) => void;
   } | null,
 }));
 
@@ -48,6 +50,7 @@ const store = vi.hoisted(() => ({
   dshVersion: "0.1.0-rc.6",
   nodeVersion: "22.19.0",
   origin: "http://127.0.0.1:1337/",
+  hostSession: 1,
   autoRestartedAttempt: null,
   error: null,
   lastFailedAction: null,
@@ -55,6 +58,8 @@ const store = vi.hoisted(() => ({
   refreshStatus: vi.fn(),
   initCrashEvents: vi.fn(),
   setHostReady: vi.fn(),
+  markHostRestarting: vi.fn(),
+  failHostRestart: vi.fn(),
   startHost: vi.fn(),
   installDsh: vi.fn(),
   resetError: vi.fn(),
@@ -120,6 +125,26 @@ test("opens settings as a page from the tray", async () => {
 
   expect(wrapper.findComponent({ name: "SettingsPage" }).exists()).toBe(true);
   expect(wrapper.find("iframe").exists()).toBe(false);
+});
+
+test("applies the tray restart origin without starting host again", async () => {
+  shallowMount(MainView);
+  tray.handlers?.hostRestarting();
+  tray.handlers?.hostRestarted("http://127.0.0.1:1339/");
+  await flushPromises();
+
+  expect(store.markHostRestarting).toHaveBeenCalledOnce();
+  expect(store.setHostReady).toHaveBeenCalledWith("http://127.0.0.1:1339/");
+  expect(store.startHost).not.toHaveBeenCalled();
+});
+
+test("surfaces a tray restart failure without starting host", async () => {
+  shallowMount(MainView);
+  tray.handlers?.hostRestartFailed("failed to spawn host");
+  await flushPromises();
+
+  expect(store.failHostRestart).toHaveBeenCalledWith("failed to spawn host");
+  expect(store.startHost).not.toHaveBeenCalled();
 });
 
 test("opens the update dialog, then installs and restarts when the toast action is clicked", async () => {
