@@ -4,7 +4,7 @@
 //! 的 `spawnDshWeb` 与 `SpawnDshWebOptions`。
 //!
 //! 设计 §M1.3 要求：
-//! - 命令：`<node> --expose-internals <cli_entry> web --host 127.0.0.1 --port 0`
+//! - 命令：`<node> --expose-internals <cli_entry> web --host 127.0.0.1 --port 0 --no-open`
 //! - `stdio: ['ignore', 'pipe', 'pipe']`，`windowsHide: true`
 //! - 环境变量过滤：剥离 `RUST_*`、`TAURI_*`、`npm_*`，只透传 `DSH_*`、`PATH`、`HOME`/`USERPROFILE`、`LANG`、`LC_*`
 //! - M1 阶段 `nodeExecutable` 直接读 `state.node.binary` 或回退系统 `PATH` 上的 `node`；
@@ -104,22 +104,16 @@ fn is_passthrough(key: &str) -> bool {
 /// - `windows_hide`：true（Windows 上不弹控制台窗口）
 /// - `kill_on_drop`：true（supervisor 提前 drop Child 时杀进程，避免泄漏）
 pub fn spawn_dsh_web(opts: &SpawnDshWebOptions) -> Result<Child> {
+    let cli_entry = opts
+        .cli_entry
+        .to_str()
+        .ok_or_else(|| LauncherError::PathResolve {
+            what: "cli_entry",
+            cause: format!("path is not valid UTF-8: {}", opts.cli_entry.display()),
+        })?;
     let mut cmd = Command::new(&opts.node_executable);
     cmd.current_dir(&opts.cwd);
-    cmd.args([
-        "--expose-internals",
-        opts.cli_entry
-            .to_str()
-            .ok_or_else(|| LauncherError::PathResolve {
-                what: "cli_entry",
-                cause: format!("path is not valid UTF-8: {}", opts.cli_entry.display()),
-            })?,
-        "web",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "0",
-    ]);
+    cmd.args(dsh_web_argv(cli_entry));
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -140,6 +134,19 @@ pub fn spawn_dsh_web(opts: &SpawnDshWebOptions) -> Result<Child> {
     }
 
     spawn_command(&mut cmd).map_err(LauncherError::Io)
+}
+
+fn dsh_web_argv(cli_entry: &str) -> [&str; 8] {
+    [
+        "--expose-internals",
+        cli_entry,
+        "web",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "0",
+        "--no-open",
+    ]
 }
 
 const SPAWN_BUSY_ATTEMPTS: u32 = 8;
@@ -258,6 +265,24 @@ mod tests {
             Some(v) => std::env::set_var("DSH_CLI_ENTRY", v),
             None => std::env::remove_var("DSH_CLI_ENTRY"),
         }
+    }
+
+    #[test]
+    fn web_argv_keeps_the_ui_in_the_desktop_shell() {
+        let args = dsh_web_argv("/tmp/dsh/bin.js");
+        assert_eq!(
+            args,
+            [
+                "--expose-internals",
+                "/tmp/dsh/bin.js",
+                "web",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "0",
+                "--no-open",
+            ]
+        );
     }
 
     #[test]
