@@ -1,24 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import {
   CheckCircle2,
   CircleAlert,
   Download,
   LoaderCircle,
+  Puzzle,
   ShieldCheck,
   Terminal,
   Trash2,
 } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
+import { useInstalledPlugins } from "@/composables/useInstalledPlugins";
 import {
   runPluginCommand,
   type LauncherErrorPayload,
   type PluginCommandResult,
 } from "@/lib/tauri";
+import SettingsInstalledPlugins from "./SettingsInstalledPlugins.vue";
+
+type PluginTab = "installed" | "command";
 
 const command = ref("");
 const input = ref<InstanceType<typeof Input> | null>(null);
@@ -27,7 +33,15 @@ const validationError = ref<string | null>(null);
 const result = ref<PluginCommandResult | null>(null);
 const operationError = ref<string | null>(null);
 const running = ref(false);
+const removingName = ref<string | null>(null);
+const activeTab = ref<PluginTab>("installed");
 const { t } = useI18n();
+const {
+  plugins: installedPlugins,
+  loading: installedLoading,
+  error: installedError,
+  reload: reloadInstalled,
+} = useInstalledPlugins();
 
 type PluginAction = "add" | "remove";
 
@@ -42,6 +56,12 @@ const actionLabel = computed(() =>
     ? t("pluginCommand.remove")
     : t("pluginCommand.install"),
 );
+
+watch(activeTab, (tab) => {
+  if (tab === "command") {
+    void nextTick(() => input.value?.$el.focus());
+  }
+});
 
 function parseCommand(value: string): ParsedPluginCommand | null {
   const parts = value.trim().split(/\s+/);
@@ -97,12 +117,34 @@ async function executeCommand(): Promise<void> {
   try {
     result.value = await runPluginCommand(command.value);
     preview.value = null;
+    await reloadInstalled();
   } catch (error) {
     const payload = error as LauncherErrorPayload;
     operationError.value =
       payload.user_message ?? payload.message ?? t("pluginCommand.failed");
   } finally {
     running.value = false;
+  }
+}
+
+async function removeInstalled(name: string): Promise<void> {
+  const line = `dsh plugin --profile web remove ${name}`;
+  if (running.value || !parseCommand(line)) return;
+  running.value = true;
+  removingName.value = name;
+  operationError.value = null;
+  result.value = null;
+  preview.value = null;
+  try {
+    result.value = await runPluginCommand(line);
+    await reloadInstalled();
+  } catch (error) {
+    const payload = error as LauncherErrorPayload;
+    operationError.value =
+      payload.user_message ?? payload.message ?? t("pluginCommand.failed");
+  } finally {
+    running.value = false;
+    removingName.value = null;
   }
 }
 </script>
@@ -126,138 +168,24 @@ async function executeCommand(): Promise<void> {
         </div>
       </header>
 
-      <Card class="settings-plugin-command-card">
-        <CardHeader class="gap-3 pb-4">
-          <div class="flex items-center justify-between gap-3">
-            <CardTitle class="text-base">{{
-              t("pluginCommand.commandTitle")
-            }}</CardTitle>
-            <span class="text-xs text-muted-foreground">{{
-              t("pluginCommand.supported")
-            }}</span>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              @click="updateCommand('add')"
-            >
-              <Download />{{ t("pluginCommand.quickInstall") }}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              @click="updateCommand('remove')"
-            >
-              <Trash2 />{{ t("pluginCommand.quickRemove") }}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <form class="space-y-3" @submit.prevent="prepareCommand">
-            <div class="settings-plugin-command-input-wrap">
-              <span class="settings-plugin-command-prompt" aria-hidden="true"
-                >›</span
-              >
-              <Input
-                ref="input"
-                v-model="command"
-                class="settings-plugin-command-input font-mono text-sm"
-                :aria-label="t('pluginCommand.inputLabel')"
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck="false"
-                placeholder="dsh plugin --profile web add <source>"
-                @input="
-                  preview = null;
-                  result = null;
-                  validationError = null;
-                  operationError = null;
-                "
-              />
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-xs text-muted-foreground">
-                {{ t("pluginCommand.hint") }}
-              </p>
-              <Button
-                type="submit"
-                size="sm"
-                :disabled="running || !command.trim()"
-              >
-                {{ t("pluginCommand.review") }}
-              </Button>
-            </div>
-          </form>
-
-          <p
-            v-if="validationError"
-            class="settings-plugin-command-feedback text-destructive"
-            role="alert"
-          >
-            <CircleAlert aria-hidden="true" />{{ validationError }}
-          </p>
-
-          <div v-if="preview" class="settings-plugin-command-review">
-            <div class="flex items-start gap-3">
-              <ShieldCheck
-                class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <div class="min-w-0">
-                <p class="text-sm font-medium">
-                  {{ t("pluginCommand.reviewTitle", { action: actionLabel }) }}
-                </p>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  {{ t("pluginCommand.reviewDescription") }}
-                </p>
-              </div>
-            </div>
-            <dl class="settings-plugin-command-details">
-              <div>
-                <dt>{{ t("pluginCommand.action") }}</dt>
-                <dd>{{ actionLabel }}</dd>
-              </div>
-              <div>
-                <dt>{{ t("pluginCommand.profile") }}</dt>
-                <dd class="font-mono">{{ preview.profile }}</dd>
-              </div>
-              <div>
-                <dt>{{ t("pluginCommand.source") }}</dt>
-                <dd class="break-all font-mono">{{ preview.source }}</dd>
-              </div>
-            </dl>
-            <div class="flex justify-end gap-2">
-              <Button
-                type="button"
+      <div class="settings-plugin-tabs">
+        <Tabs v-model="activeTab" class="flex h-full min-h-0 flex-col">
+          <TabsList class="w-fit shrink-0 self-start">
+            <TabsTrigger value="installed">
+              <Puzzle />
+              {{ t("pluginList.title") }}
+              <Badge
+                v-if="!installedLoading && installedPlugins.length > 0"
                 variant="outline"
-                size="sm"
-                :disabled="running"
-                @click="editCommand"
-                >{{ t("pluginCommand.edit") }}</Button
               >
-              <Button
-                type="button"
-                :variant="
-                  preview.action === 'remove' ? 'destructive' : 'default'
-                "
-                size="sm"
-                :disabled="running"
-                @click="executeCommand"
-              >
-                <LoaderCircle v-if="running" class="animate-spin" />
-                <Trash2 v-else-if="preview.action === 'remove'" />
-                <Download v-else />
-                {{
-                  running
-                    ? t("pluginCommand.running")
-                    : t("pluginCommand.confirm", { action: actionLabel })
-                }}
-              </Button>
-            </div>
-          </div>
+                {{ installedPlugins.length }}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="command">
+              <Terminal />
+              {{ t("pluginCommand.commandTitle") }}
+            </TabsTrigger>
+          </TabsList>
 
           <div
             v-if="result"
@@ -291,8 +219,165 @@ async function executeCommand(): Promise<void> {
           >
             <CircleAlert aria-hidden="true" />{{ operationError }}
           </p>
-        </CardContent>
-      </Card>
+
+          <TabsContent
+            value="installed"
+            class="mt-3 min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+          >
+            <SettingsInstalledPlugins
+              :plugins="installedPlugins"
+              :loading="installedLoading"
+              :error="installedError"
+              :busy-name="removingName"
+              :disabled="running"
+              @remove="removeInstalled"
+            />
+          </TabsContent>
+
+          <TabsContent
+            value="command"
+            class="mt-3 data-[state=inactive]:hidden"
+          >
+            <Card class="settings-plugin-command-card">
+              <CardHeader class="gap-3 pb-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      @click="updateCommand('add')"
+                    >
+                      <Download />{{ t("pluginCommand.quickInstall") }}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      @click="updateCommand('remove')"
+                    >
+                      <Trash2 />{{ t("pluginCommand.quickRemove") }}
+                    </Button>
+                  </div>
+                  <span class="text-xs text-muted-foreground">{{
+                    t("pluginCommand.supported")
+                  }}</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <form class="space-y-3" @submit.prevent="prepareCommand">
+                  <div class="settings-plugin-command-input-wrap">
+                    <span
+                      class="settings-plugin-command-prompt"
+                      aria-hidden="true"
+                      >›</span
+                    >
+                    <Input
+                      ref="input"
+                      v-model="command"
+                      class="settings-plugin-command-input font-mono text-sm"
+                      :aria-label="t('pluginCommand.inputLabel')"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      spellcheck="false"
+                      placeholder="dsh plugin --profile web add <source>"
+                      @input="
+                        preview = null;
+                        result = null;
+                        validationError = null;
+                        operationError = null;
+                      "
+                    />
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <p class="text-xs text-muted-foreground">
+                      {{ t("pluginCommand.hint") }}
+                    </p>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      :disabled="running || !command.trim()"
+                    >
+                      {{ t("pluginCommand.review") }}
+                    </Button>
+                  </div>
+                </form>
+
+                <p
+                  v-if="validationError"
+                  class="settings-plugin-command-feedback text-destructive"
+                  role="alert"
+                >
+                  <CircleAlert aria-hidden="true" />{{ validationError }}
+                </p>
+
+                <div v-if="preview" class="settings-plugin-command-review">
+                  <div class="flex items-start gap-3">
+                    <ShieldCheck
+                      class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium">
+                        {{
+                          t("pluginCommand.reviewTitle", {
+                            action: actionLabel,
+                          })
+                        }}
+                      </p>
+                      <p class="mt-1 text-xs text-muted-foreground">
+                        {{ t("pluginCommand.reviewDescription") }}
+                      </p>
+                    </div>
+                  </div>
+                  <dl class="settings-plugin-command-details">
+                    <div>
+                      <dt>{{ t("pluginCommand.action") }}</dt>
+                      <dd>{{ actionLabel }}</dd>
+                    </div>
+                    <div>
+                      <dt>{{ t("pluginCommand.profile") }}</dt>
+                      <dd class="font-mono">{{ preview.profile }}</dd>
+                    </div>
+                    <div>
+                      <dt>{{ t("pluginCommand.source") }}</dt>
+                      <dd class="break-all font-mono">{{ preview.source }}</dd>
+                    </div>
+                  </dl>
+                  <div class="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      :disabled="running"
+                      @click="editCommand"
+                      >{{ t("pluginCommand.edit") }}</Button
+                    >
+                    <Button
+                      type="button"
+                      :variant="
+                        preview.action === 'remove' ? 'destructive' : 'default'
+                      "
+                      size="sm"
+                      :disabled="running"
+                      @click="executeCommand"
+                    >
+                      <LoaderCircle v-if="running" class="animate-spin" />
+                      <Trash2 v-else-if="preview.action === 'remove'" />
+                      <Download v-else />
+                      {{
+                        running
+                          ? t("pluginCommand.running")
+                          : t("pluginCommand.confirm", { action: actionLabel })
+                      }}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <footer class="settings-plugin-command-note">
         <ShieldCheck aria-hidden="true" />
@@ -304,22 +389,29 @@ async function executeCommand(): Promise<void> {
 
 <style scoped>
 .settings-plugin-command {
+  display: flex;
   min-height: 0;
   flex: 1;
-  overflow: auto;
-  padding: clamp(32px, 8vh, 88px) 32px 48px;
+  flex-direction: column;
+  overflow: hidden;
+  padding: clamp(24px, 5vh, 48px) 32px 24px;
 }
 
 .settings-plugin-command-shell {
+  display: flex;
   width: min(720px, 100%);
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   margin: 0 auto;
 }
 
 .settings-plugin-command-heading {
   display: flex;
+  flex-shrink: 0;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 .settings-plugin-command-heading h1 {
@@ -349,6 +441,13 @@ async function executeCommand(): Promise<void> {
 .settings-plugin-command-mark :deep(svg) {
   width: 18px;
   height: 18px;
+}
+
+.settings-plugin-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .settings-plugin-command-card {
@@ -450,8 +549,9 @@ async function executeCommand(): Promise<void> {
 
 .settings-plugin-command-note {
   display: flex;
+  flex-shrink: 0;
   gap: 8px;
-  margin: 18px 4px 0;
+  margin: 16px 4px 0;
   color: hsl(var(--muted-foreground));
   font-size: 0.75rem;
   line-height: 1.5;
@@ -459,11 +559,11 @@ async function executeCommand(): Promise<void> {
 
 @media (max-width: 640px) {
   .settings-plugin-command {
-    padding: 28px 18px 36px;
+    padding: 20px 18px 24px;
   }
 
   .settings-plugin-command-heading {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 }
 </style>

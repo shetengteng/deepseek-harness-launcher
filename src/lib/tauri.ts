@@ -427,11 +427,28 @@ export interface PluginCommandResult {
   summary: string;
 }
 
+export interface InstalledPlugin {
+  name: string;
+  spec: string;
+}
+
+export interface ProfilePluginList {
+  profile: string;
+  plugins: InstalledPlugin[];
+}
+
 /** 使用 launcher 托管的 dsh 执行单条、经过校验的插件安装或卸载命令。 */
 export function runPluginCommand(
   command: string,
 ): Promise<PluginCommandResult> {
   return invokeCommand<PluginCommandResult>("run_plugin_command", { command });
+}
+
+/** 读取指定 profile 里当前可卸载的第三方插件。 */
+export function listProfilePlugins(
+  profile: string,
+): Promise<ProfilePluginList> {
+  return invokeCommand<ProfilePluginList>("list_profile_plugins", { profile });
 }
 
 // ─── PR-019: 诊断导出 ───

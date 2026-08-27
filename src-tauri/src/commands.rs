@@ -38,7 +38,10 @@ pub use node_install::{
     rollback_node_upgrade_command, upgrade_node_command, upgrade_node_for_dsh_update_command,
     InstallNodeArgs, NodeUpdateTarget, NodeUpgradeTransaction,
 };
-pub use plugin_command::{run_plugin_command, PluginCommandResult};
+pub use plugin_command::{
+    list_profile_plugins, run_plugin_command, InstalledPlugin, PluginCommandResult,
+    ProfilePluginList,
+};
 pub use recovery::{
     decide_after_crash, spawn_crash_recovery, CrashAction, CrashLimitPayload, HostRestartedPayload,
 };

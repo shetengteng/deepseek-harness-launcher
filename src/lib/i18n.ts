@@ -80,6 +80,15 @@ const messages = {
     "pluginCommand.failed": "插件操作失败，请检查来源与 profile 后重试。",
     "pluginCommand.safety":
       "插件来源由 dsh 处理。安装前请确认来源可信，并在卸载时使用已安装时的同一来源。",
+    "pluginList.title": "已安装插件",
+    "pluginList.description":
+      "当前 web profile 中已安装、可直接卸载的第三方插件。",
+    "pluginList.empty": "还没有已安装的第三方插件。",
+    "pluginList.failed": "无法读取已安装插件列表。",
+    "pluginList.loading": "正在读取插件列表…",
+    "pluginList.uninstall": "卸载",
+    "pluginList.confirm": "确认卸载",
+    "pluginList.cancel": "取消",
     "settings.description":
       "管理 DeepSeek Harness 的运行时、更新源和诊断信息。",
     "environment.title": "运行环境",
@@ -325,6 +334,15 @@ const messages = {
       "The plugin action failed. Check the source and profile, then try again.",
     "pluginCommand.safety":
       "dsh handles plugin sources. Verify the source before installation, and use the same source that was installed when removing it.",
+    "pluginList.title": "Installed plugins",
+    "pluginList.description":
+      "Third-party plugins currently installed in the web profile. Use Uninstall to remove one.",
+    "pluginList.empty": "No third-party plugins are installed.",
+    "pluginList.failed": "Could not read the installed plugin list.",
+    "pluginList.loading": "Reading installed plugins…",
+    "pluginList.uninstall": "Uninstall",
+    "pluginList.confirm": "Confirm uninstall",
+    "pluginList.cancel": "Cancel",
     "settings.description":
       "Manage the DeepSeek Harness runtime, update sources, and diagnostics.",
     "environment.title": "Runtime",
@@ -429,7 +447,8 @@ const messages = {
     "update.target": "Target",
     "update.wait": "Please wait",
     "update.cancelling": "Cancelling…",
-    "update.rollbackNodeFailed": "Node rollback failed; check the runtime and try again.",
+    "update.rollbackNodeFailed":
+      "Node rollback failed; check the runtime and try again.",
     "crash.exitCode": "Exit code {value}",
     "crash.signal": "Signal {value}",
     "crash.title": "DeepSeek Harness keeps crashing",

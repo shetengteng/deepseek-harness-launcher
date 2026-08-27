@@ -1,7 +1,9 @@
+use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 use crate::error::{LauncherError, Result};
@@ -107,6 +109,95 @@ pub async fn run_plugin_command(command: String) -> Result<PluginCommandResult> 
     })
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct InstalledPlugin {
+    name: String,
+    spec: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct ProfilePluginList {
+    profile: String,
+    plugins: Vec<InstalledPlugin>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ProfileManifest {
+    #[serde(default)]
+    dependencies: BTreeMap<String, String>,
+    #[serde(default)]
+    dsh: DshManifestSection,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct DshManifestSection {
+    #[serde(default)]
+    profile: DshProfileManifest,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct DshProfileManifest {
+    #[serde(default)]
+    bundles: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn list_profile_plugins(profile: String) -> Result<ProfilePluginList> {
+    if !is_profile_valid(&profile) {
+        return Err(invalid_command());
+    }
+    list_profile_plugins_in(&resolve_dsh_home()?, &profile)
+}
+
+fn resolve_dsh_home() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("DSH_HOME") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    let base = directories::BaseDirs::new().ok_or_else(|| LauncherError::PathResolve {
+        what: "dsh_home",
+        cause: "HOME or APPDATA may be unset".to_string(),
+    })?;
+    Ok(base.home_dir().join(".dsh"))
+}
+
+fn list_profile_plugins_in(home: &Path, profile: &str) -> Result<ProfilePluginList> {
+    let manifest_path = home.join("profiles").join(profile).join("package.json");
+    if !manifest_path.is_file() {
+        return Ok(ProfilePluginList {
+            profile: profile.to_string(),
+            plugins: Vec::new(),
+        });
+    }
+    let raw = std::fs::read_to_string(&manifest_path)?;
+    let manifest: ProfileManifest = serde_json::from_str(&raw)?;
+    Ok(ProfilePluginList {
+        profile: profile.to_string(),
+        plugins: installed_plugins(&manifest),
+    })
+}
+
+fn installed_plugins(manifest: &ProfileManifest) -> Vec<InstalledPlugin> {
+    let bundles = manifest
+        .dsh
+        .profile
+        .bundles
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    manifest
+        .dependencies
+        .iter()
+        .filter(|(name, _)| bundles.contains(name.as_str()))
+        .map(|(name, spec)| InstalledPlugin {
+            name: name.clone(),
+            spec: spec.clone(),
+        })
+        .collect()
+}
+
 fn parse_plugin_command(input: &str) -> Result<PluginCommand> {
     let command = input.trim();
     if command.is_empty() || command.len() > MAX_COMMAND_LENGTH {
@@ -202,6 +293,76 @@ mod tests {
         assert_eq!(
             output_summary(b"done", b"\x1b[31mfailed\nplease retry"),
             "[31mfailed please retry"
+        );
+    }
+
+    #[test]
+    fn lists_only_dependency_managed_bundles() {
+        let manifest: ProfileManifest = serde_json::from_str(
+            r#"{
+              "dsh": {
+                "profile": {
+                  "bundles": [
+                    "@deepseek-ai/dsh-base",
+                    "@deepseek-ai/dsh-web-app",
+                    "dshmarket",
+                    "dsh-lumina-tarot"
+                  ]
+                }
+              },
+              "dependencies": {
+                "dsh-lumina-tarot": "link:/tmp/dsh-lumina-tarot",
+                "dshmarket": "1.31.1",
+                "plain-lib": "2.0.0"
+              }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            installed_plugins(&manifest),
+            vec![
+                InstalledPlugin {
+                    name: "dsh-lumina-tarot".to_string(),
+                    spec: "link:/tmp/dsh-lumina-tarot".to_string(),
+                },
+                InstalledPlugin {
+                    name: "dshmarket".to_string(),
+                    spec: "1.31.1".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_profile_manifest_is_an_empty_list() {
+        let temp = tempfile::tempdir().unwrap();
+        let listed = list_profile_plugins_in(temp.path(), "web").unwrap();
+        assert_eq!(listed.profile, "web");
+        assert!(listed.plugins.is_empty());
+    }
+
+    #[test]
+    fn reads_installed_plugins_from_the_profile_manifest() {
+        let temp = tempfile::tempdir().unwrap();
+        let profile_dir = temp.path().join("profiles").join("web");
+        std::fs::create_dir_all(&profile_dir).unwrap();
+        std::fs::write(
+            profile_dir.join("package.json"),
+            r#"{
+              "dsh": { "profile": { "bundles": ["dshmarket"] } },
+              "dependencies": { "dshmarket": "1.31.1" }
+            }"#,
+        )
+        .unwrap();
+
+        let listed = list_profile_plugins_in(temp.path(), "web").unwrap();
+        assert_eq!(
+            listed.plugins,
+            vec![InstalledPlugin {
+                name: "dshmarket".to_string(),
+                spec: "1.31.1".to_string(),
+            }]
         );
     }
 }

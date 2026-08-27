@@ -110,6 +110,7 @@ pub fn run() {
             commands::cli_shim::get_dsh_cli_status,
             commands::cli_shim::uninstall_dsh_cli_command,
             commands::plugin_command::run_plugin_command,
+            commands::plugin_command::list_profile_plugins,
             commands::maintenance::rollback_dsh_command,
             commands::maintenance::exit_app_command,
             commands::diagnostics::export_diagnostics,
