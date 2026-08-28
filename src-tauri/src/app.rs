@@ -120,17 +120,12 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
-            match &event {
-                RunEvent::Ready => {
-                    if let Err(error) = platform::apply_transparent_dock_icon() {
-                        tracing::warn!(%error, "failed to apply transparent dock icon");
-                    }
-                }
-                RunEvent::Reopen {
-                    has_visible_windows: false,
-                    ..
-                } => tray::show_main_window(app),
-                _ => {}
+            if let RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = &event
+            {
+                tray::show_main_window(app);
             }
             if let RunEvent::ExitRequested { api, .. } = event {
                 if app.state::<ExitCoordinator>().requested() {
