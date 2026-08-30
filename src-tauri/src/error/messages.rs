@@ -63,7 +63,20 @@ pub fn user_message(error: &LauncherError) -> String {
                 .to_string()
         }
         LauncherError::DshPlugin(message) if message.contains("timed out") => {
-            "插件操作超时。请检查网络后重试，或在 dsh 中确认当前状态。".to_string()
+            "插件操作超时。Git 插件首次安装可能需要几分钟，请检查网络后重试。".to_string()
+        }
+        LauncherError::DshPlugin(message)
+            if message.contains("needs to execute build scripts")
+                || message.contains("Ignored build scripts")
+                || message.contains("ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED")
+                || message.contains("ERR_PNPM_IGNORED_BUILDS") =>
+        {
+            "这个 git 插件需要在安装时执行构建脚本，被 pnpm 默认拦截。请确认来源后重试；详情已写入应用日志。".to_string()
+        }
+        LauncherError::DshPlugin(message)
+            if message.contains("git-hosted plugins") || message.contains("allowBuilds") =>
+        {
+            "Git 插件安装失败。pnpm 可能拦截了构建脚本，或来源无法访问；详情已写入应用日志。".to_string()
         }
         LauncherError::DshPlugin(_) => {
             "插件操作失败。请检查来源与 profile 后重试；详情已写入应用日志。".to_string()
@@ -161,5 +174,14 @@ mod tests {
             user_message(&LauncherError::Host("readiness timed out".to_string()))
                 .contains("启动超时")
         );
+    }
+
+    #[test]
+    fn git_plugin_build_block_has_an_actionable_message() {
+        let message = user_message(&LauncherError::DshPlugin(
+            "dsh plugin command exited with code Some(1): git-hosted package \"dsh-lumina-tarot@0.1.0\" needs to execute build scripts".to_string(),
+        ));
+        assert!(message.contains("构建脚本"));
+        assert!(message.contains("pnpm"));
     }
 }
