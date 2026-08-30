@@ -60,6 +60,20 @@ export function createHostActions(
     }
   }
 
+  async function restartRunningHost(): Promise<boolean> {
+    if (!state.origin.value || state.starting.value) return false;
+    state.starting.value = true;
+    try {
+      setHostReady(await restartHost());
+      return true;
+    } catch (error) {
+      fail(error, "startHost");
+      return false;
+    } finally {
+      state.starting.value = false;
+    }
+  }
+
   async function retryAfterCrash(): Promise<void> {
     if (state.crashRecovering.value) return;
     state.crashRecovering.value = true;
@@ -117,6 +131,7 @@ export function createHostActions(
     failHostRestart,
     startHostAction,
     shutdownHostAction,
+    restartRunningHost,
     retryAfterCrash,
     rollbackAfterCrash,
     dismissCrash,

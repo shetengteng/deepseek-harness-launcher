@@ -61,6 +61,7 @@ const store = vi.hoisted(() => ({
   markHostRestarting: vi.fn(),
   failHostRestart: vi.fn(),
   startHost: vi.fn(),
+  restartRunningHost: vi.fn(),
   installDsh: vi.fn(),
   resetError: vi.fn(),
   retryLastAction: vi.fn(),

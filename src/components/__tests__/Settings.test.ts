@@ -468,3 +468,82 @@ test("upgrades Node after confirmation and then installs the displayed dsh", asy
   ]);
   wrapper.unmount();
 });
+
+test("shows local settings while the latest version check is still loading", async () => {
+  api.getLatestDshVersion.mockReturnValue(new Promise(() => undefined));
+  const wrapper = mount(Settings, {
+    props: { nodeVersion: "22.19.0", hostOrigin: "http://127.0.0.1:51842/" },
+  });
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("外观");
+  expect(wrapper.text()).toContain("问题排查");
+  expect(wrapper.text()).toContain("0.0.9");
+  expect(wrapper.text()).toContain("22.19.0");
+  expect(wrapper.text()).toContain("127.0.0.1:51842");
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "正在检查更新",
+  );
+  expect(wrapper.text()).not.toContain("无法加载设置");
+});
+
+test("keeps settings visible when the latest version check fails", async () => {
+  api.getLatestDshVersion.mockRejectedValue({
+    message: "npm registry unreachable",
+  });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("外观");
+  expect(wrapper.text()).toContain("0.0.9");
+  expect(wrapper.text()).toContain("问题排查");
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "无法检查最新版本",
+  );
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "npm registry unreachable",
+  );
+  expect(wrapper.text()).not.toContain("无法加载设置");
+});
+
+test("shows appearance and support when runtime state cannot be loaded", async () => {
+  api.getDshState.mockRejectedValue({ message: "state.json unreadable" });
+  const wrapper = mount(Settings, {
+    props: { nodeVersion: "22.19.0" },
+  });
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("外观");
+  expect(wrapper.text()).toContain("问题排查");
+  expect(wrapper.text()).toContain("22.19.0");
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "无法读取运行环境",
+  );
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "state.json unreadable",
+  );
+  expect(wrapper.text()).toContain("无法加载下载来源");
+  expect(wrapper.text()).not.toContain("无法加载设置");
+});
+
+test("loads the command card independently of the latest version check", async () => {
+  api.getLatestDshVersion.mockReturnValue(new Promise(() => undefined));
+  api.getDshCliStatus.mockReturnValue(new Promise(() => undefined));
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("正在读取命令状态");
+  expect(wrapper.text()).toContain("外观");
+  expect(wrapper.text()).toContain("0.0.9");
+});
+
+test("shows a command-card error without hiding other settings", async () => {
+  api.getDshCliStatus.mockRejectedValue({ message: "cli status failed" });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("无法读取命令行状态");
+  expect(wrapper.text()).toContain("cli status failed");
+  expect(wrapper.text()).toContain("外观");
+  expect(wrapper.text()).toContain("0.0.9");
+});

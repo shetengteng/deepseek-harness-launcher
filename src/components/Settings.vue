@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { Settings2 } from "lucide-vue-next";
-import LauncherIcon from "@/components/LauncherIcon.vue";
 import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
 import SettingsAppearanceCard from "@/components/settings/SettingsAppearanceCard.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
@@ -68,14 +67,17 @@ const props = withDefaults(
 );
 
 const dshState = ref<DshStateSnapshot | null>(null);
+const dshStateLoading = ref(true);
+const dshStateErrorDetail = ref<string | null>(null);
 const theme = useThemeStore();
 const { t } = useI18n();
 const latestDshVersion = ref<LatestDshVersion | null>(null);
 const nodeMirrors = ref<MirrorInfo[]>([]);
 const nodeMirrorDraft = ref("");
 const registryDraft = ref("");
-const loading = ref(true);
-const versionsLoading = ref(false);
+const sourcesLoading = ref(true);
+const sourcesError = ref<string | null>(null);
+const versionsLoading = ref(true);
 const upgrading = ref(false);
 const upgradeError = ref<string | null>(null);
 const sourceError = ref<string | null>(null);
@@ -100,6 +102,7 @@ const nodeDownloadProgress = ref<{ bytes: number; total: number | null }>({
 const nodeUpdateOperationId = ref<string | null>(null);
 const installingDshCli = ref(false);
 const dshCliStatus = ref<DshCliStatus | null>(null);
+const dshCliLoading = ref(true);
 const dshCliError = ref<string | null>(null);
 const uninstallingDshCli = ref(false);
 
@@ -130,24 +133,49 @@ const nodeUpdateActionLabel = computed(() =>
     : t("settings.nodeReinstall"),
 );
 
+const dshStateError = computed(() =>
+  dshStateErrorDetail.value
+    ? t("environment.loadFailed", { detail: dshStateErrorDetail.value })
+    : null,
+);
+const sourcesBusy = computed(
+  () => dshStateLoading.value || sourcesLoading.value,
+);
+const sourcesLoadError = computed(() => {
+  if (sourcesError.value) return sourcesError.value;
+  if (dshStateErrorDetail.value)
+    return t("sources.loadFailed", { detail: dshStateErrorDetail.value });
+  return null;
+});
+
 async function loadDshState(): Promise<void> {
-  loading.value = true;
+  dshStateLoading.value = true;
+  dshStateErrorDetail.value = null;
   try {
-    const [state, mirrors, latest] = await Promise.all([
-      getDshState(),
-      listMirrors(),
-      getLatestDshVersion(),
-    ]);
+    const state = await getDshState();
     dshState.value = state;
-    latestDshVersion.value = latest;
-    nodeMirrors.value = mirrors;
     nodeMirrorDraft.value = state.node_mirror;
     registryDraft.value = state.registry;
-    await loadDshCliStatus();
-  } catch {
+  } catch (error) {
     dshState.value = null;
+    dshStateErrorDetail.value = messageOf(error);
   } finally {
-    loading.value = false;
+    dshStateLoading.value = false;
+  }
+}
+
+async function loadMirrors(): Promise<void> {
+  sourcesLoading.value = true;
+  sourcesError.value = null;
+  try {
+    nodeMirrors.value = await listMirrors();
+  } catch (error) {
+    nodeMirrors.value = [];
+    sourcesError.value = t("sources.loadFailed", {
+      detail: messageOf(error),
+    });
+  } finally {
+    sourcesLoading.value = false;
   }
 }
 
@@ -157,7 +185,10 @@ async function refreshLatestDshVersion(): Promise<void> {
   try {
     latestDshVersion.value = await getLatestDshVersion();
   } catch (error) {
-    upgradeError.value = messageOf(error);
+    latestDshVersion.value = null;
+    upgradeError.value = t("environment.latestFailed", {
+      detail: messageOf(error),
+    });
   } finally {
     versionsLoading.value = false;
   }
@@ -278,7 +309,11 @@ async function confirmManualNodeUpdate(): Promise<void> {
 
 async function finishLatestInstall(): Promise<void> {
   const restart = await restartHostAfterDshUpdate();
-  await loadDshState();
+  await Promise.all([
+    loadDshState(),
+    refreshLatestDshVersion(),
+    loadDshCliStatus(),
+  ]);
   if (restart.rolled_back) {
     upgradeError.value = t("settings.rollback", {
       version: restart.active_version,
@@ -374,11 +409,17 @@ async function handleInstallDshCli(): Promise<void> {
 }
 
 async function loadDshCliStatus(): Promise<void> {
+  if (dshCliStatus.value === null) dshCliLoading.value = true;
   try {
     dshCliStatus.value = await getDshCliStatus();
+    dshCliError.value = null;
   } catch (error) {
     dshCliStatus.value = null;
-    dshCliError.value = messageOf(error);
+    dshCliError.value = t("command.loadFailed", {
+      detail: messageOf(error),
+    });
+  } finally {
+    dshCliLoading.value = false;
   }
 }
 
@@ -405,6 +446,9 @@ let unlistenExtractProgress: (() => void) | null = null;
 
 onMounted(() => {
   void loadDshState();
+  void loadMirrors();
+  void refreshLatestDshVersion();
+  void loadDshCliStatus();
   void (async () => {
     try {
       unlistenDownloadProgress = await listen<ProgressEvent>(
@@ -447,24 +491,7 @@ watch(
   <div
     class="settings-panel relative flex min-h-0 flex-1 flex-col overflow-y-auto px-8 pb-12 pt-[clamp(32px,8vh,88px)] max-sm:px-[18px] max-sm:pb-9 max-sm:pt-7"
   >
-    <div
-      v-if="loading"
-      class="absolute inset-0 flex items-center justify-center"
-      role="status"
-    >
-      <section class="flex flex-col items-center gap-[18px]">
-        <LauncherIcon
-          aria-hidden="true"
-          class="size-16 shrink-0 animate-none"
-        />
-        <span
-          aria-hidden="true"
-          class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary"
-        />
-        <span class="sr-only">{{ t("settings.loading") }}</span>
-      </section>
-    </div>
-    <div v-else class="settings-panel-content">
+    <div class="settings-panel-content">
       <header class="settings-panel-heading">
         <div class="settings-panel-mark" aria-hidden="true">
           <Settings2 />
@@ -478,10 +505,7 @@ watch(
         </div>
       </header>
 
-      <div v-if="!dshState" class="text-muted-foreground text-sm">
-        {{ t("settings.loadFailed") }}
-      </div>
-      <div v-else class="settings-panel-cards space-y-4">
+      <div class="settings-panel-cards space-y-4">
         <SettingsAppearanceCard
           :mode="theme.mode"
           :disabled="theme.initializing || theme.saving"
@@ -490,6 +514,8 @@ watch(
         />
         <SettingsEnvironmentCard
           :dsh-state="dshState"
+          :state-loading="dshStateLoading"
+          :state-error="dshStateError"
           :node-version="props.nodeVersion"
           :host-origin="props.hostOrigin"
           :latest-version="latestDshVersion"
@@ -506,6 +532,7 @@ watch(
         />
         <SettingsCommandCard
           :status="dshCliStatus"
+          :loading="dshCliLoading && dshCliStatus === null"
           :installing="installingDshCli"
           :uninstalling="uninstallingDshCli"
           :error="dshCliError"
@@ -516,6 +543,8 @@ watch(
           :node-mirrors="nodeMirrors"
           :node-mirror="nodeMirrorDraft"
           :registry="registryDraft"
+          :loading="sourcesBusy"
+          :load-error="sourcesLoadError"
           :error="sourceError"
           @set-node-mirror="handleSetNodeMirror"
           @set-registry="handleSetRegistry"

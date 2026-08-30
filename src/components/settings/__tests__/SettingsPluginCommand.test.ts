@@ -6,10 +6,16 @@ const api = vi.hoisted(() => ({
   listProfilePlugins: vi.fn(),
 }));
 
+const store = vi.hoisted(() => ({
+  origin: "http://127.0.0.1:1337/",
+  restartRunningHost: vi.fn(),
+}));
+
 vi.mock("@/lib/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/tauri")>();
   return { ...actual, ...api };
 });
+vi.mock("@/stores/launcher", () => ({ useLauncherStore: () => store }));
 
 import SettingsPluginCommand from "@/components/settings/SettingsPluginCommand.vue";
 
@@ -24,6 +30,8 @@ async function openCommandTab(wrapper: ReturnType<typeof mount>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store.origin = "http://127.0.0.1:1337/";
+  store.restartRunningHost.mockResolvedValue(true);
   api.listProfilePlugins.mockResolvedValue({ profile: "web", plugins: [] });
 });
 
@@ -77,7 +85,10 @@ test("runs a confirmed remove command and reports success", async () => {
   expect(api.runPluginCommand).toHaveBeenCalledWith(
     "dsh plugin --profile web remove github:owner/plugin",
   );
-  expect(wrapper.get('[role="status"]').text()).toContain("已完成卸载");
+  expect(store.restartRunningHost).toHaveBeenCalledOnce();
+  expect(wrapper.get('[role="status"]').text()).toContain(
+    "已完成卸载，dsh 已重启",
+  );
 });
 
 test("lists installed plugins and uninstalls from the row button", async () => {
@@ -106,8 +117,39 @@ test("lists installed plugins and uninstalls from the row button", async () => {
   expect(api.runPluginCommand).toHaveBeenCalledWith(
     "dsh plugin --profile web remove dsh-lumina-tarot",
   );
-  expect(wrapper.get('[role="status"]').text()).toContain("已完成卸载");
+  expect(store.restartRunningHost).toHaveBeenCalledOnce();
+  expect(wrapper.get('[role="status"]').text()).toContain(
+    "已完成卸载，dsh 已重启",
+  );
   expect(api.listProfilePlugins).toHaveBeenCalledTimes(2);
+});
+
+test("does not restart dsh when the host is not running", async () => {
+  store.restartRunningHost.mockResolvedValue(false);
+  api.runPluginCommand.mockResolvedValue({
+    action: "remove",
+    profile: "web",
+    source: "dsh-lumina-tarot",
+    summary: "removed dsh-lumina-tarot",
+  });
+  api.listProfilePlugins.mockResolvedValue({
+    profile: "web",
+    plugins: [{ name: "dsh-lumina-tarot", spec: "link:/tmp/plugin" }],
+  });
+  const wrapper = mount(SettingsPluginCommand);
+  await flushPromises();
+
+  await wrapper
+    .get('button[aria-label="卸载 dsh-lumina-tarot"]')
+    .trigger("click");
+  await wrapper
+    .get('button[aria-label="确认卸载 dsh-lumina-tarot"]')
+    .trigger("click");
+  await flushPromises();
+
+  expect(store.restartRunningHost).toHaveBeenCalledOnce();
+  expect(wrapper.get('[role="status"]').text()).toContain("已完成卸载");
+  expect(wrapper.get('[role="status"]').text()).not.toContain("dsh 已重启");
 });
 
 test("keeps the command form on a separate tab", async () => {

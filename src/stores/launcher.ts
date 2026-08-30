@@ -127,6 +127,7 @@ export const useLauncherStore = defineStore("launcher", () => {
     failHostRestart: host.failHostRestart,
     startHost: host.startHostAction,
     shutdownHost: host.shutdownHostAction,
+    restartRunningHost: host.restartRunningHost,
     retryAfterCrash: host.retryAfterCrash,
     rollbackAfterCrash: host.rollbackAfterCrash,
     dismissCrash: host.dismissCrash,

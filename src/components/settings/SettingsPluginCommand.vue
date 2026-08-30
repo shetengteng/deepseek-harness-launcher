@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import {
   CheckCircle2,
   CircleAlert,
@@ -22,6 +22,7 @@ import {
   type LauncherErrorPayload,
   type PluginCommandResult,
 } from "@/lib/tauri";
+import { useLauncherStore } from "@/stores/launcher";
 import SettingsInstalledPlugins from "./SettingsInstalledPlugins.vue";
 
 type PluginTab = "installed" | "command";
@@ -33,9 +34,12 @@ const validationError = ref<string | null>(null);
 const result = ref<PluginCommandResult | null>(null);
 const operationError = ref<string | null>(null);
 const running = ref(false);
+const restartingHost = shallowRef(false);
+const hostRestarted = shallowRef(false);
 const removingName = ref<string | null>(null);
 const activeTab = ref<PluginTab>("installed");
 const { t } = useI18n();
+const store = useLauncherStore();
 const {
   plugins: installedPlugins,
   loading: installedLoading,
@@ -82,18 +86,22 @@ function parseCommand(value: string): ParsedPluginCommand | null {
   return { action, profile, source };
 }
 
+function resetOperationFeedback(): void {
+  result.value = null;
+  hostRestarted.value = false;
+  operationError.value = null;
+}
+
 function updateCommand(action: PluginAction): void {
   command.value = `dsh plugin --profile web ${action} `;
   preview.value = null;
-  result.value = null;
+  resetOperationFeedback();
   validationError.value = null;
-  operationError.value = null;
   void nextTick(() => input.value?.$el.focus());
 }
 
 function prepareCommand(): void {
-  result.value = null;
-  operationError.value = null;
+  resetOperationFeedback();
   const parsed = parseCommand(command.value);
   if (!parsed) {
     preview.value = null;
@@ -110,14 +118,26 @@ function editCommand(): void {
   void nextTick(() => input.value?.$el.focus());
 }
 
+async function runPluginThenReloadHost(line: string): Promise<void> {
+  hostRestarted.value = false;
+  result.value = await runPluginCommand(line);
+  await reloadInstalled();
+  if (result.value.profile !== "web") return;
+  restartingHost.value = true;
+  try {
+    hostRestarted.value = await store.restartRunningHost();
+  } finally {
+    restartingHost.value = false;
+  }
+}
+
 async function executeCommand(): Promise<void> {
   if (!preview.value || running.value) return;
   running.value = true;
   operationError.value = null;
   try {
-    result.value = await runPluginCommand(command.value);
+    await runPluginThenReloadHost(command.value);
     preview.value = null;
-    await reloadInstalled();
   } catch (error) {
     const payload = error as LauncherErrorPayload;
     operationError.value =
@@ -132,12 +152,10 @@ async function removeInstalled(name: string): Promise<void> {
   if (running.value || !parseCommand(line)) return;
   running.value = true;
   removingName.value = name;
-  operationError.value = null;
-  result.value = null;
+  resetOperationFeedback();
   preview.value = null;
   try {
-    result.value = await runPluginCommand(line);
-    await reloadInstalled();
+    await runPluginThenReloadHost(line);
   } catch (error) {
     const payload = error as LauncherErrorPayload;
     operationError.value =
@@ -196,12 +214,19 @@ async function removeInstalled(name: string): Promise<void> {
             <div>
               <p class="text-sm font-medium">
                 {{
-                  t("pluginCommand.completed", {
-                    action:
-                      result.action === "remove"
-                        ? t("pluginCommand.remove")
-                        : t("pluginCommand.install"),
-                  })
+                  restartingHost
+                    ? t("pluginCommand.restarting")
+                    : t(
+                        hostRestarted
+                          ? "pluginCommand.completedAndRestarted"
+                          : "pluginCommand.completed",
+                        {
+                          action:
+                            result.action === "remove"
+                              ? t("pluginCommand.remove")
+                              : t("pluginCommand.install"),
+                        },
+                      )
                 }}
               </p>
               <p
@@ -283,9 +308,8 @@ async function removeInstalled(name: string): Promise<void> {
                       placeholder="dsh plugin --profile web add <source>"
                       @input="
                         preview = null;
-                        result = null;
+                        resetOperationFeedback();
                         validationError = null;
-                        operationError = null;
                       "
                     />
                   </div>

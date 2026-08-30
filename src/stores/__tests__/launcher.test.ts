@@ -23,6 +23,7 @@ import { useLauncherStore } from "@/stores/launcher";
 
 beforeEach(() => {
   setActivePinia(createPinia());
+  vi.clearAllMocks();
 });
 
 test("dsh runtime repair clears only the unavailable dsh version", () => {
@@ -90,5 +91,47 @@ test("tray restart failure clears the starting overlay and records a host error"
     kind: "host",
     message: "failed to spawn host",
   });
+  expect(store.lastFailedAction).toBe("startHost");
+});
+
+test("restartRunningHost restarts a live host and remounts the session", async () => {
+  const { restartHost } = await import("@/lib/tauri");
+  vi.mocked(restartHost).mockResolvedValue("http://127.0.0.1:1338/");
+  const store = useLauncherStore();
+  store.setHostReady("http://127.0.0.1:1337/");
+  const session = store.hostSession;
+
+  await expect(store.restartRunningHost()).resolves.toBe(true);
+
+  expect(restartHost).toHaveBeenCalledOnce();
+  expect(store.origin).toBe("http://127.0.0.1:1338/");
+  expect(store.hostSession).toBe(session + 1);
+  expect(store.starting).toBe(false);
+  expect(store.phase).toBe("ready");
+});
+
+test("restartRunningHost does nothing when the host is not running", async () => {
+  const { restartHost } = await import("@/lib/tauri");
+  const store = useLauncherStore();
+
+  await expect(store.restartRunningHost()).resolves.toBe(false);
+
+  expect(restartHost).not.toHaveBeenCalled();
+  expect(store.origin).toBeNull();
+});
+
+test("restartRunningHost records a host error when restart fails", async () => {
+  const { restartHost } = await import("@/lib/tauri");
+  vi.mocked(restartHost).mockRejectedValue({
+    kind: "host",
+    message: "failed to spawn host",
+  });
+  const store = useLauncherStore();
+  store.setHostReady("http://127.0.0.1:1337/");
+
+  await expect(store.restartRunningHost()).resolves.toBe(false);
+
+  expect(store.starting).toBe(false);
+  expect(store.phase).toBe("error");
   expect(store.lastFailedAction).toBe("startHost");
 });
