@@ -1,7 +1,7 @@
 /// Readiness output line prefix.
 pub const READINESS_PREFIX: &str = "dsh web: ";
 
-/// A validated loopback HTTP origin.
+/// A validated loopback HTTP URL (origin plus any auth query dsh emits).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin(pub(super) String);
 
@@ -72,11 +72,15 @@ fn parse_token(token: &str) -> Result<Origin, ReadinessError> {
             "port must be explicit (1..=65535): {token}"
         )));
     }
-    if !trailing.is_empty() && trailing != "/" {
+    if !trailing.is_empty() && trailing != "/" && !trailing.starts_with("/?") {
         return Err(ReadinessError::InvalidUrl(format!(
-            "readiness URL must have pathname '/' and no query/hash: {token}"
+            "readiness URL must have pathname '/' and no hash: {token}"
         )));
     }
 
-    Ok(Origin(format!("http://{host}:{port}")))
+    let query = match trailing {
+        "" | "/" => "",
+        _ => trailing, // starts with "/?"
+    };
+    Ok(Origin(format!("http://{host}:{port}{query}")))
 }

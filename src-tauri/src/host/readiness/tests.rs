@@ -54,12 +54,30 @@ async fn rejects_invalid_readiness_urls() {
         "dsh web: https://127.0.0.1:8080/\n",
         "dsh web: http://127.0.0.1/\n",
         "dsh web: http://127.0.0.1:0/\n",
-        "dsh web: http://127.0.0.1:8080/?x=1\n",
         "dsh web: http://127.0.0.1:8080/#frag\n",
+        "dsh web: http://127.0.0.1:8080/web?token=abc\n",
+        "dsh web: http://127.0.0.1:8080?token=abc\n",
     ] {
         let error = ReadinessParser::new().push(line).await.unwrap_err();
         assert!(matches!(error, ReadinessError::InvalidUrl(_)));
     }
+}
+
+#[tokio::test]
+async fn preserves_auth_query_in_readiness_url() {
+    let parser = ReadinessParser::new();
+    let result = parser
+        .push("dsh web: http://127.0.0.1:62860/?token=icFSw9ecAaK8mdgnOsYiKSjSlQFMDxjTCp7EnCZiYZI\n")
+        .await
+        .unwrap();
+    assert_eq!(
+        result.as_ref().map(Origin::as_str),
+        Some("http://127.0.0.1:62860/?token=icFSw9ecAaK8mdgnOsYiKSjSlQFMDxjTCp7EnCZiYZI")
+    );
+    assert_eq!(
+        parser.finalize().await.unwrap().as_str(),
+        "http://127.0.0.1:62860/?token=icFSw9ecAaK8mdgnOsYiKSjSlQFMDxjTCp7EnCZiYZI"
+    );
 }
 
 #[tokio::test]
