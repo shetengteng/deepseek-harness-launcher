@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import { Download, Eye, EyeOff, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,16 @@ const hostAddress = computed(() => {
     return props.hostOrigin;
   }
 });
+
+const launchToken = computed(() => {
+  if (!props.hostOrigin) return null;
+  try {
+    return new URL(props.hostOrigin).searchParams.get("token");
+  } catch {
+    return null;
+  }
+});
+const tokenVisible = ref(false);
 
 const dshActionsDisabled = computed(
   () =>
@@ -145,6 +155,47 @@ const dshActionsDisabled = computed(
           </div>
         </div>
         <span class="font-mono text-sm">{{ hostAddress ?? t("environment.notRunning") }}</span>
+      </div>
+      <div class="flex items-center justify-between gap-4">
+        <div class="shrink-0">
+          <div class="text-sm">{{ t("environment.launchToken") }}</div>
+          <div class="text-xs text-muted-foreground">
+            {{ t("environment.launchTokenDescription") }}
+          </div>
+        </div>
+        <template v-if="launchToken">
+          <div class="flex min-w-0 items-center justify-end gap-1">
+            <span
+              class="min-w-0 break-all text-right font-mono text-xs"
+              data-testid="launch-token-value"
+            >
+              {{ tokenVisible ? launchToken : "••••••••••••" }}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="shrink-0"
+              :aria-label="
+                tokenVisible
+                  ? t('environment.hideToken')
+                  : t('environment.showToken')
+              "
+              :title="
+                tokenVisible
+                  ? t('environment.hideToken')
+                  : t('environment.showToken')
+              "
+              data-testid="launch-token-toggle"
+              @click="tokenVisible = !tokenVisible"
+            >
+              <EyeOff v-if="tokenVisible" aria-hidden="true" />
+              <Eye v-else aria-hidden="true" />
+            </Button>
+          </div>
+        </template>
+        <span v-else class="font-mono text-sm">{{
+          hostAddress ? t("environment.noToken") : t("environment.notRunning")
+        }}</span>
       </div>
     </CardContent>
   </Card>

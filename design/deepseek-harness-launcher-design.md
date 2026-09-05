@@ -67,7 +67,7 @@ PATH=<data_dir>/bin:$PATH <node> --expose-internals <dsh-entry>/lib/bin.js web -
 dsh 启动后在 stdout 输出就绪行：
 
 ```
-dsh web: http://127.0.0.1:<port>/
+dsh web: http://127.0.0.1:<port>/?token=<launch-token>
 ```
 
 壳子解析此行后拿到 origin，将 Tauri webview 导航到该 URL。约束与 dsh desktop 的 host supervisor 保持等价；上游参考实现不随本仓库分发：
@@ -75,7 +75,7 @@ dsh web: http://127.0.0.1:<port>/
 - 协议必须为 `http:`
 - hostname 必须为 `127.0.0.1` 或 `localhost`
 - 必须有显式端口号（1–65535）
-- pathname 必须为 `/`，无 query 和 hash
+- pathname 必须为 `/`；dsh `0.1.2-rc.1` 起携带启动令牌 query（`?token=...`），壳子解析时保留整个 query 用于 iframe 认证，hash 仍拒绝
 
 ### 2.3 契约稳定性
 

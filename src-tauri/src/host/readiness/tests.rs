@@ -67,7 +67,9 @@ async fn rejects_invalid_readiness_urls() {
 async fn preserves_auth_query_in_readiness_url() {
     let parser = ReadinessParser::new();
     let result = parser
-        .push("dsh web: http://127.0.0.1:62860/?token=icFSw9ecAaK8mdgnOsYiKSjSlQFMDxjTCp7EnCZiYZI\n")
+        .push(
+            "dsh web: http://127.0.0.1:62860/?token=icFSw9ecAaK8mdgnOsYiKSjSlQFMDxjTCp7EnCZiYZI\n",
+        )
         .await
         .unwrap();
     assert_eq!(

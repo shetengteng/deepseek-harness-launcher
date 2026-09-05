@@ -41,13 +41,23 @@ const EXTERNAL_LINK_BRIDGE: &str = r#"
 })();
 "#;
 
-/// 仅允许壳页与当前 Host 就绪行声明的精确 dsh origin 导航。
+/// 仅允许壳页（内置协议 origin 或启动时注册的前端回环 origin）与当前 Host
+/// 就绪行声明的精确 dsh origin 导航。
 #[derive(Default)]
 pub(crate) struct NavigationPolicy {
     dsh_origin: RwLock<Option<Url>>,
+    launcher_origin: RwLock<Option<Url>>,
 }
 
 impl NavigationPolicy {
+    pub(crate) fn activate_launcher_origin(&self, origin: &str) {
+        let parsed = Url::parse(origin).expect("launcher origin is validated before activation");
+        *self
+            .launcher_origin
+            .write()
+            .expect("navigation policy lock poisoned") = Some(parsed);
+    }
+
     pub(crate) fn activate_dsh_origin(&self, origin: &str) {
         let parsed = Url::parse(origin).expect("host origin was validated before activation");
         *self
@@ -72,7 +82,13 @@ impl NavigationPolicy {
     }
 
     fn allows(&self, url: &Url) -> bool {
-        is_launcher_url(url)
+        is_builtin_launcher_url(url)
+            || self
+                .launcher_origin
+                .read()
+                .expect("navigation policy lock poisoned")
+                .as_ref()
+                .is_some_and(|origin| same_origin(origin, url))
             || self
                 .dsh_origin
                 .read()
@@ -95,13 +111,9 @@ pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
-fn is_launcher_url(url: &Url) -> bool {
+fn is_builtin_launcher_url(url: &Url) -> bool {
     (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
         || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"))
-        || (cfg!(debug_assertions)
-            && url.scheme() == "http"
-            && url.host_str() == Some("localhost")
-            && url.port_or_known_default() == Some(1420))
 }
 
 fn same_origin(left: &Url, right: &Url) -> bool {
@@ -124,9 +136,20 @@ mod tests {
 
         assert!(policy.allows(&url("tauri://localhost/")));
         assert!(policy.allows(&url("https://tauri.localhost/")));
-        assert!(policy.allows(&url("http://localhost:1420/")));
         assert!(!policy.allows(&url("http://127.0.0.1:48123/")));
         assert!(!policy.allows(&url("https://example.com/")));
+    }
+
+    #[test]
+    fn allows_only_the_registered_frontend_origin() {
+        let policy = NavigationPolicy::default();
+        policy.activate_launcher_origin("http://127.0.0.1:1420");
+
+        assert!(policy.allows(&url("http://127.0.0.1:1420/")));
+        assert!(policy.allows(&url("http://127.0.0.1:1420/assets/app.js")));
+        assert!(!policy.allows(&url("http://127.0.0.1:1421/")));
+        assert!(!policy.allows(&url("http://localhost:1420/")));
+        assert!(!policy.allows(&url("https://127.0.0.1:1420/")));
     }
 
     #[test]

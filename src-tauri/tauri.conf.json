@@ -5,22 +5,13 @@
   "identifier": "io.deepseek.harness-launcher",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": false,
-    "windows": [
-      {
-        "title": "DeepSeek Harness Launcher",
-        "width": 1280,
-        "height": 840,
-        "minWidth": 960,
-        "minHeight": 600,
-        "theme": "Light"
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; frame-src http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
     }

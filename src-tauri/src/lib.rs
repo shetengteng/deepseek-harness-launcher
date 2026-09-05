@@ -10,6 +10,7 @@ pub mod commands;
 pub mod dsh;
 pub mod error;
 pub mod host;
+mod ipc_commands;
 pub mod logging;
 pub mod node;
 pub mod paths;

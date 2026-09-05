@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 use crate::{commands, logging, navigation, node::NodeDownloadOperations, paths, tray};
 
@@ -40,20 +40,69 @@ pub fn run() {
     if let Err(error) = paths::ensure_dirs() {
         eprintln!("warning: ensure_dirs failed: {error:?}");
     }
-    tauri::Builder::default()
+    #[cfg(not(dev))]
+    let frontend_port =
+        portpicker::pick_unused_port().expect("failed to pick a loopback port for the frontend");
+
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             tray::show_main_window(app);
         }))
         .plugin(navigation::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(not(dev))]
+    let builder = builder.plugin(
+        tauri_plugin_localhost::Builder::new(frontend_port)
+            .host("127.0.0.1")
+            .build(),
+    );
+
+    builder
         .manage(commands::SharedState::new())
         .manage(crate::dsh::DshInstallOperations::default())
         .manage(NodeDownloadOperations::default())
         .manage(ExitCoordinator {
             requested: AtomicBool::new(false),
         })
-        .setup(|app| {
+        .setup(move |app| {
+            // 前端 origin 必须与 dsh（--host 127.0.0.1）同 site，否则 dsh 颁发的
+            // SameSite=Strict cookie 会被 WebKit 当作跨站 iframe cookie 丢弃
+            // （详见 design/dsh-auth-cookie-samesite-fix.md）。dev 的 origin 直接
+            // 取自 tauri.conf.json 的 devUrl，避免两处重复定义。
+            #[cfg(dev)]
+            let (frontend_url, window_url) = (
+                app.config()
+                    .build
+                    .dev_url
+                    .clone()
+                    .expect("devUrl must be set in tauri.conf.json"),
+                WebviewUrl::App(std::path::PathBuf::from("/")),
+            );
+            #[cfg(not(dev))]
+            let (frontend_url, window_url) = {
+                let addr = format!("127.0.0.1:{frontend_port}");
+                if !wait_for_loopback_server(&addr) {
+                    report_frontend_server_failure(app);
+                    return Ok(());
+                }
+                let url = Url::parse(&format!("http://{addr}"))
+                    .expect("frontend loopback origin is a valid URL");
+                (url.clone(), WebviewUrl::External(url))
+            };
+
+            // 前端运行在回环 origin（非内置协议）上：remote 上下文的 IPC 全部走
+            // ACL 检查，应用自身命令也必须显式授权，否则启动即
+            // "Command launcher_status not allowed by ACL"。capability 同时覆盖
+            // local（dev 下相对 devUrl 判定为 local）与 remote（回环 URL）上下文。
+            register_loopback_capability(app, &frontend_url)?;
+
+            // 必须先放行前端 origin，再创建窗口：首次导航也经过 navigation policy。
+            app.state::<commands::SharedState>()
+                .navigation
+                .activate_launcher_origin(frontend_url.as_str());
+
             let handle = app.handle().clone();
             app.state::<commands::SharedState>()
                 .supervisor
@@ -61,9 +110,13 @@ pub fn run() {
                     commands::spawn_crash_recovery(handle.clone(), detail)
                 }));
             tray::setup(app)?;
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                commands::settings::apply_persisted_window_theme(&window);
-            }
+            let window = WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, window_url)
+                .title("DeepSeek Harness Launcher")
+                .inner_size(1280.0, 840.0)
+                .min_inner_size(960.0, 600.0)
+                .theme(Some(tauri::Theme::Light))
+                .build()?;
+            commands::settings::apply_persisted_window_theme(&window);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -135,4 +188,53 @@ pub fn run() {
                 tray::request_exit(app.clone());
             }
         });
+}
+
+// 前端服务器在插件自己的线程里启动（bind 失败只会在该线程 panic）；
+// 窗口加载前确认端口已可连，失败时返回 false 由调用方给出可操作的错误。
+#[cfg(not(dev))]
+fn wait_for_loopback_server(addr: &str) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(addr).is_ok() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    tracing::error!(addr, "frontend loopback server did not accept connections in time");
+    false
+}
+
+// 设计 §11.1：用户可见错误必须可操作。与其让窗口加载死 URL 得到白屏，
+// 不如弹出错误说明并退出，用户重试或导出诊断。
+#[cfg(not(dev))]
+fn report_frontend_server_failure(app: &tauri::App) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+    let handle = app.handle().clone();
+    app.dialog()
+        .message("无法启动本地前端服务，请重新启动应用。若持续出现，请通过设置导出诊断日志并反馈。")
+        .title("DeepSeek Harness Launcher")
+        .kind(MessageDialogKind::Error)
+        .show(move |_| {
+            handle.state::<ExitCoordinator>().request();
+            handle.exit(1);
+        });
+}
+
+// 授予回环前端窗口全部 IPC 权限（build.rs 为每个命令生成 allow-<command>
+// 权限）。capability 默认 local=true 且 remote 指向前端 origin，dev 与生产
+// 上下文都由此单一来源授权，不再保留静态 capabilities 文件。
+fn register_loopback_capability(app: &tauri::App, frontend_url: &Url) -> tauri::Result<()> {
+    let mut capability = tauri::ipc::CapabilityBuilder::new("loopback-frontend")
+        .remote(frontend_url.to_string())
+        .window(MAIN_WINDOW_LABEL)
+        .permission("core:default")
+        .permission("opener:allow-open-url")
+        .permission("opener:allow-default-urls")
+        .permission("dialog:default");
+    for command in crate::ipc_commands::IPC_COMMANDS {
+        capability = capability.permission(format!("allow-{}", command.replace('_', "-")));
+    }
+    app.add_capability(capability)
 }
