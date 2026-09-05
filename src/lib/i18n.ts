@@ -263,6 +263,7 @@ const messages = {
     "update.verifying": "正在校验安装结果…",
     "update.rollbackVersion":
       "版本 {version} 无法启动，已恢复 {activeVersion}。",
+    "update.startError": "启动失败原因",
     "update.noVersion": "未获取到可安装的新版本，请重新检查更新。",
     "update.running": "更新中…",
     "update.now": "立即更新",
@@ -542,6 +543,7 @@ const messages = {
     "update.verifying": "Verifying the installation…",
     "update.rollbackVersion":
       "Version {version} could not start; restored {activeVersion}.",
+    "update.startError": "Why it failed to start",
     "update.noVersion":
       "No installable new version was found. Check for updates again.",
     "update.running": "Updating…",

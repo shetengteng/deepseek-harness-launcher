@@ -9,6 +9,8 @@ const api = vi.hoisted(() =>
       "getNodeUpdateTarget",
       "installDshCli",
       "installDsh",
+      "cancelDshInstall",
+      "cancelNodeInstall",
       "upgradeNode",
       "upgradeNodeForDshUpdate",
       "rollbackNodeUpgrade",
@@ -176,11 +178,77 @@ test("updates only to the registry latest version after explicit confirmation", 
   await button(wrapper, "安装新版本").trigger("click");
   await flushPromises();
 
-  expect(api.installDsh).toHaveBeenCalledWith({ expectedVersion: "0.1.0" });
+  expect(api.installDsh).toHaveBeenCalledWith({
+    expectedVersion: "0.1.0",
+    operationId: expect.any(String),
+  });
   expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
   expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([
     "http://127.0.0.1:1337/",
   ]);
+});
+
+test("shows install progress details while updating to the latest dsh", async () => {
+  let finishInstall: ((version: string) => void) | undefined;
+  api.installDsh.mockImplementation(
+    () => new Promise<string>((resolve) => (finishInstall = resolve)),
+  );
+  const wrapper = mount(Settings, { attachTo: document.body });
+  await flushPromises();
+
+  await button(wrapper, "安装新版本").trigger("click");
+  await flushPromises();
+
+  expect(document.body.textContent).toContain("正在更新 dsh");
+  expect(document.body.textContent).toContain("0.0.9");
+  expect(document.body.textContent).toContain("0.1.0");
+  expect(
+    document.body.querySelector('[data-testid="dsh-update-progress-status"]')
+      ?.textContent,
+  ).toContain("正在从当前下载源获取最新版本");
+
+  eventListeners.get("dsh-install-progress")?.({
+    payload: { stage: "downloading", bytes: 0, total: null },
+  });
+  await flushPromises();
+
+  expect(
+    document.body.querySelector('[data-testid="dsh-update-progress-status"]')
+      ?.textContent,
+  ).toContain("npm install 进行中，已处理 1 个包");
+
+  finishInstall?.("0.1.0");
+  await flushPromises();
+  wrapper.unmount();
+});
+
+test("shows the start error after a new version fails and rolls back", async () => {
+  api.installDsh.mockResolvedValue("0.1.0");
+  api.restartHostAfterDshUpdate.mockResolvedValue({
+    origin: "http://127.0.0.1:1337/",
+    active_version: "0.1.1-rc.2",
+    rolled_back: true,
+    start_error: {
+      kind: "host",
+      message:
+        "host supervisor error: desktop Host readiness timed out after 90s",
+      user_message:
+        "dsh 启动超时（90 秒内未就绪）。请重试；若持续失败请导出诊断信息。",
+    },
+  });
+  const wrapper = mount(Settings);
+  await flushPromises();
+
+  await button(wrapper, "安装新版本").trigger("click");
+  await flushPromises();
+
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "新版本无法启动，已恢复 0.1.1-rc.2。",
+  );
+  const startError = wrapper.get('[data-testid="dsh-start-error"]');
+  expect(startError.text()).toContain("启动失败原因");
+  expect(startError.text()).toContain("dsh 启动超时");
+  expect(startError.text()).toContain("readiness timed out");
 });
 
 test("keeps the update status height fixed when the current version is latest", async () => {
@@ -461,6 +529,7 @@ test("upgrades Node after confirmation and then installs the displayed dsh", asy
   });
   expect(api.installDsh).toHaveBeenNthCalledWith(2, {
     expectedVersion: "0.1.0",
+    operationId: expect.any(String),
   });
   expect(api.restartHostAfterDshUpdate).toHaveBeenCalledOnce();
   expect(wrapper.emitted("upgradeReady")?.[0]).toEqual([

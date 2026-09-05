@@ -148,6 +148,21 @@ export interface DshUpgradeRestartResult {
   origin: string;
   active_version: string;
   rolled_back: boolean;
+  start_error: LauncherErrorPayload | null;
+}
+
+/** 回滚后展示启动失败：优先用户提示，技术详情单独给出。 */
+export function describeStartError(error: LauncherErrorPayload | null | undefined): {
+  hint: string | null;
+  technical: string | null;
+} {
+  if (!error) return { hint: null, technical: null };
+  const hint = error.user_message ?? error.message;
+  const technical =
+    Boolean(error.user_message) && error.user_message !== error.message
+      ? error.message
+      : null;
+  return { hint, technical };
 }
 
 export function restartHostAfterDshUpdate(): Promise<DshUpgradeRestartResult> {

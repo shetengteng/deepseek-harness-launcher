@@ -9,7 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
+import DshUpdateProgressBody from "@/components/DshUpdateProgressBody.vue";
+import StartErrorAlert from "@/components/StartErrorAlert.vue";
 import { useDshUpdate } from "@/composables/useDshUpdate";
 import { useI18n } from "@/lib/i18n";
 
@@ -24,6 +25,8 @@ const {
   updateCurrentVersion,
   updateTargetVersion,
   updateError,
+  updateErrorHint,
+  updateErrorTechnical,
   nodeUpgrade,
   startDshUpdate,
   confirmNodeUpgrade,
@@ -58,12 +61,17 @@ function openUpdateSettings(): void {
         <div
           class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
           role="alert"
+          data-testid="dsh-update-error"
         >
           <div class="mb-1 text-xs font-medium">{{ t("update.failed") }}</div>
           <p class="break-words text-xs leading-5 text-foreground/80">
             {{ updateError }}
           </p>
         </div>
+        <StartErrorAlert
+          :hint="updateErrorHint"
+          :technical="updateErrorTechnical"
+        />
 
         <DialogFooter class="gap-2 sm:gap-2">
           <Button variant="ghost" @click="closeUpdateDialog">{{ t("error.close") }}</Button>
@@ -105,55 +113,19 @@ function openUpdateSettings(): void {
         </DialogFooter>
       </template>
 
-      <template v-else>
-        <DialogHeader>
-          <DialogTitle class="flex items-center gap-2">
-            <RefreshCw class="h-5 w-5 animate-spin text-info" />
-            {{ t("update.updating") }}
-          </DialogTitle>
-          <DialogDescription>
-            {{ t("update.updatingDescription") }}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-          <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">{{ t("update.current") }}</span>
-            <span class="font-mono text-xs">{{
-              updateCurrentVersion ?? "—"
-            }}</span>
-          </div>
-          <div class="flex items-center justify-between gap-4">
-            <span class="text-muted-foreground">{{ t("update.target") }}</span>
-            <span class="font-mono text-xs text-info">
-              {{ updateTargetVersion ?? "—" }}
-            </span>
-          </div>
-        </div>
-
-        <Progress :model-value="updateProgress" class="h-2 [&>div]:bg-info" />
-        <div
-          class="-mt-2 flex items-center justify-between gap-4 font-mono text-[11px] text-muted-foreground"
-          aria-live="polite"
-          role="status"
-        >
-          <span>{{ updateStageMessage }}</span>
-          <span>{{ t("update.wait") }}</span>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            :disabled="
-              updateDialogState !== 'installing' &&
-              updateDialogState !== 'upgrading_node'
-            "
-            @click="cancelDshUpdate"
-          >
-            {{ updateDialogState === "cancelling" ? t("update.cancelling") : t("common.cancel") }}
-          </Button>
-        </DialogFooter>
-      </template>
+      <DshUpdateProgressBody
+        v-else
+        :progress="updateProgress"
+        :stage-message="updateStageMessage"
+        :current-version="updateCurrentVersion"
+        :target-version="updateTargetVersion"
+        :cancelling="updateDialogState === 'cancelling'"
+        :cancel-disabled="
+          updateDialogState !== 'installing' &&
+          updateDialogState !== 'upgrading_node'
+        "
+        @cancel="cancelDshUpdate"
+      />
     </DialogContent>
   </Dialog>
 </template>

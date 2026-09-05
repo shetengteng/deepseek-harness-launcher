@@ -4,6 +4,7 @@ import { Download, Eye, EyeOff, LoaderCircle, RefreshCw } from "lucide-vue-next"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import StartErrorAlert from "@/components/StartErrorAlert.vue";
 import type { DshStateSnapshot, LatestDshVersion } from "@/lib/tauri";
 import { useI18n } from "@/lib/i18n";
 
@@ -17,6 +18,8 @@ const props = defineProps<{
   refreshing: boolean;
   upgrading: boolean;
   error: string | null;
+  errorHint?: string | null;
+  errorTechnical?: string | null;
   nodeUpdateLoading: boolean;
   nodeUpdateError: string | null;
 }>();
@@ -197,6 +200,7 @@ const dshActionsDisabled = computed(
           hostAddress ? t("environment.noToken") : t("environment.notRunning")
         }}</span>
       </div>
+      <StartErrorAlert :hint="errorHint" :technical="errorTechnical" />
     </CardContent>
   </Card>
 </template>

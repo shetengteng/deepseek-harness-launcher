@@ -124,18 +124,23 @@ impl LauncherError {
     }
 }
 
+impl From<&LauncherError> for SerializableError {
+    fn from(error: &LauncherError) -> Self {
+        Self {
+            kind: error.kind_str(),
+            message: error.to_string(),
+            user_message: error.user_message(),
+            data: error.data(),
+        }
+    }
+}
+
 impl serde::Serialize for LauncherError {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        SerializableError {
-            kind: self.kind_str(),
-            message: self.to_string(),
-            user_message: self.user_message(),
-            data: self.data(),
-        }
-        .serialize(serializer)
+        SerializableError::from(self).serialize(serializer)
     }
 }
 

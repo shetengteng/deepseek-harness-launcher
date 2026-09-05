@@ -18,6 +18,7 @@ import {
   installDsh,
   parseNodeUpgradeRequired,
   rollbackNodeUpgrade,
+  describeStartError,
   restartHostAfterDshUpdate,
   upgradeNodeForDshUpdate,
   type DshInstallProgressEvent,
@@ -46,6 +47,8 @@ export function useDshUpdate() {
   const updateCurrentVersion = ref<string | null>(null);
   const updateTargetVersion = ref<string | null>(null);
   const updateError = ref<string | null>(null);
+  const updateErrorHint = ref<string | null>(null);
+  const updateErrorTechnical = ref<string | null>(null);
   const nodeUpgrade = ref<NodeUpgradeRequired | null>(null);
   const nodeUpgradeTransaction = ref<NodeUpgradeTransaction | null>(null);
   const updateStage = ref<DshInstallProgressEvent["stage"]>("resolving");
@@ -106,6 +109,8 @@ export function useDshUpdate() {
     updateDialogState.value = "idle";
     updateOperationId.value = null;
     updateError.value = null;
+    updateErrorHint.value = null;
+    updateErrorTechnical.value = null;
     nodeUpgrade.value = null;
     nodeUpgradeTransaction.value = null;
   }
@@ -144,11 +149,14 @@ export function useDshUpdate() {
     store.dshVersion = restart.active_version;
     store.setHostReady(restart.origin);
     if (restart.rolled_back) {
+      const startError = describeStartError(restart.start_error);
       updateDialogState.value = "failed";
       updateError.value = t("update.rollbackVersion", {
         version,
         activeVersion: restart.active_version,
       });
+      updateErrorHint.value = startError.hint;
+      updateErrorTechnical.value = startError.technical;
       return;
     }
     updateNotice.value?.dismiss();
@@ -189,6 +197,8 @@ export function useDshUpdate() {
   function startDshUpdate(): void {
     if (updateBusy.value || !updateTargetVersion.value) return;
     updateError.value = null;
+    updateErrorHint.value = null;
+    updateErrorTechnical.value = null;
     nodeUpgrade.value = null;
     updateStage.value = "resolving";
     updateInstallActivity.value = 0;
@@ -352,6 +362,8 @@ export function useDshUpdate() {
     updateCurrentVersion,
     updateTargetVersion,
     updateError,
+    updateErrorHint,
+    updateErrorTechnical,
     nodeUpgrade,
     startDshUpdate,
     confirmNodeUpgrade,

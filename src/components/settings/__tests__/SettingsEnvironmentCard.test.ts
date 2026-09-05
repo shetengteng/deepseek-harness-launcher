@@ -158,3 +158,32 @@ test("marks the token row as tokenless for origins without a token", () => {
     false,
   );
 });
+
+test("shows a dedicated start-error panel for rollback details", () => {
+  const wrapper = mount(SettingsEnvironmentCard, {
+    props: {
+      dshState,
+      stateLoading: false,
+      stateError: null,
+      nodeVersion: "22.19.0",
+      hostOrigin: "http://127.0.0.1:51842/",
+      latestVersion: { latest_version: "0.1.0" },
+      refreshing: false,
+      upgrading: false,
+      error: "新版本无法启动，已恢复 0.1.1-rc.2。",
+      errorHint: "dsh 启动超时（90 秒内未就绪）。请重试；若持续失败请导出诊断信息。",
+      errorTechnical:
+        "host supervisor error: desktop Host readiness timed out after 90s",
+      nodeUpdateLoading: false,
+      nodeUpdateError: null,
+    },
+  });
+
+  expect(wrapper.get('[data-testid="dsh-update-status"]').text()).toContain(
+    "新版本无法启动，已恢复 0.1.1-rc.2。",
+  );
+  const startError = wrapper.get('[data-testid="dsh-start-error"]');
+  expect(startError.text()).toContain("启动失败原因");
+  expect(startError.text()).toContain("dsh 启动超时");
+  expect(startError.text()).toContain("readiness timed out");
+});

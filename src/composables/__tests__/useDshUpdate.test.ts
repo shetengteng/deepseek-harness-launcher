@@ -213,3 +213,32 @@ test("reports npm package activity while downloading an update", async () => {
   await flushPromises();
   wrapper.unmount();
 });
+
+test("surfaces the host start error after rolling back a failed update", async () => {
+  api.installDsh.mockResolvedValue("0.2.0");
+  api.restartHostAfterDshUpdate.mockResolvedValue({
+    origin: "http://127.0.0.1:1337/",
+    active_version: "0.1.1-rc.2",
+    rolled_back: true,
+    start_error: {
+      kind: "host",
+      message:
+        "host supervisor error: desktop Host readiness timed out after 90s",
+      user_message:
+        "dsh 启动超时（90 秒内未就绪）。请重试；若持续失败请导出诊断信息。",
+    },
+  });
+  const wrapper = mount(Harness);
+  await flushPromises();
+
+  wrapper.vm.startDshUpdate();
+  await flushPromises();
+
+  expect(wrapper.vm.updateDialogState).toBe("failed");
+  expect(wrapper.vm.updateError).toBe(
+    "版本 0.2.0 无法启动，已恢复 0.1.1-rc.2。",
+  );
+  expect(wrapper.vm.updateErrorHint).toContain("dsh 启动超时");
+  expect(wrapper.vm.updateErrorTechnical).toContain("readiness timed out");
+  wrapper.unmount();
+});

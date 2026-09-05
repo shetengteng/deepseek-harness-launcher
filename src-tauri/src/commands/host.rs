@@ -10,7 +10,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::error::{LauncherError, Result};
+use crate::error::{LauncherError, Result, SerializableError};
 use crate::host::{HostSupervisor, HostSupervisorConfig, HostSupervisorError};
 use crate::state::{AppState, StateStatus};
 
@@ -52,6 +52,7 @@ pub struct DshUpgradeRestartResult {
     pub origin: String,
     pub active_version: String,
     pub rolled_back: bool,
+    pub start_error: Option<SerializableError>,
 }
 
 #[tauri::command]
@@ -123,9 +124,11 @@ pub async fn restart_host_after_dsh_update(
                     origin,
                     active_version,
                     rolled_back: false,
+                    start_error: None,
                 })
             }
             Err(restart_error) => {
+                let start_error = SerializableError::from(&restart_error);
                 let restart_error = restart_error.to_string();
                 let active_version = rollback_failed_dsh_update()?;
                 let origin = restart_host_inner(&state.supervisor)
@@ -141,6 +144,7 @@ pub async fn restart_host_after_dsh_update(
                     origin,
                     active_version,
                     rolled_back: true,
+                    start_error: Some(start_error),
                 })
             }
         }
@@ -179,4 +183,35 @@ fn reset_crash_counter_after_manual_start() {
 
 fn map_host_error(error: HostSupervisorError) -> LauncherError {
     LauncherError::Host(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::LauncherError;
+
+    #[test]
+    fn rolled_back_result_serializes_the_original_start_error() {
+        let value = serde_json::to_value(DshUpgradeRestartResult {
+            origin: "http://127.0.0.1:1337/".to_string(),
+            active_version: "0.1.1-rc.2".to_string(),
+            rolled_back: true,
+            start_error: Some(
+                (&LauncherError::Host("desktop Host readiness timed out after 90s".to_string()))
+                    .into(),
+            ),
+        })
+        .expect("serialize");
+        assert_eq!(value["rolled_back"], true);
+        assert_eq!(value["active_version"], "0.1.1-rc.2");
+        assert_eq!(value["start_error"]["kind"], "host");
+        assert!(value["start_error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("readiness timed out"));
+        assert!(value["start_error"]["user_message"]
+            .as_str()
+            .unwrap()
+            .contains("启动超时"));
+    }
 }

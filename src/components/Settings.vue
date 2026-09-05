@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { Settings2 } from "lucide-vue-next";
+import DshUpdateProgressBody from "@/components/DshUpdateProgressBody.vue";
 import SettingsCommandCard from "@/components/settings/SettingsCommandCard.vue";
 import SettingsAppearanceCard from "@/components/settings/SettingsAppearanceCard.vue";
 import SettingsEnvironmentCard from "@/components/settings/SettingsEnvironmentCard.vue";
@@ -21,6 +22,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  isDshInstallCancelled,
+  isNodeInstallCancelled,
+} from "@/stores/launcher-bootstrap-errors";
+import {
+  cancelDshInstall,
   cancelNodeInstall,
   exportDiagnostics,
   getDshCliStatus,
@@ -32,6 +38,7 @@ import {
   listMirrors,
   parseNodeUpgradeRequired,
   rollbackNodeUpgrade,
+  describeStartError,
   restartHostAfterDshUpdate,
   setNodeMirror,
   setRegistry,
@@ -39,6 +46,7 @@ import {
   uninstallManagedRuntime,
   upgradeNode,
   upgradeNodeForDshUpdate,
+  type DshInstallProgressEvent,
   type DshStateSnapshot,
   type DshCliStatus,
   type LatestDshVersion,
@@ -79,7 +87,16 @@ const sourcesLoading = ref(true);
 const sourcesError = ref<string | null>(null);
 const versionsLoading = ref(true);
 const upgrading = ref(false);
+const dshUpdateKind = ref<
+  "installing" | "upgrading_node" | "cancelling" | "restarting"
+>("installing");
+const dshInstallStage = ref<DshInstallProgressEvent["stage"]>("resolving");
+const dshInstallActivity = ref(0);
+const dshInstallOperationId = ref<string | null>(null);
+const upgradingNodeVersion = ref("");
 const upgradeError = ref<string | null>(null);
+const upgradeErrorHint = ref<string | null>(null);
+const upgradeErrorTechnical = ref<string | null>(null);
 const sourceError = ref<string | null>(null);
 const exporting = ref(false);
 const exportInfo = ref<string | null>(null);
@@ -106,10 +123,47 @@ const dshCliLoading = ref(true);
 const dshCliError = ref<string | null>(null);
 const uninstallingDshCli = ref(false);
 
+function clearUpgradeError(): void {
+  upgradeError.value = null;
+  upgradeErrorHint.value = null;
+  upgradeErrorTechnical.value = null;
+}
+
 const messageOf = (error: unknown) =>
   typeof error === "object" && error !== null && "message" in error
     ? String((error as { message: unknown }).message)
     : String(error);
+
+const dshUpdateProgress = computed(() => {
+  if (dshUpdateKind.value === "restarting") return 100;
+  if (dshUpdateKind.value === "upgrading_node") return 28;
+  switch (dshInstallStage.value) {
+    case "resolving":
+      return 12;
+    case "downloading":
+      return 45;
+    case "installing":
+      return 72;
+    case "verifying":
+      return 90;
+  }
+});
+
+const dshUpdateStageMessage = computed(() => {
+  if (dshUpdateKind.value === "cancelling") return t("update.cancellingInstall");
+  if (dshUpdateKind.value === "restarting") return t("update.restartingDsh");
+  if (dshUpdateKind.value === "upgrading_node") {
+    return t("update.upgradingNode", {
+      version: upgradingNodeVersion.value,
+    });
+  }
+  return {
+    resolving: t("update.resolving"),
+    downloading: t("update.downloading", { count: dshInstallActivity.value }),
+    installing: t("update.installing"),
+    verifying: t("update.verifying"),
+  }[dshInstallStage.value];
+});
 
 const nodeUpdateProgress = computed(() => {
   if (nodeUpdateStage.value === "complete") return 100;
@@ -181,7 +235,7 @@ async function loadMirrors(): Promise<void> {
 
 async function refreshLatestDshVersion(): Promise<void> {
   versionsLoading.value = true;
-  upgradeError.value = null;
+  clearUpgradeError();
   try {
     latestDshVersion.value = await getLatestDshVersion();
   } catch (error) {
@@ -194,15 +248,37 @@ async function refreshLatestDshVersion(): Promise<void> {
   }
 }
 
+function beginDshInstallProgress(
+  kind: "installing" | "upgrading_node",
+): string {
+  const operationId = crypto.randomUUID();
+  dshUpdateKind.value = kind;
+  dshInstallStage.value = "resolving";
+  dshInstallActivity.value = 0;
+  dshInstallOperationId.value = operationId;
+  return operationId;
+}
+
+function isLatestInstallCancelled(error: unknown): boolean {
+  return (
+    dshUpdateKind.value === "cancelling" ||
+    isDshInstallCancelled(error) ||
+    isNodeInstallCancelled(error)
+  );
+}
+
 async function installLatestDsh(): Promise<void> {
   const expectedVersion = latestDshVersion.value?.latest_version;
   if (upgrading.value || !expectedVersion) return;
   upgrading.value = true;
-  upgradeError.value = null;
+  clearUpgradeError();
+  const operationId = beginDshInstallProgress("installing");
   try {
-    await installDsh({ expectedVersion });
+    await installDsh({ expectedVersion, operationId });
+    dshUpdateKind.value = "restarting";
     await finishLatestInstall();
   } catch (error) {
+    if (isLatestInstallCancelled(error)) return;
     const required = parseNodeUpgradeRequired(error);
     if (required) {
       nodeUpgrade.value = required;
@@ -210,6 +286,7 @@ async function installLatestDsh(): Promise<void> {
     }
     upgradeError.value = messageOf(error);
   } finally {
+    dshInstallOperationId.value = null;
     upgrading.value = false;
   }
 }
@@ -219,15 +296,19 @@ async function confirmNodeUpgrade(): Promise<void> {
   const expectedVersion = latestDshVersion.value?.latest_version;
   if (upgrading.value || !required || !expectedVersion) return;
   upgrading.value = true;
-  upgradeError.value = null;
+  clearUpgradeError();
+  upgradingNodeVersion.value = required.suggested_node;
+  nodeUpgrade.value = null;
+  const nodeOperationId = beginDshInstallProgress("upgrading_node");
   try {
     const transaction = await upgradeNodeForDshUpdate({
       version: required.suggested_node,
-      operationId: crypto.randomUUID(),
+      operationId: nodeOperationId,
     });
     nodeUpgradeTransaction.value = transaction;
-    nodeUpgrade.value = null;
-    await installDsh({ expectedVersion });
+    const operationId = beginDshInstallProgress("installing");
+    await installDsh({ expectedVersion, operationId });
+    dshUpdateKind.value = "restarting";
     await finishLatestInstall();
   } catch (error) {
     const transaction = nodeUpgradeTransaction.value;
@@ -240,9 +321,14 @@ async function confirmNodeUpgrade(): Promise<void> {
         nodeUpgradeTransaction.value = null;
       }
     }
-    if (!upgradeError.value) upgradeError.value = messageOf(error);
+    if (isLatestInstallCancelled(error)) {
+      if (!upgradeError.value) return;
+    } else if (!upgradeError.value) {
+      upgradeError.value = messageOf(error);
+    }
   } finally {
     nodeUpgradeTransaction.value = null;
+    dshInstallOperationId.value = null;
     upgrading.value = false;
   }
 }
@@ -250,6 +336,28 @@ async function confirmNodeUpgrade(): Promise<void> {
 function cancelNodeUpgrade(): void {
   nodeUpgrade.value = null;
   nodeUpgradeTransaction.value = null;
+}
+
+async function cancelLatestDshUpdate(): Promise<void> {
+  if (nodeUpgrade.value !== null) {
+    cancelNodeUpgrade();
+    return;
+  }
+  if (!upgrading.value || dshUpdateKind.value === "restarting") return;
+  const operationId = dshInstallOperationId.value;
+  if (!operationId) return;
+  const previous = dshUpdateKind.value;
+  dshUpdateKind.value = "cancelling";
+  try {
+    const cancelled =
+      previous === "upgrading_node"
+        ? await cancelNodeInstall(operationId)
+        : await cancelDshInstall(operationId);
+    if (!cancelled) dshUpdateKind.value = previous;
+  } catch (error) {
+    console.warn("failed to cancel dsh update:", error);
+    dshUpdateKind.value = previous;
+  }
 }
 
 async function prepareNodeUpdate(): Promise<void> {
@@ -315,9 +423,12 @@ async function finishLatestInstall(): Promise<void> {
     loadDshCliStatus(),
   ]);
   if (restart.rolled_back) {
+    const startError = describeStartError(restart.start_error);
     upgradeError.value = t("settings.rollback", {
       version: restart.active_version,
     });
+    upgradeErrorHint.value = startError.hint;
+    upgradeErrorTechnical.value = startError.technical;
   }
   emit("upgradeReady", restart.origin);
 }
@@ -443,6 +554,7 @@ function handleThemeChange(mode: "light" | "dark"): void {
 
 let unlistenDownloadProgress: (() => void) | null = null;
 let unlistenExtractProgress: (() => void) | null = null;
+let unlistenDshInstallProgress: (() => void) | null = null;
 
 onMounted(() => {
   void loadDshState();
@@ -468,6 +580,16 @@ onMounted(() => {
           if (updatingNode.value) nodeUpdateStage.value = "extracting";
         },
       );
+      unlistenDshInstallProgress = await listen<DshInstallProgressEvent>(
+        "dsh-install-progress",
+        (event) => {
+          if (!upgrading.value || dshUpdateKind.value !== "installing") return;
+          dshInstallStage.value = event.payload.stage;
+          if (event.payload.stage === "downloading") {
+            dshInstallActivity.value += 1;
+          }
+        },
+      );
     } catch (error) {
       console.warn("Tauri event listen failed:", error);
     }
@@ -477,6 +599,7 @@ onMounted(() => {
 onUnmounted(() => {
   unlistenDownloadProgress?.();
   unlistenExtractProgress?.();
+  unlistenDshInstallProgress?.();
 });
 
 watch(
@@ -522,6 +645,8 @@ watch(
           :refreshing="versionsLoading"
           :upgrading="upgrading"
           :error="upgradeError"
+          :error-hint="upgradeErrorHint"
+          :error-technical="upgradeErrorTechnical"
           :node-update-loading="
             preparingNodeUpdate || updatingNode || upgrading
           "
@@ -562,6 +687,26 @@ watch(
         />
       </div>
     </div>
+
+    <Dialog :open="upgrading && nodeUpgrade === null">
+      <DialogContent
+        class="sm:max-w-[420px] [&>button]:hidden"
+        @escape-key-down.prevent
+        @pointer-down-outside.prevent
+      >
+        <DshUpdateProgressBody
+          :progress="dshUpdateProgress"
+          :stage-message="dshUpdateStageMessage"
+          :current-version="dshState?.current ?? null"
+          :target-version="latestDshVersion?.latest_version ?? null"
+          :cancelling="dshUpdateKind === 'cancelling'"
+          :cancel-disabled="
+            dshUpdateKind !== 'installing' && dshUpdateKind !== 'upgrading_node'
+          "
+          @cancel="cancelLatestDshUpdate"
+        />
+      </DialogContent>
+    </Dialog>
 
     <Dialog :open="nodeUpgrade !== null">
       <DialogContent
