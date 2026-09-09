@@ -32,6 +32,26 @@ async fn ignores_non_readiness_lines() {
 }
 
 #[tokio::test]
+async fn ignores_prefixed_diagnostic_text() {
+    let parser = ReadinessParser::new();
+    assert_eq!(
+        parser
+            .push("dsh web: opening the default browser; pass --no-open to disable\n")
+            .await
+            .unwrap(),
+        None
+    );
+    let result = parser
+        .push("dsh web: http://127.0.0.1:3080/\n")
+        .await
+        .unwrap();
+    assert_eq!(
+        result.as_ref().map(Origin::as_str),
+        Some("http://127.0.0.1:3080")
+    );
+}
+
+#[tokio::test]
 async fn handles_split_chunks() {
     let parser = ReadinessParser::new();
     assert_eq!(parser.push("dsh web: http://127.").await.unwrap(), None);

@@ -76,6 +76,7 @@ function parseCommand(value: string): ParsedPluginCommand | null {
     plugin !== "plugin" ||
     profileFlag !== "--profile" ||
     !/^[A-Za-z0-9_-]{1,64}$/.test(profile) ||
+    profile.toLowerCase() === "desktop" ||
     (action !== "add" && action !== "remove") ||
     !source ||
     source.length > 1024 ||
@@ -84,6 +85,16 @@ function parseCommand(value: string): ParsedPluginCommand | null {
     return null;
   }
   return { action, profile, source };
+}
+
+function isReservedDesktopCommand(value: string): boolean {
+  const parts = value.trim().split(/\s+/);
+  return (
+    parts[0] === "dsh" &&
+    parts[1] === "plugin" &&
+    parts[2] === "--profile" &&
+    parts[3]?.toLowerCase() === "desktop"
+  );
 }
 
 function resetOperationFeedback(): void {
@@ -105,7 +116,9 @@ function prepareCommand(): void {
   const parsed = parseCommand(command.value);
   if (!parsed) {
     preview.value = null;
-    validationError.value = t("pluginCommand.invalid");
+    validationError.value = isReservedDesktopCommand(command.value)
+      ? t("pluginCommand.reservedDesktop")
+      : t("pluginCommand.invalid");
     return;
   }
   validationError.value = null;

@@ -173,6 +173,7 @@ struct DshProfileManifest {
 
 #[tauri::command]
 pub async fn list_profile_plugins(profile: String) -> Result<ProfilePluginList> {
+    reject_reserved_profile(&profile)?;
     if !is_profile_valid(&profile) {
         return Err(invalid_command());
     }
@@ -240,6 +241,7 @@ fn parse_plugin_command(input: &str) -> Result<PluginCommand> {
     let Some(action) = PluginAction::parse(action) else {
         return Err(invalid_command());
     };
+    reject_reserved_profile(profile)?;
     if !is_profile_valid(profile) || !is_source_valid(source) {
         return Err(invalid_command());
     }
@@ -255,6 +257,15 @@ fn invalid_command() -> LauncherError {
     LauncherError::DshPlugin(
         "expected: dsh plugin --profile <profile> add|remove <source>".to_string(),
     )
+}
+
+fn reject_reserved_profile(profile: &str) -> Result<()> {
+    if profile.eq_ignore_ascii_case("desktop") {
+        return Err(LauncherError::DshPlugin(
+            "profile desktop is reserved by dsh for the official desktop application".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn is_profile_valid(profile: &str) -> bool {
@@ -617,6 +628,21 @@ mod tests {
                 Err(LauncherError::DshPlugin(_))
             ));
         }
+    }
+
+    #[test]
+    fn rejects_the_dsh_reserved_desktop_profile() {
+        let error = parse_plugin_command("dsh plugin --profile desktop add github:owner/plugin")
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            LauncherError::DshPlugin(message) if message.contains("reserved by dsh")
+        ));
+        let error = parse_plugin_command("dsh plugin --profile Desktop remove example").unwrap_err();
+        assert!(matches!(
+            error,
+            LauncherError::DshPlugin(message) if message.contains("reserved by dsh")
+        ));
     }
 
     #[test]

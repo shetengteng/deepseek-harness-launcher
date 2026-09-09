@@ -62,6 +62,10 @@ pub fn user_message(error: &LauncherError) -> String {
             "仅支持单条安装或卸载命令：dsh plugin --profile <profile> add|remove <source>。"
                 .to_string()
         }
+        LauncherError::DshPlugin(message) if message.contains("reserved by dsh") => {
+            "dsh 保留了 desktop 这个 profile 名给官方桌面端，请改用 web 或其他自定义 profile。"
+                .to_string()
+        }
         LauncherError::DshPlugin(message) if message.contains("timed out") => {
             "插件操作超时。Git 插件首次安装可能需要几分钟，请检查网络后重试。".to_string()
         }
@@ -174,6 +178,14 @@ mod tests {
             user_message(&LauncherError::Host("readiness timed out".to_string()))
                 .contains("启动超时")
         );
+    }
+
+    #[test]
+    fn reserved_desktop_profile_has_an_actionable_message() {
+        assert!(user_message(&LauncherError::DshPlugin(
+            "profile desktop is reserved by dsh for the official desktop application".to_string(),
+        ))
+        .contains("改用 web"));
     }
 
     #[test]

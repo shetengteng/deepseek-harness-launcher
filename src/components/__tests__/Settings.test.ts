@@ -420,6 +420,8 @@ test("removes only the launcher-managed dsh command", async () => {
   await flushPromises();
 
   expect(wrapper.text()).toContain("dsh 命令已安装");
+  expect(wrapper.text()).toContain("dsh web");
+  expect(wrapper.text()).toContain("dsh --profile web");
   await button(wrapper, "移除命令").trigger("click");
   await flushPromises();
 

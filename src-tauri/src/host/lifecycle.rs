@@ -4,7 +4,7 @@
 //! 的 `spawnDshWeb` 与 `SpawnDshWebOptions`。
 //!
 //! 设计 §M1.3 要求：
-//! - 命令：`<node> --expose-internals <cli_entry> web --host 127.0.0.1 --port 0 --no-open`
+//! - 命令：`<node> --expose-internals <cli_entry> --profile web --host 127.0.0.1 --port 0 --no-open`
 //! - `stdio: ['ignore', 'pipe', 'pipe']`，`windowsHide: true`
 //! - 环境变量过滤：剥离 `RUST_*`、`TAURI_*`、`npm_*`，只透传 `DSH_*`、`PATH`、`HOME`/`USERPROFILE`、`LANG`、`LC_*`
 //! - M1 阶段 `nodeExecutable` 直接读 `state.node.binary` 或回退系统 `PATH` 上的 `node`；
@@ -136,10 +136,11 @@ pub fn spawn_dsh_web(opts: &SpawnDshWebOptions) -> Result<Child> {
     spawn_command(&mut cmd).map_err(LauncherError::Io)
 }
 
-fn dsh_web_argv(cli_entry: &str) -> [&str; 8] {
+fn dsh_web_argv(cli_entry: &str) -> [&str; 9] {
     [
         "--expose-internals",
         cli_entry,
+        "--profile",
         "web",
         "--host",
         "127.0.0.1",
@@ -275,6 +276,7 @@ mod tests {
             [
                 "--expose-internals",
                 "/tmp/dsh/bin.js",
+                "--profile",
                 "web",
                 "--host",
                 "127.0.0.1",

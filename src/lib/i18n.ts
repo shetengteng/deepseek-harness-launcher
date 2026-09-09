@@ -65,6 +65,8 @@ const messages = {
     "pluginCommand.review": "检查命令",
     "pluginCommand.invalid":
       "使用 dsh plugin --profile <profile> add|remove <source>，来源必须是单个参数。",
+    "pluginCommand.reservedDesktop":
+      "dsh 保留了 desktop 这个 profile 名给官方桌面端，请改用 web 或其他自定义 profile。",
     "pluginCommand.install": "安装",
     "pluginCommand.remove": "卸载",
     "pluginCommand.reviewTitle": "确认{action}插件",
@@ -131,7 +133,7 @@ const messages = {
     "command.installed": "已安装：",
     "command.installedTitle": "dsh 命令已安装",
     "command.installedDescription":
-      "在新终端中管理与启动器相同的 DeepSeek Harness profile。",
+      "在新终端运行 dsh web 或 dsh --profile web，与启动器共用同一套 profile。直接输入 dsh 会失败。插件：dsh plugin --profile web add <source>。",
     "command.uninstalling": "移除中…",
     "command.uninstall": "移除命令",
     "command.conflictTitle": "已有其他 dsh 命令",
@@ -334,6 +336,8 @@ const messages = {
     "pluginCommand.review": "Review command",
     "pluginCommand.invalid":
       "Use dsh plugin --profile <profile> add|remove <source>. The source must be one argument.",
+    "pluginCommand.reservedDesktop":
+      "dsh reserves the desktop profile for its official desktop app. Use web or another custom profile.",
     "pluginCommand.install": "Install",
     "pluginCommand.remove": "Remove",
     "pluginCommand.reviewTitle": "Confirm plugin {action}",
@@ -402,7 +406,7 @@ const messages = {
     "command.installed": "Installed: ",
     "command.installedTitle": "dsh command installed",
     "command.installedDescription":
-      "Manage the same DeepSeek Harness profile as the launcher from a new terminal.",
+      "In a new terminal, run dsh web or dsh --profile web to use the same profile as the launcher. A bare dsh command fails. Plugins: dsh plugin --profile web add <source>.",
     "command.uninstalling": "Removing…",
     "command.uninstall": "Remove command",
     "command.conflictTitle": "Another dsh command already exists",

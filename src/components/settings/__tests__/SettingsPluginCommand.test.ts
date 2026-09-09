@@ -66,6 +66,18 @@ test("shows a format hint instead of running unsupported input", async () => {
   expect(api.runPluginCommand).not.toHaveBeenCalled();
 });
 
+test("rejects the dsh-reserved desktop profile", async () => {
+  const wrapper = mount(SettingsPluginCommand);
+  await openCommandTab(wrapper);
+  const input = wrapper.get('input[aria-label="插件安装或卸载命令"]');
+
+  await input.setValue("dsh plugin --profile desktop add github:owner/plugin");
+  await wrapper.get("form").trigger("submit");
+
+  expect(wrapper.get('[role="alert"]').text()).toContain("官方桌面端");
+  expect(api.runPluginCommand).not.toHaveBeenCalled();
+});
+
 test("runs a confirmed remove command and reports success", async () => {
   api.runPluginCommand.mockResolvedValue({
     action: "remove",

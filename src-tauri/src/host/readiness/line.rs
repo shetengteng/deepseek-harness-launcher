@@ -36,6 +36,9 @@ pub fn parse_readiness_line(line: &str) -> Result<Option<Origin>, ReadinessError
         .ok_or_else(|| {
             ReadinessError::MalformedLine(format!("readiness line has no URL: {line}"))
         })?;
+    if !token.contains("://") {
+        return Ok(None);
+    }
     Ok(Some(parse_token(token)?))
 }
 
