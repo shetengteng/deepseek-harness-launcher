@@ -82,12 +82,26 @@ async fn start_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
 }
 
 pub async fn restart_host_inner(supervisor: &Arc<HostSupervisor>) -> Result<String> {
+    kill_stale_before_restart(supervisor).await;
     let origin = supervisor
         .restart(&build_spawn_options().await?)
         .await
         .map_err(map_host_error)?;
     reset_crash_counter_after_manual_start();
     Ok(origin.as_str().to_string())
+}
+
+/// 重启前清理不受 supervisor 管理的残留 dsh 进程：孤儿进程持有的 session
+/// 写锁会让新实例报 `SessionAlreadyOwnedError`。尽力而为，失败不阻塞重启。
+async fn kill_stale_before_restart(supervisor: &Arc<HostSupervisor>) {
+    let exclude_pid = supervisor.child_pid().await;
+    match crate::host::kill_stale_dsh_processes(exclude_pid).await {
+        Ok(killed) if !killed.is_empty() => {
+            tracing::info!(?killed, "killed stale dsh processes before restart");
+        }
+        Ok(_) => {}
+        Err(error) => tracing::warn!(%error, "stale dsh scan failed; restarting anyway"),
+    }
 }
 
 #[tauri::command]

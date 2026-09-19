@@ -10,6 +10,7 @@
 
 pub mod crash;
 pub mod lifecycle;
+pub mod orphan;
 pub mod readiness;
 pub mod supervisor;
 
@@ -17,6 +18,7 @@ pub use crash::{
     record_crash, reset_crash_counter, CrashDecision, CRASH_RETRY_LIMIT, CRASH_WINDOW_SECS,
 };
 pub use lifecycle::{filtered_env, spawn_dsh_web, SpawnDshWebOptions};
+pub use orphan::kill_stale_dsh_processes;
 pub use readiness::{Origin, ReadinessError, ReadinessParser, READINESS_PREFIX};
 pub use supervisor::{
     HostExitDetail, HostSupervisor, HostSupervisorConfig, HostSupervisorError, LogCallback,

@@ -35,6 +35,24 @@ async fn shutdown_without_start_is_noop() {
     assert!(supervisor.shutdown_flag.load(Ordering::Acquire));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn child_pid_tracks_managed_child() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let supervisor = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));
+    assert_eq!(supervisor.child_pid().await, None);
+
+    supervisor
+        .start(&mock_host_options(&temp, "ready"))
+        .await
+        .expect("mock host ready");
+    let pid = supervisor.child_pid().await.expect("pid after start");
+    assert!(pid > 0);
+
+    supervisor.shutdown().await.await_completion().await;
+    assert_eq!(supervisor.child_pid().await, None);
+}
+
 #[tokio::test]
 async fn start_after_shutdown_errors() {
     let supervisor = Arc::new(HostSupervisor::new(HostSupervisorConfig::default()));

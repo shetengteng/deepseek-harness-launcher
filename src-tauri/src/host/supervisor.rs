@@ -71,6 +71,11 @@ impl HostSupervisor {
         *self.exit_handler.write().unwrap() = Some(handler);
     }
 
+    /// 当前托管子进程的 PID（未启动或已退出时为 `None`）。
+    pub async fn child_pid(&self) -> Option<u32> {
+        self.inner.lock().await.child.as_ref().and_then(Child::id)
+    }
+
     pub async fn start(
         self: &Arc<Self>,
         options: &SpawnDshWebOptions,
