@@ -83,8 +83,8 @@ async fn build_spawn_options_in(
 
 fn prepend_path(env: &mut HashMap<String, String>, directory: &Path) -> Result<()> {
     let mut entries = vec![directory.to_path_buf()];
-    if let Some(path) = env.get("PATH") {
-        entries.extend(std::env::split_paths(path));
+    if let Some(existing) = take_path_entry(env) {
+        entries.extend(std::env::split_paths(&existing));
     }
     let path = std::env::join_paths(entries).map_err(|error| LauncherError::PathResolve {
         what: "PATH",
@@ -92,6 +92,23 @@ fn prepend_path(env: &mut HashMap<String, String>, directory: &Path) -> Result<(
     })?;
     env.insert("PATH".to_string(), path.to_string_lossy().into_owned());
     Ok(())
+}
+
+/// 取出并移除已有的 PATH 条目。
+/// Windows 键名不区分大小写，环境块里的实际键可能是 `Path`，精确匹配会漏掉
+/// 并在环境块里留下 `Path`/`PATH` 两个条目。
+#[cfg(windows)]
+fn take_path_entry(env: &mut HashMap<String, String>) -> Option<String> {
+    let key = env
+        .keys()
+        .find(|k| k.eq_ignore_ascii_case("PATH"))
+        .cloned();
+    key.and_then(|k| env.remove(&k))
+}
+
+#[cfg(not(windows))]
+fn take_path_entry(env: &mut HashMap<String, String>) -> Option<String> {
+    env.remove("PATH")
 }
 
 #[cfg(test)]
@@ -115,6 +132,32 @@ mod tests {
         let error = build_spawn_options_in(&runtime, &dsh).await.unwrap_err();
 
         assert!(matches!(error, LauncherError::NodeNotInstalled { .. }));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn prepend_path_replaces_casing_variants() {
+        let mut env = HashMap::new();
+        env.insert("Path".to_string(), "C:\\Windows\\System32".to_string());
+        prepend_path(&mut env, Path::new("C:\\managed\\bin")).unwrap();
+        // 环境块里只允许一个 PATH 键，且 managed bin 在最前。
+        assert_eq!(env.len(), 1);
+        let path = env.get("PATH").expect("unified PATH key");
+        assert!(path.starts_with("C:\\managed\\bin"));
+        assert!(path.contains("C:\\Windows\\System32"));
+    }
+
+    #[test]
+    fn prepend_path_prepends_without_existing_entry() {
+        let dir = if cfg!(windows) {
+            "C:\\managed\\bin"
+        } else {
+            "/managed/bin"
+        };
+        let mut env = HashMap::new();
+        prepend_path(&mut env, Path::new(dir)).unwrap();
+        let path = env.get("PATH").expect("PATH key");
+        assert!(path.starts_with(dir));
     }
 
     #[cfg(unix)]

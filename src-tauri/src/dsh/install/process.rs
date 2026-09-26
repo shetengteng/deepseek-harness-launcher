@@ -98,6 +98,11 @@ fn apply_npm_install_env(cmd: &mut Command, opts: &InstallDshOptions) -> Result<
     }
     #[cfg(windows)]
     apply_windows_process_env(cmd);
+    // npm install 需要联网拉包，透传用户代理配置（保留原始键名与大小写）。
+    // 挂代理的环境缺这些会导致安装失败或超时。
+    for (key, value) in proxy_env_entries() {
+        cmd.env(key, value);
+    }
     cmd.env("npm_config_scripts_prepend_node_path", "true");
     if let Some(cache) = &opts.npm_cache {
         std::fs::create_dir_all(cache).map_err(LauncherError::Io)?;
@@ -111,6 +116,31 @@ fn apply_npm_install_env(cmd: &mut Command, opts: &InstallDshOptions) -> Result<
         );
     }
     Ok(())
+}
+
+/// 当前进程环境里的代理变量。小写是 curl 系约定、大写是 Node/undici 约定，
+/// 大小写不敏感匹配任一变体，按原始键名返回。
+fn proxy_env_entries() -> Vec<(String, String)> {
+    const PROXY_KEYS: &[&str] = &[
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "all_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "ALL_PROXY",
+    ];
+    std::env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.to_str()?.to_string();
+            let value = value.to_str()?.to_string();
+            PROXY_KEYS
+                .iter()
+                .any(|wanted| key.eq_ignore_ascii_case(wanted))
+                .then_some((key, value))
+        })
+        .collect()
 }
 
 #[cfg(windows)]
@@ -302,4 +332,39 @@ async fn cancel_install(
     let _ = child.kill().await;
     let _ = child.wait().await;
     Err(cancellation.error())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 环境变量测试串行化，避免并行测试互相污染代理变量。
+    static PROXY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn proxy_env_entries_passes_through_user_proxy_config() {
+        let _guard = PROXY_ENV_LOCK.lock().unwrap();
+        std::env::set_var("http_proxy", "http://127.0.0.1:7890");
+        std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:7890");
+        let entries = proxy_env_entries();
+        assert!(entries
+            .iter()
+            .any(|(key, value)| key == "http_proxy" && value == "http://127.0.0.1:7890"));
+        assert!(entries
+            .iter()
+            .any(|(key, _)| key == "HTTPS_PROXY"));
+        std::env::remove_var("http_proxy");
+        std::env::remove_var("HTTPS_PROXY");
+    }
+
+    #[test]
+    fn proxy_env_entries_ignores_unrelated_keys() {
+        let _guard = PROXY_ENV_LOCK.lock().unwrap();
+        std::env::set_var("DSH_TEST_NOT_A_PROXY", "http://127.0.0.1:7890");
+        let entries = proxy_env_entries();
+        assert!(!entries
+            .iter()
+            .any(|(key, _)| key == "DSH_TEST_NOT_A_PROXY"));
+        std::env::remove_var("DSH_TEST_NOT_A_PROXY");
+    }
 }

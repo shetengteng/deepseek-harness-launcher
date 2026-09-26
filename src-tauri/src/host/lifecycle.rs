@@ -64,6 +64,9 @@ impl SpawnDshWebOptions {
 /// - `PATH`（子进程找 node_modules、git 等依赖）
 /// - `HOME` / `USERPROFILE`（用户目录解析）
 /// - `LANG` / `LC_*`（locale）
+/// - `TMPDIR` / `SHELL` / `USER` / `LOGNAME`（Unix 常规依赖）
+/// - `*_proxy` / `*_PROXY`（用户代理配置，dsh 联网依赖）
+/// - Windows 系统变量（`SystemRoot` 等，见 [`WINDOWS_SYSTEM_PASSTHROUGH`]）
 pub fn filtered_env() -> HashMap<String, String> {
     let mut out = HashMap::new();
     for (k, v) in std::env::vars() {
@@ -74,16 +77,60 @@ pub fn filtered_env() -> HashMap<String, String> {
     out
 }
 
+/// Windows 上 `env_clear()` 后仍必须保留的系统变量（大写归一形式）。
+///
+/// `SystemRoot` 缺失会让 Node 在 `InitializeOncePerProcessInternal` 阶段
+/// 断言崩溃（`Assertion failed: ncrypto::CSPRNG(nullptr, 0)`，exit 134），
+/// 其余是 CRT / cmd spawn / npm 生态的标准依赖。Git for Windows 同样要求
+/// 子环境带 `SystemRoot`，属于 Windows 子进程的通行约定。
+#[cfg(windows)]
+const WINDOWS_SYSTEM_PASSTHROUGH: [&str; 15] = [
+    "SYSTEMROOT",
+    "WINDIR",
+    "SYSTEMDRIVE",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "USERNAME",
+    "USERDOMAIN",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+];
+
 fn is_passthrough(key: &str) -> bool {
+    // Windows 环境变量名不区分大小写，环境块里实际可能是 `Path`、`SystemRoot`
+    // 等任意大小写形式；统一大写后匹配，否则 `key == "PATH"` 会漏掉 `Path`。
+    // Unix 键名大小写敏感，原样匹配。
+    #[cfg(windows)]
+    {
+        is_passthrough_match(&key.to_ascii_uppercase())
+    }
+    #[cfg(not(windows))]
+    {
+        is_passthrough_match(key)
+    }
+}
+
+/// 匹配已按平台归一的环境变量名。Windows 调用方传入大写形式（`NPM_`），
+/// Unix 传入原样形式（`npm_`，npm 注入的变量在 Unix 上是小写）。
+fn is_passthrough_match(key: &str) -> bool {
+    let npm_reject = if cfg!(windows) { "NPM_" } else { "npm_" };
     if key.starts_with("RUST_")
         || key.starts_with("TAURI_")
-        || key.starts_with("npm_")
-        // 显式拒绝 npm_config_*、npm_lifecycle_* 等 npm 注入变量（不以上划线开头）
-        || key.starts_with("npm_config_")
-        || key.starts_with("npm_lifecycle_")
-        || key.starts_with("npm_package_")
+        || key.starts_with(npm_reject)
     {
         return false;
+    }
+    #[cfg(windows)]
+    {
+        if WINDOWS_SYSTEM_PASSTHROUGH.contains(&key) {
+            return true;
+        }
     }
     if key == "PATH"
         || key == "HOME"
@@ -92,6 +139,25 @@ fn is_passthrough(key: &str) -> bool {
         || key == "DSH_CLI_ENTRY" // dsh 自身入口变量也透传，方便子进程再 spawn
         || key.starts_with("DSH_")
         || key.starts_with("LC_")
+        // Unix 常规依赖：临时目录、默认 shell（node-pty）、用户名（whoami 类工具）。
+        // GUI 启动的 app 本就继承不到 shell 环境，再被过滤会丢光。
+        || key == "TMPDIR"
+        || key == "SHELL"
+        || key == "USER"
+        || key == "LOGNAME"
+        // 代理：小写是 curl 系约定，大写是 Node/undici 约定，两个都透传。
+        // dsh 需要联网拉取资源，用户挂代理时缺这些会导致启动卡死到超时。
+        || matches!(
+            key,
+            "http_proxy"
+                | "https_proxy"
+                | "no_proxy"
+                | "all_proxy"
+                | "HTTP_PROXY"
+                | "HTTPS_PROXY"
+                | "NO_PROXY"
+                | "ALL_PROXY"
+        )
     {
         return true;
     }
@@ -196,6 +262,68 @@ mod tests {
     fn passthrough_includes_dsh_prefix() {
         assert!(is_passthrough("DSH_FOO"));
         assert!(is_passthrough("DSH_BAR"));
+    }
+
+    #[test]
+    fn passthrough_includes_unix_and_proxy_vars() {
+        // Unix 常规依赖与代理变量在所有平台透传（Windows 侧已归一为大写匹配）。
+        for key in ["TMPDIR", "SHELL", "USER", "LOGNAME"] {
+            assert!(is_passthrough(key), "expected passthrough: {key}");
+        }
+        for key in [
+            "http_proxy",
+            "https_proxy",
+            "no_proxy",
+            "all_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "ALL_PROXY",
+        ] {
+            assert!(is_passthrough(key), "expected passthrough: {key}");
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn passthrough_includes_windows_system_vars() {
+        // Windows 环境变量名不区分大小写，白名单做大小写归一。
+        for key in [
+            "SystemRoot",
+            "SYSTEMROOT",
+            "systemroot",
+            "ComSpec",
+            "COMSPEC",
+            "PATHEXT",
+            "TEMP",
+            "TMP",
+        ] {
+            assert!(is_passthrough(key), "expected passthrough: {key}");
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn passthrough_normalizes_key_casing() {
+        // 进程环境块里 PATH 的键名实际是 `Path`（混合大小写），精确匹配会漏掉。
+        assert!(is_passthrough("Path"));
+        assert!(is_passthrough("Userprofile"));
+        assert!(is_passthrough("dsh_profile"));
+        // 拒绝清单同样按归一后的键名生效。
+        assert!(!is_passthrough("npm_config_user_agent"));
+        assert!(!is_passthrough("NPM_CONFIG_USER_AGENT"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn filtered_env_keeps_system_root() {
+        // Windows 缺 SystemRoot 会让 Node 在 CSPRNG 初始化时崩溃（exit 134）。
+        let env = filtered_env();
+        assert!(
+            env.keys().any(|k| k.eq_ignore_ascii_case("SystemRoot")),
+            "filtered_env must keep SystemRoot on Windows, got keys: {:?}",
+            env.keys().collect::<Vec<_>>()
+        );
     }
 
     #[test]
