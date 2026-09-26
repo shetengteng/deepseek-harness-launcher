@@ -76,6 +76,7 @@ fn stale_candidates(
 
 /// 只扫不杀，供测试轮询进程表。
 #[cfg(test)]
+#[cfg(unix)]
 fn scan_stale_sync(node_runtime: &Path, dsh_dir: &Path, exclude_pid: Option<u32>) -> Vec<u32> {
     stale_candidates(&refreshed_system(), node_runtime, dsh_dir, exclude_pid)
 }

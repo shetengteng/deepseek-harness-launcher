@@ -241,9 +241,11 @@ async fn npm_install_exposes_managed_node_to_lifecycle_scripts() {
     let temp = tempdir().unwrap();
     let managed_bin = temp.path().join("bin");
     std::fs::create_dir_all(&managed_bin).unwrap();
-    let managed_node = managed_bin.join("node");
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&real_node, &managed_node).unwrap();
+    {
+        let managed_node = managed_bin.join("node");
+        std::os::unix::fs::symlink(&real_node, &managed_node).unwrap();
+    }
     #[cfg(windows)]
     std::fs::copy(&real_node, managed_bin.join("node.exe")).unwrap();
     #[cfg(windows)]

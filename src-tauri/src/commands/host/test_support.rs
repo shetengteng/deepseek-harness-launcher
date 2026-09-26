@@ -1,5 +1,7 @@
 use std::path::Path;
 
+// 引用方均为 `#[cfg(unix)]` 测试；Windows 测试构建下没有调用方。
+#[cfg_attr(not(unix), allow(dead_code))]
 pub fn write_node_runtime(runtime_dir: &Path, version: &str) {
     let node_dir = runtime_dir.join(format!("node-v{version}"));
     let node_path = crate::node::install::node_bin_path(&node_dir);
