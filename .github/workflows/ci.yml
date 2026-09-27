@@ -64,8 +64,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-14 已被 GitHub 标记废弃。
           - name: macOS
-            os: macos-14
+            os: macos-15
           - name: Windows
             os: windows-latest
           - name: Linux

@@ -120,14 +120,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-14 已被 GitHub 标记废弃；两个 macOS 任务统一跑 macos-15
+          # ARM 镜像，x64 交叉编译（Rust 同 OS 跨架构、DMG 打包与架构无关）。
+          # Intel 镜像（macos-*-intel）上 bundle_dmg.sh 打包不稳定。
           - id: macos-arm64
             name: macOS arm64
-            os: macos-14
+            os: macos-15
             target: aarch64-apple-darwin
             bundles: dmg
           - id: macos-x64
             name: macOS x64
-            os: macos-15-intel
+            os: macos-15
             target: x86_64-apple-darwin
             bundles: dmg
           - id: windows-x64
