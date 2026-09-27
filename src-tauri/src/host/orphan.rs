@@ -276,26 +276,26 @@ mod tests {
     #[cfg(unix)]
     mod integration {
         use super::*;
+        use std::os::unix::process::CommandExt;
         use std::process::{Command, Stdio};
         use std::time::{Duration, Instant};
 
-        /// 接受任意参数且长驻的二进制，仅用于占住进程表；拷贝到托管 node
-        /// 路径后，其 argv[0] 即为托管路径本身。
-        fn sleeper_binary() -> &'static str {
-            "/usr/bin/yes"
-        }
-
+        /// `/bin/sh` 的 `-c` 把命令串之后的参数一律当位置参数，不会像
+        /// `yes`/`sleep` 那样被 getopt 当未知选项直接退出；`arg0` 把
+        /// argv[0] 伪造成托管 node 路径，命令行特征与真实 dsh web 一致。
         fn spawn_stale(root: &Path) -> std::process::Child {
             let bin_dir = root.join("node-runtime/node-v24.18.1/bin");
             std::fs::create_dir_all(&bin_dir).expect("mkdir node bin");
             let fake_node = bin_dir.join("node");
-            std::fs::copy(sleeper_binary(), &fake_node).expect("copy sleeper");
             let entry_dir = root.join("dsh/9.9.9/node_modules/@deepseek-ai/dsh/lib");
             std::fs::create_dir_all(&entry_dir).expect("mkdir dsh lib");
             let entry = entry_dir.join("bin.js");
             std::fs::write(&entry, b"").expect("touch entry");
-            Command::new(&fake_node)
+            Command::new("/bin/sh")
+                .arg0(&fake_node)
                 .args([
+                    "-c",
+                    "while :; do sleep 1; done",
                     "--expose-internals",
                     entry.to_str().expect("utf8 entry"),
                     "web",
