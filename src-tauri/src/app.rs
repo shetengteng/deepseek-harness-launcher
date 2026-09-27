@@ -201,7 +201,10 @@ fn wait_for_loopback_server(addr: &str) -> bool {
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    tracing::error!(addr, "frontend loopback server did not accept connections in time");
+    tracing::error!(
+        addr,
+        "frontend loopback server did not accept connections in time"
+    );
     false
 }
 

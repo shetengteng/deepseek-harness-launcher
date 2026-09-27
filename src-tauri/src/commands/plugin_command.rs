@@ -638,7 +638,8 @@ mod tests {
             error,
             LauncherError::DshPlugin(message) if message.contains("reserved by dsh")
         ));
-        let error = parse_plugin_command("dsh plugin --profile Desktop remove example").unwrap_err();
+        let error =
+            parse_plugin_command("dsh plugin --profile Desktop remove example").unwrap_err();
         assert!(matches!(
             error,
             LauncherError::DshPlugin(message) if message.contains("reserved by dsh")

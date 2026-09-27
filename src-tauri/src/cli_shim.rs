@@ -349,7 +349,10 @@ mod tests {
         let helper = std::fs::read_to_string(helper_path(&data)).expect("helper");
 
         assert!(command.contains(SHIM_MARKER));
+        #[cfg(unix)]
         assert!(command.contains("node-runtime/VERSION"));
+        #[cfg(windows)]
+        assert!(command.contains("node-runtime\\VERSION"));
         assert!(helper.contains("current.json"));
         assert!(helper.contains("readlinkSync"));
         assert!(helper.contains("packageManagerDir"));

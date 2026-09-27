@@ -86,18 +86,17 @@ pub fn kill_stale_sync(node_runtime: &Path, dsh_dir: &Path, exclude_pid: Option<
     let system = refreshed_system();
     stale_candidates(&system, node_runtime, dsh_dir, exclude_pid)
         .into_iter()
-        .filter_map(|pid| {
+        .filter(|&pid| {
             let killed = system
                 .process(sysinfo::Pid::from_u32(pid))
                 .map(|process| process.kill())
                 .unwrap_or(false);
             if killed {
                 tracing::info!(pid, "killed stale dsh web process");
-                Some(pid)
             } else {
                 tracing::warn!(pid, "failed to kill stale dsh web process");
-                None
             }
+            killed
         })
         .collect()
 }

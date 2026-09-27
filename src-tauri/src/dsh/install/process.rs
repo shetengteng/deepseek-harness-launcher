@@ -350,9 +350,7 @@ mod tests {
         assert!(entries
             .iter()
             .any(|(key, value)| key == "http_proxy" && value == "http://127.0.0.1:7890"));
-        assert!(entries
-            .iter()
-            .any(|(key, _)| key == "HTTPS_PROXY"));
+        assert!(entries.iter().any(|(key, _)| key == "HTTPS_PROXY"));
         std::env::remove_var("http_proxy");
         std::env::remove_var("HTTPS_PROXY");
     }
@@ -362,9 +360,7 @@ mod tests {
         let _guard = PROXY_ENV_LOCK.lock().unwrap();
         std::env::set_var("DSH_TEST_NOT_A_PROXY", "http://127.0.0.1:7890");
         let entries = proxy_env_entries();
-        assert!(!entries
-            .iter()
-            .any(|(key, _)| key == "DSH_TEST_NOT_A_PROXY"));
+        assert!(!entries.iter().any(|(key, _)| key == "DSH_TEST_NOT_A_PROXY"));
         std::env::remove_var("DSH_TEST_NOT_A_PROXY");
     }
 }

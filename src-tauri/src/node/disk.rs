@@ -68,8 +68,19 @@ mod tests {
 
     #[test]
     fn ensure_disk_space_errors_on_missing_dir() {
-        let err = ensure_disk_space(Path::new("/nonexistent-definitely-missing-dir"))
-            .expect_err("missing dir errors");
+        // Windows 的 GetDiskFreeSpaceExW 只解析盘符：存在盘符下不存在的目录
+        // 仍返回整盘容量，只有不存在的盘符才报错。
+        #[cfg(windows)]
+        let missing = {
+            let drive = (b'A'..=b'Z')
+                .map(char::from)
+                .find(|letter| !std::path::PathBuf::from(format!("{letter}:\\")).exists())
+                .expect("no free drive letter for the test");
+            std::path::PathBuf::from(format!("{drive}:\\nonexistent-definitely-missing-dir"))
+        };
+        #[cfg(not(windows))]
+        let missing = std::path::PathBuf::from("/nonexistent-definitely-missing-dir");
+        let err = ensure_disk_space(&missing).expect_err("missing dir errors");
         assert!(matches!(err, LauncherError::Io(_)));
     }
 }

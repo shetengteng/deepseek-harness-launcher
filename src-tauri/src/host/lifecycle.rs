@@ -120,10 +120,7 @@ fn is_passthrough(key: &str) -> bool {
 /// Unix 传入原样形式（`npm_`，npm 注入的变量在 Unix 上是小写）。
 fn is_passthrough_match(key: &str) -> bool {
     let npm_reject = if cfg!(windows) { "NPM_" } else { "npm_" };
-    if key.starts_with("RUST_")
-        || key.starts_with("TAURI_")
-        || key.starts_with(npm_reject)
-    {
+    if key.starts_with("RUST_") || key.starts_with("TAURI_") || key.starts_with(npm_reject) {
         return false;
     }
     #[cfg(windows)]

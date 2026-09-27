@@ -99,10 +99,7 @@ fn prepend_path(env: &mut HashMap<String, String>, directory: &Path) -> Result<(
 /// 并在环境块里留下 `Path`/`PATH` 两个条目。
 #[cfg(windows)]
 fn take_path_entry(env: &mut HashMap<String, String>) -> Option<String> {
-    let key = env
-        .keys()
-        .find(|k| k.eq_ignore_ascii_case("PATH"))
-        .cloned();
+    let key = env.keys().find(|k| k.eq_ignore_ascii_case("PATH")).cloned();
     key.and_then(|k| env.remove(&k))
 }
 
